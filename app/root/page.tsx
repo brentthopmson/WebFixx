@@ -77,7 +77,8 @@ export default function AdminDashboard() {
                 sender: { success: false, headers: [], data: [], count: 0 },
                 limits: { success: false, headers: [], data: [], count: 0 }
             }, 
-            isAuthenticated: false 
+            isAuthenticated: false,
+            isOffline: false // Added missing property
         }); // Clear global app state
         sessionStorage.removeItem("loggedInAdmin"); // Clear old session storage item
         sessionStorage.removeItem("adminData"); // Clear old session storage item
