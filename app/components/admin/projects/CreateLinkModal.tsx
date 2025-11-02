@@ -368,8 +368,9 @@ export default function CreateLinkModal({ onClose, onSave, addresses }: CreateLi
         onSave(response.data);
         resetForm(); // Reset the form after successful creation
       } else {
-        // Check for insufficient balance error here, as backend returns 200 OK with success: false
-        if (response.details?.error?.includes('Insufficient balance')) {
+        // Check for insufficient balance error in multiple possible locations
+        const errorMessage = response.error || response.details?.error || response.details?.message || response.details?.details?.Message || '';
+        if (errorMessage.includes('Insufficient balance')) {
           const currentBalance = parseFloat(appData?.user?.balance ?? '0');
           const requiredAmount = formState.price || 0;
           const shortfall = requiredAmount - currentBalance;
@@ -377,7 +378,7 @@ export default function CreateLinkModal({ onClose, onSave, addresses }: CreateLi
             requiredAmount: requiredAmount.toFixed(2),
             currentBalance: currentBalance.toFixed(2),
             shortfall: shortfall.toFixed(2),
-            message: response.details.details?.Message || 'Insufficient balance to create project.',
+            message: errorMessage || 'Insufficient balance to create project.',
           });
           setShowFundAccountModal(true);
         } else {

@@ -57,6 +57,7 @@ export interface UserData {
   username: string;
   role: 'ADMIN' | 'USER';
   plan: string;
+  planExpiry: string;
   verifyStatus: 'TRUE' | 'FALSE' | '';
   btcAddress: string;
   ethAddress: string;
@@ -274,6 +275,7 @@ export const authApi = {
         username: responseData.user.username,
         role: responseData.user.role,
         plan: responseData.user.plan,
+        planExpiry: responseData.user.planExpiry,
         verifyStatus: responseData.user.verifyStatus as 'TRUE' | 'FALSE' | '',
         btcAddress: responseData.user.btcAddress || '',
         ethAddress: responseData.user.ethAddress || '',

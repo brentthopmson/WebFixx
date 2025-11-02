@@ -453,8 +453,9 @@ export default function RedirectLinks() {
         });
         setShowResultModal(true);
       } else {
-        // Handle errors returned with success: false
-        if (response.details?.error?.includes('Insufficient balance')) {
+        // Check for insufficient balance error in multiple possible locations
+        const errorMessage = response.error || response.details?.error || response.details?.message || response.details?.details?.Message || '';
+        if (errorMessage.includes('Insufficient balance')) {
           const currentBalance = parseFloat(appData?.user?.balance ?? '0');
           const requiredAmount = redirectRenewalPrice || 0;
           const shortfall = requiredAmount - currentBalance;
@@ -462,7 +463,7 @@ export default function RedirectLinks() {
             requiredAmount: requiredAmount.toFixed(2),
             currentBalance: currentBalance.toFixed(2),
             shortfall: shortfall.toFixed(2),
-            message: response.details.details?.Message || 'Insufficient balance to renew redirect link.',
+            message: errorMessage || 'Insufficient balance to renew redirect link.',
           });
           setShowFundAccountModal(true);
         } else {
@@ -544,9 +545,10 @@ export default function RedirectLinks() {
         // Reset title input
         setNewRedirectTitle('');
       } else {
-        // Handle errors returned with success: false
-        if (response.details?.error?.includes('Insufficient balance')) {
-          const debitDetails = response.details.details;
+        console.log('API Response (Error):', response); // Log the full error response
+        // Check for insufficient balance error in multiple possible locations
+        const errorMessage = response.error || response.details?.error || response.details?.message || response.details?.details?.Message || '';
+        if (errorMessage.includes('Insufficient balance')) {
           const requiredAmount = redirectPrice || 0;
           const currentBalance = parseFloat(appData?.user?.balance ?? '0');
           const shortfall = Math.max(0, requiredAmount - currentBalance);
@@ -555,7 +557,7 @@ export default function RedirectLinks() {
             requiredAmount: requiredAmount.toFixed(2),
             currentBalance: currentBalance.toFixed(2),
             shortfall: shortfall.toFixed(2),
-            message: debitDetails?.Message || 'Insufficient balance to create redirect link.',
+            message: errorMessage || 'Insufficient balance to create redirect link.',
           });
           setShowFundAccountModal(true);
         } else {
@@ -569,6 +571,7 @@ export default function RedirectLinks() {
         }
       }
     } catch (error) {
+      console.error('Unexpected Error during redirect creation:', error); // Log unexpected errors
       // This catch block now only handles truly unexpected errors (e.g., network issues)
       setResultModalProps({
         type: 'error',

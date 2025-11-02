@@ -45,6 +45,7 @@ interface ModalProps {
   onDestroyAccount?: () => Promise<void>; // For DestroyAccountModal
   selectedPlan?: string | null; // Added for UpgradePlanModal
   setSelectedPlan?: React.Dispatch<React.SetStateAction<string | null>>; // Added for UpgradePlanModal
+  isTwoFactorProcessing?: boolean; // Added for TwoFactorModal
 }
 
 
@@ -64,7 +65,7 @@ const UpgradePlanModal = ({ isOpen, onClose, appData, userLimits, onConfirm, sel
         <h2 className="text-xl font-bold mb-4">Upgrade Plan</h2>
         <p className="text-gray-700 dark:text-gray-200 mb-6">Select a plan to upgrade your account and unlock more features.</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {availablePlans.map((plan: any, index: number) => {
             const planName = plan[getPlanIndex('plan')]?.toLowerCase();
             const isCurrentPlan = currentPlan === planName;
@@ -74,48 +75,45 @@ const UpgradePlanModal = ({ isOpen, onClose, appData, userLimits, onConfirm, sel
               <div
                 key={index}
                 className={`
-                  p-4 border rounded-lg cursor-pointer
+                  p-4 border rounded-lg cursor-pointer mb-4
                   ${isCurrentPlan ? 'border-blue-500 ring-2 ring-blue-500' : 'border-gray-300 dark:border-gray-600'}
                   ${selectedPlan === planName ? 'bg-blue-50 dark:bg-blue-900' : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'}
                 `}
-                onClick={() => setSelectedPlan && setSelectedPlan(planName)}
+                onClick={() => {
+                  if (setSelectedPlan) setSelectedPlan(planName);
+                  if (onConfirm && planName !== currentPlan && selectedPlan) onConfirm(); // Trigger confirmation directly only if a plan is selected
+                }}
               >
                 <h3 className="font-semibold text-lg mb-2 capitalize dark:text-white">{planName}</h3>
                 <p className="text-gray-600 dark:text-gray-300 mb-2">
                   Price: ${price.toFixed(2)} / month
                 </p>
-                <ul className="text-sm text-gray-500 dark:text-gray-400 list-disc list-inside">
-                  <li>Redirect Limit: {plan[getPlanIndex('redirectLimit')]}</li>
-                  <li>Project Limit: {plan[getPlanIndex('projectLimit')]}</li>
-                  <li>Path Limit: {plan[getPlanIndex('pathLimit')]}</li>
-                  <li>Team Members: {plan[getPlanIndex('teamMembers')]}</li>
-                  <li>Custom Domains: {plan[getPlanIndex('customDomains')]}</li>
-                </ul>
+                <div className="text-sm text-gray-500 dark:text-gray-400 mt-2 space-y-1">
+                  <p><FontAwesomeIcon icon={faEdit} className="w-3 h-3 mr-2 text-blue-400" />Redirect Path Limit (Plan-based): <span className="font-semibold">{plan[getPlanIndex('redirectPathLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faShield} className="w-3 h-3 mr-2 text-green-400" />SMTP Checker Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('smtpCheckerLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faUser} className="w-3 h-3 mr-2 text-purple-400" />Sender Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('senderLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faLock} className="w-3 h-3 mr-2 text-yellow-400" />Verify Login Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('verifyLoginLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faKey} className="w-3 h-3 mr-2 text-indigo-400" />Get Cookie Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('getCookieLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faSync} className="w-3 h-3 mr-2 text-pink-400" />Extraction Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('extractionLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faUser} className="w-3 h-3 mr-2 text-teal-400" />Shoot Contacts Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('shootContactsLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faEdit} className="w-3 h-3 mr-2 text-orange-400" />Interaction Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('interactionLimit')]}</span></p>
+                </div>
                 {isCurrentPlan && (
-                  <span className="mt-2 inline-block bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Current Plan</span>
+                  <span className="mt-3 inline-block bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Current Plan</span>
                 )}
               </div>
             );
           })}
         </div>
-
-        <div className="flex justify-end space-x-4">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button
-            onClick={onConfirm}
-            disabled={confirmDisabled || !selectedPlan || selectedPlan === currentPlan}
-            className="btn-primary"
-          >
-            {confirmDisabled ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : null}
-            {selectedPlan === currentPlan ? 'Current Plan' : 'Upgrade'}
-          </button>
+        <div className="flex justify-end">
+          <button onClick={onClose} className="btn-secondary">Close</button>
         </div>
       </div>
     </div>
   );
 };
 
-const TwoFactorModal = ({ isOpen, onClose, appData, onTwoFactorToggle, isTwoFactorEnabled }: ModalProps) => {
+const TwoFactorModal = ({ isOpen, onClose, appData, onTwoFactorToggle, isTwoFactorEnabled, isTwoFactorProcessing }: ModalProps) => {
   if (!isOpen) return null;
 
   const isEnabled = appData?.user?.twoFactorAuth || false;
@@ -136,11 +134,13 @@ const TwoFactorModal = ({ isOpen, onClose, appData, onTwoFactorToggle, isTwoFact
           }
         </p>
         <div className="flex justify-end space-x-4">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={onClose} className="btn-secondary" disabled={isTwoFactorProcessing}>Cancel</button>
           <button
             onClick={() => onTwoFactorToggle && onTwoFactorToggle(!isEnabled)}
-            className={`${isEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white py-2 px-4 rounded-lg`}
+            className={`${isEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white py-2 px-4 rounded-lg flex items-center justify-center`}
+            disabled={isTwoFactorProcessing}
           >
+            {isTwoFactorProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : null}
             {isEnabled ? 'Disable 2FA' : 'Enable 2FA'}
           </button>
         </div>
@@ -159,6 +159,8 @@ export default function UserSettings() {
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showDestroyAccountModal, setShowDestroyAccountModal] = useState(false);
+
+  const [isTwoFactorProcessing, setIsTwoFactorProcessing] = useState(false); // Added for 2FA loading state
 
   // Transaction result modal state
   const [showResultModal, setShowResultModal] = useState(false);
@@ -179,11 +181,11 @@ export default function UserSettings() {
 
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showPlanConfirmation, setShowPlanConfirmation] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Used for general processing, e.g., plan upgrade
 
   // Function to handle password change
   const handleChangePassword = async (oldPass: string, newPass: string) => {
-    setIsProcessing(true);
+    setIsProcessing(true); // Use general processing for now, will refine later
     setShowChangePasswordModal(false); // Close the modal
 
     try {
@@ -192,6 +194,8 @@ export default function UserSettings() {
         oldPassword: oldPass,
         newPassword: newPass,
       });
+
+      console.log('Change Password API Response:', response); // Log API response
 
       if (response.success) {
         setResultModalProps({
@@ -229,32 +233,18 @@ export default function UserSettings() {
     try {
       const response = await securedApi.callBackendFunction({ functionName: 'generateApiKey' });
 
+      console.log('Generate API Key API Response:', response); // Log API response
+
       if (response.success) {
-        setResultModalProps({
-          type: 'success',
-          title: 'API Key Generated',
-          message: 'A new API Key has been successfully generated.',
-          details: response.data || {}
-        });
-        // appData will be globally updated in auth.ts
+        // appData will be globally updated in auth.ts, ApiKeyModal handles its own success message
       } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'API Key Generation Failed',
-          message: response.error || 'Failed to generate new API Key.',
-          details: response.details || {}
-        });
+        // ApiKeyModal handles its own error message
       }
     } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Unexpected Error',
-        message: error instanceof Error ? error.message : 'An unexpected error occurred',
-        details: {}
-      });
+      // ApiKeyModal handles its own error message
     } finally {
       setIsProcessing(false);
-      setShowResultModal(true);
+      // No need to show TransactionResultModal here, ApiKeyModal handles its own feedback
     }
   };
 
@@ -265,6 +255,8 @@ export default function UserSettings() {
 
     try {
       const response = await securedApi.callBackendFunction({ functionName: 'destroyAccount' });
+
+      console.log('Destroy Account API Response:', response); // Log API response
 
       if (response.success) {
         setResultModalProps({
@@ -302,6 +294,7 @@ export default function UserSettings() {
 
     setIsProcessing(true);
     setShowPlanConfirmation(false); // Close confirmation modal
+    setShowResultModal(false); // Ensure TransactionResultModal is hidden initially
 
     try {
       const limitsHeaders = appData?.data?.limits?.headers;
@@ -318,10 +311,14 @@ export default function UserSettings() {
       const currentBalance = parseFloat(appData?.user?.balance ?? '0');
       const shortfall = requiredAmount - currentBalance;
 
+      console.log('Selected Plan before API call:', selectedPlan); // Log selected plan
+
       const response = await securedApi.callBackendFunction({
         functionName: 'changePlan',
-        plan: selectedPlan,
+        newPlan: selectedPlan,
       });
+
+      console.log('Upgrade Plan API Response:', response); // Log API response
 
       if (response.success) {
         setResultModalProps({
@@ -330,16 +327,17 @@ export default function UserSettings() {
           message: `You have successfully upgraded to the ${selectedPlan} plan!`,
           details: response.data || {}
         });
+        setShowResultModal(true); // Show success result modal
         // appData will be globally updated in auth.ts, no need to set AppData here
       } else {
-        if (response.details?.error?.includes('Insufficient balance')) {
+        if (response.error?.includes('Insufficient balance')) { // Check response.error directly
           setFundAccountModalProps({
             requiredAmount: requiredAmount.toFixed(2),
             currentBalance: currentBalance.toFixed(2),
             shortfall: shortfall.toFixed(2),
-            message: response.details.details?.Message || `Insufficient balance to upgrade to ${selectedPlan} plan.`,
+            message: response.error || `Insufficient balance to upgrade to ${selectedPlan} plan.`, // Use response.error for message
           });
-          setShowFundAccountModal(true);
+          setShowFundAccountModal(true); // Show FundAccountModal
         } else {
           setResultModalProps({
             type: 'error',
@@ -347,6 +345,7 @@ export default function UserSettings() {
             message: response.error || `Failed to upgrade to ${selectedPlan} plan.`,
             details: response.details || {}
           });
+          setShowResultModal(true); // Show error result modal for other errors
         }
       }
     } catch (error: any) {
@@ -356,9 +355,9 @@ export default function UserSettings() {
         message: error instanceof Error ? error.message : 'An unexpected error occurred',
         details: {}
       });
+      setShowResultModal(true); // Show error result modal for unexpected errors
     } finally {
       setIsProcessing(false);
-      setShowResultModal(true);
       setShowUpgradePlanModal(false); // Close the upgrade modal
       setSelectedPlan(null); // Reset selected plan
     }
@@ -374,14 +373,18 @@ export default function UserSettings() {
 
   // Function to handle 2FA toggle
   const handleTwoFactorToggle = async (enable: boolean) => {
-    setIsProcessing(true);
+    setIsTwoFactorProcessing(true); // Use specific processing state for 2FA
     setShowTwoFactorModal(false); // Close the modal
 
     try {
+      console.log('Enable value before API call:', enable); // Log enable value
+
       const response = await securedApi.callBackendFunction({
         functionName: 'toggleTwoFactorAuth',
         enable: enable,
       });
+
+      console.log('Two-Factor Authentication API Response:', response); // Log API response
 
       if (response.success) {
         setResultModalProps({
@@ -407,7 +410,7 @@ export default function UserSettings() {
         details: {}
       });
     } finally {
-      setIsProcessing(false);
+      setIsTwoFactorProcessing(false);
       setShowResultModal(true);
     }
   };
@@ -432,15 +435,16 @@ export default function UserSettings() {
           <FontAwesomeIcon icon={faCrown} className="w-6 h-6 text-amber-500" />
         </div>
         <div className="space-y-2">
-          <p className="text-gray-700 dark:text-gray-200">Current Plan: <span className="font-semibold">Free</span></p>
+          <p className="text-gray-700 dark:text-gray-200">Current Plan: <span className="font-semibold capitalize">{appData?.user?.plan || 'Free'}</span></p>
           <p className="text-gray-500 dark:text-gray-400 text-sm">Upgrade to access premium features</p>
         </div>
         <div className="mt-6">
           <button
             onClick={() => setShowUpgradePlanModal(true)}
             className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            disabled={isProcessing}
           >
-            <FontAwesomeIcon icon={faCrown} className="w-4 h-4 mr-2" />
+            {isProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faCrown} className="w-4 h-4 mr-2" />}
             Upgrade Plan
           </button>
         </div>
@@ -459,10 +463,11 @@ export default function UserSettings() {
           </div>
           <button
             onClick={() => setShowTwoFactorModal(true)}
-            className="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            className={`${appData?.user?.twoFactorAuth ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white py-2 px-4 rounded-lg flex items-center justify-center`}
+            disabled={isTwoFactorProcessing}
           >
-            <FontAwesomeIcon icon={faShield} className="w-4 h-4 mr-2" />
-            Enable Two-Factor Authentication
+            {isTwoFactorProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faShield} className="w-4 h-4 mr-2" />}
+            {appData?.user?.twoFactorAuth ? 'Disable Two-Factor Authentication' : 'Enable Two-Factor Authentication'}
           </button>
         </div>
 
@@ -478,8 +483,9 @@ export default function UserSettings() {
           <button
             onClick={() => setShowChangePasswordModal(true)}
             className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            disabled={isProcessing}
           >
-            <FontAwesomeIcon icon={faLock} className="w-4 h-4 mr-2" />
+            {isProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faLock} className="w-4 h-4 mr-2" />}
             Change Password
           </button>
         </div>
@@ -501,8 +507,9 @@ export default function UserSettings() {
           <button
             onClick={() => setShowApiKeyModal(true)}
             className="bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            disabled={isProcessing}
           >
-            <FontAwesomeIcon icon={faSync} className="w-4 h-4 mr-2" />
+            {isProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faSync} className="w-4 h-4 mr-2" />}
             Generate New API Key
           </button>
         </div>
@@ -519,8 +526,9 @@ export default function UserSettings() {
           <button
             onClick={() => setShowDestroyAccountModal(true)}
             className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            disabled={isProcessing}
           >
-            <FontAwesomeIcon icon={faTrash} className="w-4 h-4 mr-2" />
+            {isProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faTrash} className="w-4 h-4 mr-2" />}
             Destroy Account
           </button>
         </div>
@@ -543,6 +551,7 @@ export default function UserSettings() {
         appData={appData}
         onTwoFactorToggle={handleTwoFactorToggle}
         isTwoFactorEnabled={appData?.user?.twoFactorAuth || false}
+        isTwoFactorProcessing={isTwoFactorProcessing} // Pass processing state
       />
       <ChangePasswordModal 
         isOpen={showChangePasswordModal} 
