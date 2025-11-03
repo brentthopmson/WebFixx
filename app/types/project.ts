@@ -28,4 +28,5 @@ export interface Project {
   pageURL?: string;
   templateId: string;
   links?: any[]; // TODO: Define a more specific type for links
+  notifyVisits: boolean;
 }

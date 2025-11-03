@@ -2,17 +2,17 @@ import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
-interface ChangePasswordModalProps {
+export interface ChangePasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   onChangePassword: (oldPass: string, newPass: string) => Promise<void>;
+  isChangingPassword: boolean; // Added loading state prop
 }
 
-const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose, onChangePassword }) => {
+const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose, onChangePassword, isChangingPassword }) => {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async () => {
@@ -27,20 +27,14 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await onChangePassword(oldPassword, newPassword);
-      onClose(); // Close the change password modal on successful submission
-    } catch (error: any) {
-      // The parent component (UserSettings) will handle displaying the TransactionResultModal
-      // We can set a local error message if needed for immediate feedback within this modal
-      setErrorMessage(error.message || 'An unexpected error occurred.');
-    } finally {
-      setIsSubmitting(false);
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmNewPassword('');
-    }
+    // Call the parent's onChangePassword function
+    await onChangePassword(oldPassword, newPassword);
+    onClose(); // Close the change password modal on successful submission or after API call
+
+    // Reset form fields
+    setOldPassword('');
+    setNewPassword('');
+    setConfirmNewPassword('');
   };
 
   if (!isOpen) return null;
@@ -62,7 +56,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
             value={oldPassword}
             onChange={(e) => setOldPassword(e.target.value)}
-            disabled={isSubmitting}
+            disabled={isChangingPassword}
           />
           <input
             type="password"
@@ -70,7 +64,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            disabled={isSubmitting}
+            disabled={isChangingPassword}
           />
           <input
             type="password"
@@ -78,17 +72,17 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
             value={confirmNewPassword}
             onChange={(e) => setConfirmNewPassword(e.target.value)}
-            disabled={isSubmitting}
+            disabled={isChangingPassword}
           />
         </div>
         <div className="flex justify-end space-x-4 mt-6">
-          <button onClick={onClose} className="btn-secondary" disabled={isSubmitting}>Cancel</button>
+          <button onClick={onClose} className="btn-secondary" disabled={isChangingPassword}>Cancel</button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !oldPassword || !newPassword || !confirmNewPassword || newPassword !== confirmNewPassword}
+            disabled={isChangingPassword || !oldPassword || !newPassword || !confirmNewPassword || newPassword !== confirmNewPassword}
             className="btn-primary"
           >
-            {isSubmitting ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : null}
+            {isChangingPassword ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : null}
             Change Password
           </button>
         </div>

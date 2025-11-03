@@ -35,7 +35,7 @@ export interface AppState {
     isOffline: boolean; // Added isOffline state
     data: {
       transactions: ApiResponseData<WalletTransaction>;
-      projects: ApiResponseData<Project>; // Use Project type
+      projects: ApiResponseData<Project>; // Projects data is an array of arrays
       template: ApiResponseData<Template>; // Use Template type
       hub: ApiResponseData<Hub>; // Use Hub type
       redirect?: ApiResponseData<Redirect>; // Use Redirect type

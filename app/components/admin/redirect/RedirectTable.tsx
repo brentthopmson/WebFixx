@@ -16,7 +16,6 @@ interface RedirectTableProps {
   handleRenewRedirect: (redirectId: string) => void;
   processingLinkId: string | null;
   calculateTimeRemaining: (expiryDateString: string) => string;
-  parsePaths: (pathsString: string) => any[];
 }
 
 const RedirectTable: React.FC<RedirectTableProps> = ({
@@ -33,7 +32,6 @@ const RedirectTable: React.FC<RedirectTableProps> = ({
   handleRenewRedirect,
   processingLinkId,
   calculateTimeRemaining,
-  parsePaths,
 }) => {
   return (
     <div className="w-full">
@@ -70,9 +68,6 @@ const RedirectTable: React.FC<RedirectTableProps> = ({
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
             {redirectLinks.length > 0 && (
               currentLinks.map((link: any, index: number) => {
-                // Parse paths
-                const paths = parsePaths(link.paths);
-                
                 // Calculate time remaining
                 const timeRemaining = calculateTimeRemaining(link.expiryDate);
                 
@@ -89,7 +84,7 @@ const RedirectTable: React.FC<RedirectTableProps> = ({
                         onClick={() => handleOpenPathsModal(link.redirectId, link.paths)}
                         className="text-blue-600 hover:underline dark:text-blue-400 dark:hover:underline"
                       >
-                        {paths.length} Paths
+                        {JSON.parse(link.paths || '[]').length} Paths
                       </button>
                     </td>
                     

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faComments, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faTelegram } from '@fortawesome/free-brands-svg-icons'; // Import faTelegram from free-brands-svg-icons
 
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
+  const telegramGroupLink = "https://t.me/your_telegram_group"; // Replace with actual Telegram group link
 
   return (
     <>
@@ -13,7 +15,7 @@ export default function ChatBot() {
         className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition-all duration-200 z-50 lg:bottom-8 lg:right-8 dark:bg-blue-700 dark:hover:bg-blue-800"
         aria-label="Open chat"
       >
-        <FontAwesomeIcon icon={faComments} className="w-6 h-6" />
+        <FontAwesomeIcon icon={faTelegram} className="w-6 h-6" /> {/* Use Telegram icon */}
       </button>
 
       {/* Chat Modal */}
@@ -39,13 +41,22 @@ export default function ChatBot() {
               </button>
             </div>
 
-            {/* Chat Content */}
+            {/* Chat Content - Telegram Group */}
             <div className="p-6 flex flex-col items-center justify-center h-[calc(100%-4rem)] text-center text-gray-600 dark:text-gray-300">
-              <FontAwesomeIcon icon={faComments} className="w-16 h-16 text-gray-300 mb-4 dark:text-gray-600" />
-              <h4 className="text-xl font-semibold mb-2 dark:text-white">Chat Support</h4>
-              <p className="text-gray-500 dark:text-gray-400">
-                This service is not available at the moment. Please try again later or contact support via email.
+              <FontAwesomeIcon icon={faTelegram} className="w-16 h-16 text-blue-500 mb-4" />
+              <h4 className="text-xl font-semibold mb-2 dark:text-white">Join Our Telegram Group!</h4>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                For immediate support, discussions, and updates, join our official Telegram community.
               </p>
+              <a
+                href={telegramGroupLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center space-x-2 dark:bg-blue-700 dark:hover:bg-blue-800"
+              >
+                <FontAwesomeIcon icon={faTelegram} className="w-5 h-5" />
+                <span>Join Telegram</span>
+              </a>
             </div>
           </div>
         </>

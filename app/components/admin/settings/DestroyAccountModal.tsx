@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
-interface DestroyAccountModalProps {
+export interface DestroyAccountModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDestroyAccount: () => Promise<void>;
+  isDestroyingAccount: boolean; // Added loading state prop
 }
 
-const DestroyAccountModal: React.FC<DestroyAccountModalProps> = ({ isOpen, onClose, onDestroyAccount }) => {
+const DestroyAccountModal: React.FC<DestroyAccountModalProps> = ({ isOpen, onClose, onDestroyAccount, isDestroyingAccount }) => {
   const [confirmationText, setConfirmationText] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleDestroy = async () => {
@@ -21,18 +21,12 @@ const DestroyAccountModal: React.FC<DestroyAccountModalProps> = ({ isOpen, onClo
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await onDestroyAccount(); // Call the parent's destroy function
-      onClose(); // Close the modal on successful submission
-    } catch (error: any) {
-      // The parent component (UserSettings) will handle displaying the TransactionResultModal
-      // We can set a local error message if needed for immediate feedback within this modal
-      setErrorMessage(error.message || 'An unexpected error occurred.');
-    } finally {
-      setIsSubmitting(false);
-      setConfirmationText('');
-    }
+    // Call the parent's onDestroyAccount function
+    await onDestroyAccount();
+    onClose(); // Close the modal after API call
+
+    // Reset form fields
+    setConfirmationText('');
   };
 
   if (!isOpen) return null;
@@ -59,17 +53,17 @@ const DestroyAccountModal: React.FC<DestroyAccountModalProps> = ({ isOpen, onClo
           className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
           value={confirmationText}
           onChange={(e) => setConfirmationText(e.target.value)}
-          disabled={isSubmitting}
+          disabled={isDestroyingAccount}
           placeholder="Type DELETE to confirm"
         />
         <div className="flex justify-end space-x-4 mt-6">
-          <button onClick={onClose} className="btn-secondary" disabled={isSubmitting}>Cancel</button>
+          <button onClick={onClose} className="btn-secondary" disabled={isDestroyingAccount}>Cancel</button>
           <button
             onClick={handleDestroy}
-            disabled={isSubmitting || confirmationText !== 'DELETE'}
+            disabled={isDestroyingAccount || confirmationText !== 'DELETE'}
             className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
           >
-            {isSubmitting ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : null}
+            {isDestroyingAccount ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : null}
             Destroy Account
           </button>
         </div>

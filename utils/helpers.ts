@@ -20,6 +20,37 @@ export const safeParseJSON = (jsonString: string) => {
   }
 };
 
+import type { AppState } from './authTypes'; // Import AppState for type safety
+
+export const isRedirectConnectedToProject = (appData: AppState | null, redirectId: string): { isConnected: boolean; projectTitle?: string } => {
+  if (!appData?.data?.projects?.data || !appData?.data?.projects?.headers) {
+    return { isConnected: false };
+  }
+
+  const projectsData: any[][] = appData.data.projects.data as unknown as any[][]; // Explicitly cast to array of arrays with double assertion
+  const projectsHeaders = appData.data.projects.headers;
+
+  const redirectIdIndex = projectsHeaders.indexOf('redirectId');
+  const projectTitleIndex = projectsHeaders.indexOf('projectTitle');
+
+  if (redirectIdIndex === -1) {
+    console.warn('isRedirectConnectedToProject: Project headers do not contain "redirectId" column.');
+    return { isConnected: false };
+  }
+
+  const connectedProjectRow = projectsData.find((projectRow: any[]) => projectRow[redirectIdIndex] === redirectId);
+
+  if (connectedProjectRow) {
+    const result = {
+      isConnected: true,
+      projectTitle: projectTitleIndex !== -1 ? connectedProjectRow[projectTitleIndex] : undefined
+    };
+    return result;
+  }
+
+  return { isConnected: false };
+};
+
 export const parseJSONWithComments = (str: string) => {
   if (!str || typeof str !== 'string') return null;
   

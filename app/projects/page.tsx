@@ -48,6 +48,7 @@ interface Project {
   systemStatus: string;
   pageURL?: string;
   templateId: string;
+  notifyVisits: boolean; // Added notifyVisits
 }
 import { formatDistance, isValid, parseISO } from 'date-fns';
 import ProjectSettingsModal from 'app/components/admin/projects/ProjectSettingsModal';
@@ -111,7 +112,7 @@ export default function ProjectLinks() {
             'projectTitle', '', 'templateNiche', 'templateTitle', 'templateType', 
             'pageHealth', 'pageVisits', 'botVisits', 'expiryDate', 'response', 'systemStatus',
             'redirectId', 'redirectURL', 'redirectHealth', 'domainId', 'domainURL', 'domainHealth',
-            'email', 'telegramGroupId', 'templateVariables', 'templateId'
+            'email', 'telegramGroupId', 'templateVariables', 'templateId', 'notifyVisits' // Added notifyVisits
           ];
 
           const processedData = Array.isArray(rawData) ? rawData : rawData.data || [];
@@ -142,6 +143,7 @@ export default function ProjectLinks() {
             telegramGroupId: safeHeaders.indexOf('telegramGroupId'),
             templateVariables: safeHeaders.indexOf('templateVariables'),
             templateId: safeHeaders.indexOf('templateId'),
+            notifyVisits: safeHeaders.indexOf('notifyVisits'), // Added notifyVisits
           };
 
           return processedData.map((project: any) => {
@@ -213,6 +215,7 @@ export default function ProjectLinks() {
               telegramGroupId: project[columnIndices.telegramGroupId] || '',
               templateVariables: project[columnIndices.templateVariables] || '{}',
               templateId: project[columnIndices.templateId] || '',
+              notifyVisits: project[columnIndices.notifyVisits] === 'TRUE' || false, // Initialize notifyVisits
             };
           });
         };
@@ -300,20 +303,22 @@ export default function ProjectLinks() {
           {project.responseCount} Responses
         </button>
       </div>
-      <div className="text-center flex items-center justify-center gap-2">
-        <ActionsHandler 
-          project={project} 
-          onCopy={() => {}}
-          onRefresh={() => {}}
-          onDelete={(id) => {
-            setProjects(prev => prev.filter(p => p.id !== id));
-          }}
-          onSettings={() => {
-            setSettingsProject(project);
-            setShowSettingsModal(true);
-          }}
-        />
-      </div>
+      {project.systemStatus?.toLowerCase() === 'active' && (
+        <div className="text-center flex items-center justify-center gap-2">
+          <ActionsHandler 
+            project={project} 
+            onCopy={() => {}}
+            onRefresh={() => {}}
+            onDelete={(id) => {
+              setProjects(prev => prev.filter(p => p.id !== id));
+            }}
+            onSettings={() => {
+              setSettingsProject(project);
+              setShowSettingsModal(true);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 
@@ -350,16 +355,22 @@ export default function ProjectLinks() {
           {calculateTimeRemaining(project.expiryDate)}
         </span>
       </td>
-      <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
-        <ActionsHandler 
-          project={project} 
-          onCopy={() => {}}
-          onRefresh={() => {}}
-          onDelete={(id) => {
-            setProjects(prev => prev.filter(p => p.id !== id));
-          }}
-        />
-      </td>
+      {project.systemStatus?.toLowerCase() === 'active' && (
+        <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
+          <ActionsHandler 
+            project={project} 
+            onCopy={() => {}}
+            onRefresh={() => {}}
+            onDelete={(id) => {
+              setProjects(prev => prev.filter(p => p.id !== id));
+            }}
+            onSettings={() => {
+              setSettingsProject(project);
+              setShowSettingsModal(true);
+            }}
+          />
+        </td>
+      )}
     </tr>
   );
 
@@ -451,7 +462,9 @@ export default function ProjectLinks() {
                 <th className="px-4 py-2 text-center text-gray-900 dark:text-white">Page Health</th>
                 <th className="px-4 py-2 text-center text-gray-900 dark:text-white">Page Visits</th>
                 <th className="px-4 py-2 text-center text-gray-900 dark:text-white">Time Left</th>
-                <th className="px-4 py-2 text-center text-gray-900 dark:text-white">Actions</th>
+                {currentProjects.some(project => project.systemStatus?.toLowerCase() === 'active') && (
+                  <th className="px-4 py-2 text-center text-gray-900 dark:text-white">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -487,16 +500,22 @@ export default function ProjectLinks() {
                       {calculateTimeRemaining(project.expiryDate)}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
-                    <ActionsHandler 
-                      project={project} 
-                      onCopy={() => {}}
-                      onRefresh={() => {}}
-                      onDelete={(id) => {
-                        setProjects(prev => prev.filter(p => p.id !== id));
-                      }}
-                    />
-                  </td>
+                  {project.systemStatus?.toLowerCase() === 'active' && (
+                    <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
+                      <ActionsHandler 
+                        project={project} 
+                        onCopy={() => {}}
+                        onRefresh={() => {}}
+                        onDelete={(id) => {
+                          setProjects(prev => prev.filter(p => p.id !== id));
+                        }}
+                        onSettings={() => {
+                          setSettingsProject(project);
+                          setShowSettingsModal(true);
+                        }}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
