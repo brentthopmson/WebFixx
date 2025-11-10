@@ -46,12 +46,12 @@ export const SocialTable: React.FC<SocialTableProps> = ({
 
   const getColumns = () => {
     if (width < 768) { // Mobile
-      return ['logo', 'platform', 'username', 'password', 'actions'];
+      return ['logo', 'platform', 'username', 'actions'];
     } else if (width < 1024) { // Tablet/iPad
-      return ['logo', 'timestamp', 'platform', 'username', 'password', 'actions'];
+      return ['logo', 'timestamp', 'platform', 'username', 'actions'];
     }
     // Large Screen
-    return ['logo', 'timestamp', 'platform', 'username', 'password', 'email', 'actions'];
+    return ['logo', 'timestamp', 'platform', 'username', 'email', 'actions'];
   };
 
   const getRowBackgroundColor = (item: any) => {
@@ -100,15 +100,27 @@ export const SocialTable: React.FC<SocialTableProps> = ({
                 {columns.map(column => (
                   <td key={column} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">
                     {column === 'logo' ? (
-                      <img 
-                        src={getLogoUrl(social.website || social.platform + '.com')} 
-                        alt={social.platform}
-                        className="h-8 w-8 object-contain"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = '/default-logo.png';
-                        }}
-                      />
+                      <div className="flex items-center justify-center">
+                        <img 
+                          src={getLogoUrl(social.website || social.platform + '.com')} 
+                          alt={social.platform}
+                          className="h-8 w-8 object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none'; // Hide the broken image
+                            const fallbackIcon = target.nextElementSibling as HTMLElement;
+                            if (fallbackIcon) {
+                              fallbackIcon.style.display = 'block'; // Show the fallback icon
+                            }
+                          }}
+                        />
+                        {/* Fallback icon */}
+                        <FontAwesomeIcon 
+                          icon={faGlobe} 
+                          className="h-8 w-8 text-gray-400" 
+                          style={{ display: 'none' }} // Initially hidden
+                        />
+                      </div>
                     ) : column === 'actions' ? (
                       <div className="flex items-center justify-end space-x-2">
                         {width >= 768 && (
@@ -154,8 +166,6 @@ export const SocialTable: React.FC<SocialTableProps> = ({
                       social.platform
                     ) : column === 'username' ? (
                       social.username
-                    ) : column === 'password' ? (
-                      social.password
                     ) : column === 'status' ? (
                       social.active ? 'Active' : 'Inactive'
                     ) : (

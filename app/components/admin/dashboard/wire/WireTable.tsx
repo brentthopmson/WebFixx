@@ -46,12 +46,12 @@ export const WireTable: React.FC<WireTableProps> = ({
 
   const getColumns = () => {
     if (width < 768) { // Mobile
-      return ['logo', 'email', 'password', 'actions'];
+      return ['logo', 'email', 'actions'];
     } else if (width < 1024) { // Tablet/iPad
-      return ['logo', 'timestamp', 'email', 'domain', 'password', 'actions'];
+      return ['logo', 'timestamp', 'email', 'domain', 'actions'];
     }
     // Large Screen
-    return ['logo', 'timestamp', 'email', 'domain', 'password', 'actions'];
+    return ['logo', 'timestamp', 'email', 'domain', 'actions'];
   };
 
   const formatIpData = (ipDataStr: string) => {
@@ -136,8 +136,18 @@ export const WireTable: React.FC<WireTableProps> = ({
                           className="h-8 w-8 object-contain"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
-                            target.src = '/default-logo.png';
+                            target.style.display = 'none'; // Hide the broken image
+                            const fallbackIcon = target.nextElementSibling as HTMLElement;
+                            if (fallbackIcon) {
+                              fallbackIcon.style.display = 'block'; // Show the fallback icon
+                            }
                           }}
+                        />
+                        {/* Fallback icon */}
+                        <FontAwesomeIcon 
+                          icon={faGlobe} 
+                          className="h-8 w-8 text-gray-400" 
+                          style={{ display: 'none' }} // Initially hidden
                         />
                       </div>
                     ) : column === 'actions' ? (
