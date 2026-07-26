@@ -45,25 +45,7 @@ const nextConfig = {
     ],
     unoptimized: true // This allows any external image to be used without optimization
   },
-  experimental: {
-    serverComponentsExternalPackages: ['puppeteer-core', '@sparticuz/chromium-min'],
-  },
-  webpack(config, { isServer }) {
-    if (isServer) {
-      // Handle modern JavaScript features for Puppeteer
-      config.module.rules.push({
-        test: /\.js$/,
-        include: /node_modules\/puppeteer-core/,
-        use: {
-          loader: 'babel-loader',
-          options: {
-            presets: ['@babel/preset-env'],
-          },
-        },
-      });
-    }
-    return config;
-  },
+  experimental: {},
 };
 
 module.exports = nextConfig;
