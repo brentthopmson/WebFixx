@@ -167,7 +167,7 @@ export default function Dashboard() {
   const handleOpenSession = (browserId: string) => {
     const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
     if (!token) return;
-    const apiUrl = process.env.API_BASE_URL || 'https://web-fixx-hoo.vercel.app/api';
+    const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
     let appOpened = false;
     const onBlur = () => { appOpened = true; };
     const onVisibility = () => { if (document.hidden) appOpened = true; };

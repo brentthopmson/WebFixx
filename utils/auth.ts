@@ -16,7 +16,7 @@ declare var process: {
   };
 };
 
-const API_BASE_URL = process.env.API_BASE_URL || 'https://web-fixx-hoo.vercel.app/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
 
 
 export interface IpData {
