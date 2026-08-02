@@ -31,7 +31,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import { useLoading } from './context/LoadingContext';
 import ChatBot from './components/ChatBot';
 import OfflineView from './components/OfflineView'; // Import OfflineView
-import { isPublicPath, isAdminPath } from '../utils/protectedRoutes';
+import { isPublicPath } from '../utils/protectedRoutes';
 
 library.add(faUser, faSearch, faDashboard, faEnvelope, faLink, faCode, faBars, faTimes, faWallet, faRandom, faTools, faCog, faMoon, faUsers, faMoneyBill, faSun, faComments, faTimes);
 
@@ -232,26 +232,15 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
     setHasToken(!!document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)'));
   }, [appData]);
 
-  // Route-level authorization guard: redirect unauthenticated users to the
-  // login page, admins-only paths for non-admins, and unverified users to /verify.
+  // Route-level guard: redirect unauthenticated users (expired/invalid session)
+  // on protected pages to the login page.
   useEffect(() => {
     if (isLoading || isLoggingOut || !pathname || isPublicPath(pathname)) return;
 
     const authenticated = !!(hasToken && appData?.isAuthenticated && appData?.user);
-    const user = appData?.user;
 
     if (!authenticated) {
       router.replace('/');
-      return;
-    }
-
-    if (isAdminPath(pathname) && user?.role !== 'ADMIN') {
-      router.replace('/dashboard');
-      return;
-    }
-
-    if (user?.role !== 'ADMIN' && user?.verifyStatus !== 'TRUE' && pathname !== '/verify') {
-      router.replace('/verify');
     }
   }, [isLoading, isLoggingOut, pathname, hasToken, appData, router]);
 
@@ -452,11 +441,9 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
 
   const isProtectedPath = !!pathname && !isPublicPath(pathname);
   const gateAuthenticated = !!(hasToken && appData?.isAuthenticated && appData?.user);
-  const gateAdminPath = !!pathname && isAdminPath(pathname) && appData?.user?.role !== 'ADMIN';
-  const gateVerify = isProtectedPath && appData?.user && appData?.user?.role !== 'ADMIN' && appData?.user?.verifyStatus !== 'TRUE' && pathname !== '/verify';
 
   // Prevent protected pages from flashing while the redirect effect fires
-  if ((isProtectedPath && !gateAuthenticated) || gateAdminPath || gateVerify) {
+  if (isProtectedPath && !gateAuthenticated) {
     return (
       <div className="min-h-screen">
         <LoadingSpinner 

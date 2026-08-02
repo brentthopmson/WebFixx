@@ -9,8 +9,6 @@ export const PUBLIC_PATHS: string[] = [
   '/verify',
 ];
 
-export const ADMIN_PATHS: string[] = ['/root', '/root/settings', '/root/users', '/root/transactions'];
-
 export const API_PATHS: string[] = ['/api', '/docs', '/openapi.json'];
 
 export function isPublicPath(pathname: string): boolean {
@@ -19,8 +17,4 @@ export function isPublicPath(pathname: string): boolean {
     if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return true;
   }
   return false;
-}
-
-export function isAdminPath(pathname: string): boolean {
-  return pathname === '/root' || pathname.startsWith('/root/');
 }
