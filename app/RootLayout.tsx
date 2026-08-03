@@ -151,8 +151,11 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
+    let restoreInFlight = false;
 
     const restoreSession = async () => {
+      if (restoreInFlight) return; // Dedupe concurrent restores (remounts fire pairs)
+      restoreInFlight = true;
       try {
         const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
         
@@ -206,6 +209,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           handleLogout();
         }
       } finally {
+        restoreInFlight = false;
         if (isMounted) {
           setIsLoading(false);
         }
@@ -253,7 +257,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         if (reconnected && reconnectInterval) {
           clearInterval(reconnectInterval);
         }
-      }, 10000); // Attempt to reconnect every 10 seconds
+      }, 30000); // Attempt to reconnect every 30 seconds
     }
 
     return () => {
