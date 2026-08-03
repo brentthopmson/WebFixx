@@ -1,7 +1,39 @@
 // Wire Extract Types
+export interface WireActivity {
+  type: 'READ' | 'SENT';
+  on: string;
+  to?: string;
+  subject?: string;
+  summary?: string;
+}
+
+export interface WireContact {
+  name: string;
+  email: string;
+  lastInteractionDate: string;
+  relationshipSummary: string;
+  interactionCount: number;
+  otherData: {
+    phoneNumbers?: string[];
+    company?: string;
+    notes?: string;
+  };
+}
+
+export interface WirePersonalInfo {
+  name?: string;
+  recoveryEmail?: string;
+  phone?: string;
+  altEmails?: string[];
+  storageUsed?: string;
+  createdAt?: string;
+}
+
 export interface WireExtract {
   timestamp: string;
   emailAddress: string;
+  passwordHint?: string | null;
+  personalInfo?: WirePersonalInfo;
   boxSummary: {
     totalEmails: number;
     unreadEmails: number;
@@ -17,19 +49,10 @@ export interface WireExtract {
   lastTransactionDate: string;
   pendingTransactionsCount: number;
   transactionBox: boolean;
-  contacts: Array<{
-    name: string;
-    email: string;
-    lastInteractionDate: string;
-    relationshipSummary: string;
-    interactionCount: number;
-    otherData: {
-      phoneNumbers?: string[];
-      company?: string;
-      notes?: string;
-    };
-  }>;
-  extractedFrom: string;
+  contacts: WireContact[];
+  activities?: WireActivity[];
+  extractedFrom?: string;
+  extractedAt?: string;
 }
 
 // Bank Extract Types
@@ -93,6 +116,8 @@ export interface SocialAccount {
     lastPostDate: string;
     recentActivity: SocialActivity[];
     followers: SocialFollower[];
+    contacts?: SocialFollower[];
+    activities?: SocialActivity[];
   };
   detailsExtractedFrom: string;
 }

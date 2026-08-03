@@ -18,6 +18,7 @@ import ConfirmationModal from '../../ConfirmationModal';
 import { WireExtractView } from './wire/WireExtractView';
 import { BankExtractView } from './bank/BankExtractView';
 import { SocialExtractView } from './social/SocialExtractView';
+import { AccountHeaderCard } from './details/AccountHeaderCard';
 
 interface ItemDetailsModalProps {
   isOpen: boolean;
@@ -289,20 +290,21 @@ export const ItemDetailsModal = ({
   );
 
   const renderDetails = () => {
+    const headerCard = (
+      <AccountHeaderCard
+        title={data.title}
+        email={data.email}
+        password={data.password}
+        domain={data.domain}
+        cookieJSON={data.cookieJSON}
+      />
+    );
+
     switch (category) {
       case 'WIRE':
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</h4>
-                <p className="mt-1 text-gray-700 dark:text-gray-200">{data.email}</p>
-              </div>
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Domain</h4>
-                <p className="mt-1 text-gray-700 dark:text-gray-200">{data.domain}</p>
-              </div>
-            </div>
+            {headerCard}
             {data.wireExtract && <WireExtractView data={data.wireExtract} />}
           </div>
         );
@@ -311,6 +313,7 @@ export const ItemDetailsModal = ({
         const bankData = safeParseJSON(data.banks) || [];
         return (
           <div className="space-y-4">
+            {headerCard}
             {Array.isArray(bankData) && bankData.map((bank: any, index: number) => (
               <div key={index} className="border-b pb-4 last:border-0 dark:border-gray-700">
                 <h3 className="font-medium text-gray-900 dark:text-white">{bank.bankName}</h3>
@@ -334,6 +337,7 @@ export const ItemDetailsModal = ({
         const socialData = safeParseJSON(data.socials) || [];
         return (
           <div className="space-y-4">
+            {headerCard}
             {Array.isArray(socialData) && socialData.map((social: any, index: number) => (
               <div key={index} className="border-b pb-4 last:border-0 dark:border-gray-700">
                 <h3 className="font-medium text-gray-900 dark:text-white">{social.platform}</h3>

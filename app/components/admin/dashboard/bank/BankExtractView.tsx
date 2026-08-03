@@ -43,7 +43,11 @@ export const BankExtractView = ({ data }: BankExtractViewProps) => {
               </div>
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Last Transaction</p>
-                <p className="font-medium dark:text-gray-200">{new Date(account.lastTransactionDate).toLocaleString()}</p>
+                <p className="font-medium dark:text-gray-200">
+                  {account.lastTransactionDate
+                    ? new Date(account.lastTransactionDate).toLocaleString()
+                    : 'N/A'}
+                </p>
               </div>
             </div>
 
@@ -77,7 +81,9 @@ export const BankExtractView = ({ data }: BankExtractViewProps) => {
                       <div>
                         <p className="font-medium dark:text-white">{transaction.description}</p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {new Date(transaction.date).toLocaleString()}
+                          {transaction.date
+                            ? new Date(transaction.date).toLocaleString()
+                            : 'Date unavailable'}
                         </p>
                       </div>
                       <div className={transaction.type === 'CREDIT' ? 'text-green-600' : 'text-red-600'}>

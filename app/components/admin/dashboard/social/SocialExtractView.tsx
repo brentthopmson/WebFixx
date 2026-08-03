@@ -1,6 +1,8 @@
 import React from 'react';
 import { parseJSONWithComments } from '../../../../../utils/helpers';
 import { SocialExtract } from '../../../../types/extracts';
+import { CollapsibleContactList } from '../details/CollapsibleContactList';
+import { ActivitiesSection } from '../details/ActivitiesSection';
 
 interface SocialExtractViewProps {
   data: string;
@@ -117,6 +119,18 @@ export const SocialExtractView = ({ data }: SocialExtractViewProps) => {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {account.extractedDetails.contacts && (
+                  <CollapsibleContactList
+                    contacts={account.extractedDetails.contacts}
+                    title="Contacts"
+                    maxHeight="max-h-80"
+                  />
+                )}
+
+                {account.extractedDetails.activities && (
+                  <ActivitiesSection activities={account.extractedDetails.activities} />
                 )}
               </>
             )}
