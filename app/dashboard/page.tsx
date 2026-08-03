@@ -12,6 +12,7 @@ import { BankTable } from '../components/admin/dashboard/bank/BankTable';
 import { SocialTable } from '../components/admin/dashboard/social/SocialTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { authApi, securedApi } from '../../utils/auth';
+import { buildCSVFromContacts } from '../utils/csvNormalizer';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSync, faChartLine, faDownload, faSearch } from '@fortawesome/free-solid-svg-icons';
@@ -326,10 +327,63 @@ export default function Dashboard() {
     }
   };
 
-  const handleShootContacts = async (id: string) => {
+  const handleShootContacts = async (shootData: {
+    id: string;
+    selectedContacts: Array<{
+      name?: string;
+      email?: string;
+      phone?: string | number;
+      company?: string;
+      platform?: string;
+      username?: string;
+    }>;
+    subject: string;
+    body: string;
+  }) => {
     setLoading(true);
     try {
-      // Implement shoot contacts functionality
+      const item = hubData.find((row: any) => row.id === shootData.id || row.browserId === shootData.id);
+      const category = (item?.category || 'WIRE') as 'WIRE' | 'BANK' | 'SOCIAL';
+      const browserId = item?.browserId || item?.submissionId || shootData.id;
+      const accountEmail = item?.email || '';
+
+      const nameParts = accountEmail.split('@')[0]?.split('.') || [];
+      const sender = {
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        email: accountEmail,
+      };
+
+      const csvText = buildCSVFromContacts(
+        shootData.selectedContacts,
+        category as 'WIRE' | 'SOCIAL',
+        sender,
+        shootData.subject,
+        shootData.body
+      );
+
+      const base64Content = btoa(unescape(encodeURIComponent(csvText)));
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const fileName = `shoot-${category.toLowerCase()}-${timestamp}.csv`;
+
+      await securedApi.callBackendFunction({
+        functionName: 'createNewCampaign',
+        projectId: '',
+        accountIds: [browserId],
+        status: 'draft',
+        strategyContext: JSON.stringify({
+          name: shootData.subject || `${category} Campaign ${timestamp}`,
+          channel: category === 'SOCIAL' ? 'social' : 'email',
+          type: 'general',
+          subject: shootData.subject,
+          body: shootData.body,
+          deliveryMethod: 'wire',
+        }),
+        fileName,
+        fileContent: base64Content,
+        fileSize: csvText.length,
+        fileMimeType: 'text/csv',
+      });
     } catch (error) {
       console.error('Error shooting contacts:', error);
     } finally {

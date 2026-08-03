@@ -179,6 +179,77 @@ export function normalizeCSV(rawCsvContent: string): { normalizedText: string, h
   };
 }
 
+export function buildCSVFromContacts(
+  contacts: Array<{
+    name?: string;
+    email?: string;
+    phone?: string | number;
+    company?: string;
+    platform?: string;
+    username?: string;
+  }>,
+  category: 'WIRE' | 'SOCIAL',
+  sender?: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    zipCode?: string;
+    phone?: string;
+    sex?: string;
+  },
+  subject?: string,
+  body?: string
+): string {
+  const rows: string[][] = [STANDARD_88_COLUMNS.map(h => h)];
+
+  contacts.forEach((contact, idx) => {
+    const row = new Array(STANDARD_88_COLUMNS.length).fill('');
+    row[0] = String(idx + 1);
+
+    const nameParts = (contact.name || '').split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    row[1] = firstName;
+    row[2] = lastName;
+    row[3] = contact.email || '';
+    row[9] = String(contact.phone || '');
+
+    if (contact.company) {
+      row[11] = contact.company;
+    }
+
+    if (category === 'SOCIAL') {
+      row[19] = contact.platform || '';
+      row[20] = contact.username || '';
+    }
+
+    if (sender) {
+      row[32] = sender.firstName || '';
+      row[33] = sender.lastName || '';
+      row[34] = sender.email || '';
+      row[35] = sender.address || '';
+      row[36] = sender.city || '';
+      row[37] = sender.state || '';
+      row[38] = sender.country || '';
+      row[39] = sender.zipCode || '';
+      row[40] = sender.phone || '';
+      row[41] = sender.sex || '';
+    }
+
+    row[61] = subject || '';
+    row[62] = body || '';
+
+    rows.push(row);
+  });
+
+  return stringifyCSV(rows);
+}
+
 export function generateSampleCSV(): string {
   const columns = [
     'FIRSTNAME', 'LASTNAME', 'EMAIL', 'ADDRESS', 'CITY', 'STATE', 'COUNTRY', 'ZIPCODE', 'PHONE', 'SEX',

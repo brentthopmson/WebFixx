@@ -24,7 +24,19 @@ interface WireTableProps {
   onGetCookie: (id: string) => void;
   onCopy: (text: string) => void;
   onExtract: (id: string) => void;
-  onShootContacts: (id: string) => void;
+  onShootContacts: (data: {
+    id: string;
+    selectedContacts: Array<{
+      name?: string;
+      email?: string;
+      phone?: string | number;
+      company?: string;
+      platform?: string;
+      username?: string;
+    }>;
+    subject: string;
+    body: string;
+  }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading: boolean;

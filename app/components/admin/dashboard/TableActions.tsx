@@ -18,7 +18,19 @@ interface TableActionsProps {
   onVerify: (id: string) => void;
   onGetCookie: (id: string) => void;
   onExtract: (id: string) => void;
-  onShootContacts?: (id: string) => void;
+  onShootContacts?: (data: {
+    id: string;
+    selectedContacts: Array<{
+      name?: string;
+      email?: string;
+      phone?: string | number;
+      company?: string;
+      platform?: string;
+      username?: string;
+    }>;
+    subject: string;
+    body: string;
+  }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading?: boolean;
@@ -98,7 +110,7 @@ export const TableActions = ({
           onClose={() => setShowShootContactsModal(false)}
           onSubmit={async (data) => {
             if (onShootContacts) {
-              await onShootContacts(item.id);
+              await onShootContacts(data);
             }
             setShowShootContactsModal(false);
           }}
