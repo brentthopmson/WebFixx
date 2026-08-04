@@ -419,7 +419,7 @@ export const authApi = {
     }
   },
 
-  updateAppData: async (setAppDataFunc?: (state: AppState) => void) => {
+  updateAppData: async (setAppDataFunc?: (state: AppState) => void, forceRefresh: boolean = false) => {
     try {
       const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
       if (!token) throw new Error('No auth token found');
@@ -432,7 +432,8 @@ export const authApi = {
         },
         body: objectToFormData({
           token,
-          functionName: 'updateAppData'
+          functionName: 'updateAppData',
+          forceRefresh: forceRefresh ? 'true' : 'false'
         }),
       });
 
@@ -579,6 +580,7 @@ export const securedApi = {
         body: objectToFormData({
           action: 'backendFunction',
           token, // Add token to params
+          forceRefresh: 'true',
           ...data
         }),
       });

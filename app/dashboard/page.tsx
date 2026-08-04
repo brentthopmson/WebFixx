@@ -256,7 +256,7 @@ export default function Dashboard() {
   const handleRefreshData = async () => {
     setRefreshing(true);
     try {
-      await authApi.updateAppData(setAppData);
+      await authApi.updateAppData(setAppData, true);
     } catch (error) {
       console.error('Error refreshing application data:', error);
     } finally {
