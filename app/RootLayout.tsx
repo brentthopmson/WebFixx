@@ -187,7 +187,9 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
                 sender: response.data.sender || [],
                 limits: response.data.limits || [],
                 campaigns: response.data.campaigns || [],
-                users: response.data.users || []
+                users: response.data.users || [],
+                apis: response.data.apis || [],
+                settings: response.data.settings || []
               },
               isAuthenticated: true
             });
