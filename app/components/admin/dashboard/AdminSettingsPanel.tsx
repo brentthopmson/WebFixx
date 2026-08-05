@@ -46,7 +46,7 @@ export default function AdminSettingsPanel() {
     try {
       const result = await securedApi.callBackendFunction({
         functionName: 'updateSetting',
-        key: row.settingsKey,
+        settingsKey: row.settingsKey,
         value1: next
       });
       console.log('[SettingsSave] flag result', { key: row.settingsKey, next, result: result?.success, error: result?.error });
@@ -67,7 +67,7 @@ export default function AdminSettingsPanel() {
     try {
       const result = await securedApi.callBackendFunction({
         functionName: 'updateSetting',
-        key: row.settingsKey,
+        settingsKey: row.settingsKey,
         value1: edit.v1,
         value2: edit.v2
       });
