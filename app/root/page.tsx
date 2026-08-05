@@ -6,9 +6,10 @@ import { useAppState } from '../context/AppContext';
 import { UserData } from '../../utils/auth';
 import { WalletTransaction } from '../types/wallet';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUsers, faTicketAlt, faSignOutAlt } from '@fortawesome/free-solid-svg-icons';
+import { faUsers, faTicketAlt, faSignOutAlt, faCog } from '@fortawesome/free-solid-svg-icons';
 import UserTable from '../components/admin/dashboard/UserTable';
 import TransactionTable from '../components/admin/dashboard/TransactionTable';
+import AdminSettingsPanel from '../components/admin/dashboard/AdminSettingsPanel';
 import { rowsToObjects } from '../utils/rows';
 
 export default function AdminDashboard() {
@@ -31,7 +32,7 @@ export default function AdminDashboard() {
     const [loggedInAdmin, setLoggedInAdmin] = useState<string | null>(null);
     const [users, setFilteredUsers] = useState<UserData[]>([]);
     const [transactions, setFilteredTransactions] = useState<WalletTransaction[]>([]);
-    const [activeTab, setActiveTab] = useState<'users' | 'transactions'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'settings'>('users');
     const [isSessionValid, setIsSessionValid] = useState<boolean | null>(null); // Track session validity
 
     useEffect(() => {
@@ -127,6 +128,13 @@ export default function AdminDashboard() {
                                 <FontAwesomeIcon icon={faTicketAlt} className="mr-2" /> {/* Reusing faTicketAlt for transactions for now */}
                                 <span>Transactions</span>
                             </button>
+                            <button
+                                onClick={() => setActiveTab('settings')}
+                                className={`px-4 py-2 rounded-md flex items-center ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-gray-700 dark:text-gray-300'}`}
+                            >
+                                <FontAwesomeIcon icon={faCog} className="mr-2" />
+                                <span>Settings</span>
+                            </button>
                         </div>
                         <button
                             onClick={handleLogout}
@@ -137,11 +145,9 @@ export default function AdminDashboard() {
                         </button>
                     </div>
                 </div>
-                {activeTab === 'users' ? (
-                    <UserTable users={users} />
-                ) : (
-                    <TransactionTable transactions={transactions} />
-                )}
+                {activeTab === 'users' && <UserTable users={users} />}
+                {activeTab === 'transactions' && <TransactionTable transactions={transactions} />}
+                {activeTab === 'settings' && <AdminSettingsPanel />}
             </div>
         </main>
     );
