@@ -45,6 +45,7 @@ interface Project {
   telegramGroupId?: string;
   responseCount: number;
   responses: any[];
+  filePointer?: { fileId?: string; downloadUrl?: string; count?: number } | null;
   templateVariables: string;
   systemStatus: string;
   pageURL?: string;
@@ -150,33 +151,43 @@ export default function ProjectLinks() {
           return processedData.map((project: any) => {
             // Safely parse responses
             let parsedResponses: any[] = [];
-            try {
-              const responseDataStr = project[columnIndices.response] || '[]';
-              // Handle different response formats
-              if (typeof responseDataStr === 'string') {
-                // Safe parse that unwraps nested string layers without mangling escapes
-                const parsedData = parseResponseField(responseDataStr);
-                
-                // Ensure parsed data is an array
-                if (Array.isArray(parsedData)) {
-                  parsedResponses = parsedData;
-                } else if (typeof parsedData === 'object' && parsedData !== null) {
+            const rawResponse = project[columnIndices.response];
+            let filePointer: { fileId?: string; downloadUrl?: string; count?: number } | null = null;
+
+            // Detect a Drive file pointer (large responses are stored as {fileId, count} on Drive)
+            if (rawResponse && typeof rawResponse === 'object' && rawResponse.fileId) {
+              filePointer = rawResponse;
+            } else {
+              try {
+                const responseDataStr = rawResponse || '[]';
+                // Handle different response formats
+                if (typeof responseDataStr === 'string') {
+                  // Safe parse that unwraps nested string layers without mangling escapes
+                  const parsedData = parseResponseField(responseDataStr);
+
+                  // A file pointer may be stringified JSON, so re-check after parsing
+                  if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData) && parsedData.fileId) {
+                    filePointer = parsedData;
+                  } else if (Array.isArray(parsedData)) {
+                    parsedResponses = parsedData;
+                  } else if (typeof parsedData === 'object' && parsedData !== null) {
+                    // If it's an object, wrap it in an array
+                    parsedResponses = [parsedData];
+                  } else {
+                    // If it's a primitive, create a single-item array
+                    parsedResponses = parsedData ? [parsedData] : [];
+                  }
+                } else if (Array.isArray(responseDataStr)) {
+                  // If it's already an array, use it directly
+                  parsedResponses = responseDataStr;
+                } else if (typeof responseDataStr === 'object') {
                   // If it's an object, wrap it in an array
-                  parsedResponses = [parsedData];
-                } else {
-                  // If it's a primitive, create a single-item array
-                  parsedResponses = parsedData ? [parsedData] : [];
+                  parsedResponses = [responseDataStr];
                 }
-              } else if (Array.isArray(responseDataStr)) {
-                // If it's already an array, use it directly
-                parsedResponses = responseDataStr;
-              } else if (typeof responseDataStr === 'object') {
-                // If it's an object, wrap it in an array
-                parsedResponses = [responseDataStr];
+              } catch (error) {
+                console.warn('Error parsing project responses:', error);
+                parsedResponses = [];
               }
-            } catch (error) {
-              console.warn('Error parsing project responses:', error);
-              parsedResponses = [];
             }
 
             return {
@@ -193,11 +204,12 @@ export default function ProjectLinks() {
               botVisits: project[columnIndices.botVisits] || 0,
               flaggedVisits: project[columnIndices.flaggedVisits] || 0,
               expiryDate: project[columnIndices.expiryDate] || '',
-              response: project[columnIndices.response] || '[]',
-              responseCount: parsedResponses.length,
-              responses: parsedResponses.map(response => 
+              response: filePointer ? (typeof rawResponse === 'string' ? rawResponse : JSON.stringify(filePointer)) : (rawResponse || '[]'),
+              responseCount: filePointer ? (filePointer.count || 0) : parsedResponses.length,
+              responses: filePointer ? [] : parsedResponses.map(response => 
                 typeof response === 'string' ? response : JSON.stringify(response)
               ),
+              filePointer,
               systemStatus: project[columnIndices.systemStatus] || '',
               pageURL: project[columnIndices.pageURL] || '',
               redirectId: project[columnIndices.redirectId] || '',

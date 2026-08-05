@@ -1,5 +1,5 @@
 import React from'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faCopy, 
@@ -79,6 +79,7 @@ interface ResponseModalProps {
     telegramGroupId?: string;
     responseCount: number;
     responses: any[];
+    filePointer?: { fileId?: string; downloadUrl?: string; count?: number } | null;
     templateVariables: string;
     systemStatus: string;
     pageURL?: string;
@@ -93,6 +94,8 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
   const { setAppData } = useAppState(); // Destructure setAppData
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false); // New state for refresh
+  const [loadedResponses, setLoadedResponses] = useState<ResponseData[] | null>(null); // Lazy-loaded responses for Drive file pointers
+  const [loadingFile, setLoadingFile] = useState(false);
 
   const handleRefreshData = async () => {
     setRefreshing(true);
@@ -121,6 +124,8 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
   // Parse responses, handling potential parsing errors
   const parsedResponses: ResponseData[] = useMemo(() => {
     if (!selectedProject) return []; // Return empty array if no project selected
+    // If the responses were lazily fetched from a Drive file, use those
+    if (loadedResponses) return loadedResponses;
     return selectedProject.responses.map(responseStr => {
       try {
         // Safe parse that unwraps nested string layers without mangling escapes
@@ -130,7 +135,39 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
         return null;
       }
     }).filter(response => response !== null) as ResponseData[];
-  }, [selectedProject]); // Add selectedProject to dependencies
+  }, [selectedProject, loadedResponses]); // Add selectedProject to dependencies
+
+  // Lazy-load full responses from Drive when the project's response is a file pointer
+  useEffect(() => {
+    if (!selectedProject) return;
+    const pointer = selectedProject.filePointer;
+    if (!pointer || !pointer.fileId) return;
+    setLoadingFile(true);
+    fetch(`/api/drive-csv?fileId=${pointer.fileId}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Drive fetch failed with ${res.status}`);
+        return res.json();
+      })
+      .then((result: any) => {
+        if (result.success) {
+          let data = result.data;
+          // Drive file holds a JSON array of responses (may be double-encoded)
+          let parsed: any = data;
+          if (typeof data === 'string') {
+            try { parsed = JSON.parse(data); } catch (_) {}
+          }
+          if (typeof parsed === 'string') {
+            try { parsed = JSON.parse(parsed); } catch (_) {}
+          }
+          const arr = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+          setLoadedResponses(arr as ResponseData[]);
+        } else {
+          console.error('Error loading responses from Drive:', result.error);
+        }
+      })
+      .catch(err => console.error('Error loading responses from Drive:', err))
+      .finally(() => setLoadingFile(false));
+  }, [selectedProject]);
 
   // State for detailed view
   const [detailedResponseIndex, setDetailedResponseIndex] = useState<number | null>(null);
@@ -388,7 +425,7 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
           </div>
         </div>
         <div className="text-sm text-gray-600 dark:text-gray-300 mb-4 px-4">
-          Showing {parsedResponses.length} responses
+          {loadingFile ? 'Loading responses from Drive...' : `Showing ${parsedResponses.length} responses`}
         </div>
 
         {/* Desktop View */}
