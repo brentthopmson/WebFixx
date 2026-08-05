@@ -9,14 +9,24 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUsers, faTicketAlt, faSignOutAlt } from '@fortawesome/free-solid-svg-icons';
 import UserTable from '../components/admin/dashboard/UserTable';
 import TransactionTable from '../components/admin/dashboard/TransactionTable';
+import { rowsToObjects } from '../utils/rows';
 
 export default function AdminDashboard() {
     const router = useRouter();
     const { appData, setAppData } = useAppState();
 
-    // Extract users and transactions from appData
-    const allUsers: UserData[] = useMemo(() => appData?.data?.users?.data || [], [appData]);
-    const allTransactions: WalletTransaction[] = useMemo(() => appData?.data?.transactions?.data || [], [appData]);
+    // Extract users and transactions from appData (map raw row arrays to objects via headers)
+    const allUsers: UserData[] = useMemo(() => {
+        const users = appData?.data?.users;
+        if (!users?.data || !Array.isArray(users.data)) return [];
+        return rowsToObjects(users.headers || [], users.data as unknown as any[][]) as unknown as UserData[];
+    }, [appData]);
+
+    const allTransactions: WalletTransaction[] = useMemo(() => {
+        const txs = appData?.data?.transactions;
+        if (!txs?.data || !Array.isArray(txs.data)) return [];
+        return rowsToObjects(txs.headers || [], txs.data as unknown as any[][]) as unknown as WalletTransaction[];
+    }, [appData]);
 
     const [loggedInAdmin, setLoggedInAdmin] = useState<string | null>(null);
     const [users, setFilteredUsers] = useState<UserData[]>([]);
@@ -75,7 +85,9 @@ export default function AdminDashboard() {
                 redirect: { success: false, headers: [], data: [], count: 0 },
                 custom: { success: false, headers: [], data: [], count: 0 },
                 sender: { success: false, headers: [], data: [], count: 0 },
-                limits: { success: false, headers: [], data: [], count: 0 }
+                limits: { success: false, headers: [], data: [], count: 0 },
+                apis: { success: false, headers: [], data: [], count: 0 },
+                settings: { success: false, headers: [], data: [], count: 0 }
             }, 
             isAuthenticated: false,
             isOffline: false // Added missing property

@@ -42,6 +42,8 @@ export interface AppState {
       custom?: ApiResponseData<Custom>; // Use Custom type
       sender?: ApiResponseData<Sender>; // Use Sender type
       limits?: ApiResponseData<Limit>; // Use Limit type
+      apis?: ApiResponseData<any>;
+      settings?: ApiResponseData<any>;
       users?: ApiResponseData<UserData>; // Use UserData type
       campaigns?: ApiResponseData<Campaign>; // Add campaigns
     };

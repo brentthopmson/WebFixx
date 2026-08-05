@@ -92,6 +92,8 @@ export interface AppData {
   custom?: ApiResponseData<any>;
   sender?: ApiResponseData<any>;
   limits?: ApiResponseData<Limit>;
+  apis?: ApiResponseData<any>;
+  settings?: ApiResponseData<any>;
   campaigns?: ApiResponseData<Campaign>; // Add campaigns
 }
 
@@ -134,6 +136,8 @@ export interface TokenValidationResponse {
     sender?: ApiResponseData<any>;
     users?: ApiResponseData<UserData>;
     limits?: ApiResponseData<Limit>;
+    apis?: ApiResponseData<any>;
+    settings?: ApiResponseData<any>;
     campaigns?: ApiResponseData<Campaign>; // Add campaigns
   };
   needsVerification?: boolean;
@@ -313,7 +317,9 @@ export const authApi = {
         redirect: responseData.data?.redirect || [],
         custom: responseData.data?.custom || [],
         sender: responseData.data?.sender || [],
-        limits: responseData.data?.limits || []
+        limits: responseData.data?.limits || [],
+        apis: responseData.data?.apis || [],
+        settings: responseData.data?.settings || []
       },
       needsVerification: responseData.needsVerification || false,
       error: responseData.error || undefined
@@ -491,6 +497,8 @@ export const authApi = {
                 sender: result.appData?.sender || [],
                 limits: result.appData?.limits || [],
                 users: result.appData?.users || [],
+                apis: result.appData?.apis || [],
+                settings: result.appData?.settings || [],
                 campaigns: result.appData?.campaigns || []
               },
               isAuthenticated: true
@@ -516,6 +524,8 @@ export const authApi = {
                 sender: result.appData?.sender || appState.appData?.data?.sender || [],
                 limits: result.appData?.limits || appState.appData?.data?.limits || [],
                 users: result.appData?.users || appState.appData?.data?.users || [],
+                apis: result.appData?.apis || appState.appData?.data?.apis || [],
+                settings: result.appData?.settings || appState.appData?.data?.settings || [],
                 campaigns: result.appData?.campaigns || appState.appData?.data?.campaigns || []
               },
               isAuthenticated: true
@@ -610,6 +620,8 @@ export const securedApi = {
               sender: result.appData?.sender || appState.appData?.data?.sender || [],
               limits: result.appData?.limits || appState.appData?.data?.limits || [],
               users: result.appData?.users || appState.appData?.data?.users || [],
+              apis: result.appData?.apis || appState.appData?.data?.apis || [],
+              settings: result.appData?.settings || appState.appData?.data?.settings || [],
               campaigns: result.appData?.campaigns || appState.appData?.data?.campaigns || []
             },
             isAuthenticated: true
