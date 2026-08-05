@@ -5,7 +5,7 @@ import { useAppState } from '../../../context/AppContext';
 import { securedApi } from '../../../../utils/auth';
 import { rowsToObjects } from '../../../utils/rows';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCog, faSpinner, faRobot, faShieldAlt, faSave, faCheck } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faSpinner, faRobot, faShieldAlt, faSave } from '@fortawesome/free-solid-svg-icons';
 
 export interface SettingsRow {
   settingsKey: string;
@@ -17,7 +17,6 @@ export interface SettingsRow {
 export default function AdminSettingsPanel() {
   const { appData } = useAppState();
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [savedKey, setSavedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, { v1: string; v2: string }>>({});
 
@@ -36,19 +35,23 @@ export default function AdminSettingsPanel() {
     [settings]
   );
 
+  const isOnFlag = (val: unknown) => ['TRUE', 'YES', '1'].includes(String(val).trim().toUpperCase());
+
   const saveFlag = async (row: SettingsRow) => {
     if (!row.settingsKey && row.settingsKey !== undefined) return;
+    const next = isOnFlag(row.settingsValue1) ? 'FALSE' : 'TRUE';
     setSavingKey(row.settingsKey);
     setError(null);
+    console.log('[SettingsSave] toggling flag', { key: row.settingsKey, current: row.settingsValue1, next });
     try {
-      await securedApi.callBackendFunction({
+      const result = await securedApi.callBackendFunction({
         functionName: 'updateSetting',
         key: row.settingsKey,
-        value1: String(row.settingsValue1) === 'TRUE' ? 'FALSE' : 'TRUE'
+        value1: next
       });
-      setSavedKey(row.settingsKey);
-      window.setTimeout(() => setSavedKey(null), 2000);
+      console.log('[SettingsSave] flag result', { key: row.settingsKey, next, result: result?.success, error: result?.error });
     } catch (e: any) {
+      console.error('[SettingsSave] flag error', { key: row.settingsKey, error: e?.message });
       setError(e?.message || 'Failed to update setting');
     } finally {
       setSavingKey(null);
@@ -60,16 +63,17 @@ export default function AdminSettingsPanel() {
     const edit = edits[row.settingsKey] || { v1: String(row.settingsValue1 ?? ''), v2: String(row.settingsValue2 ?? '') };
     setSavingKey(row.settingsKey);
     setError(null);
+    console.log('[SettingsSave] saving setting', { key: row.settingsKey, value1: edit.v1, value2: edit.v2 });
     try {
-      await securedApi.callBackendFunction({
+      const result = await securedApi.callBackendFunction({
         functionName: 'updateSetting',
         key: row.settingsKey,
         value1: edit.v1,
         value2: edit.v2
       });
-      setSavedKey(row.settingsKey);
-      window.setTimeout(() => setSavedKey(null), 2000);
+      console.log('[SettingsSave] setting result', { key: row.settingsKey, result: result?.success, error: result?.error });
     } catch (e: any) {
+      console.error('[SettingsSave] setting error', { key: row.settingsKey, error: e?.message });
       setError(e?.message || 'Failed to update setting');
     } finally {
       setSavingKey(null);
@@ -81,12 +85,15 @@ export default function AdminSettingsPanel() {
   };
 
   const renderToggle = (row: SettingsRow) => {
-    const isOn = String(row.settingsValue1) === 'TRUE';
+    const isOn = isOnFlag(row.settingsValue1);
     const saving = savingKey === row.settingsKey;
     return (
       <button
         onClick={() => saveFlag(row)}
         disabled={saving}
+        aria-checked={isOn}
+        role="switch"
+        title={isOn ? 'Enabled' : 'Disabled'}
         className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${
           saving ? 'opacity-60' : isOn ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
         }`}
@@ -130,9 +137,6 @@ export default function AdminSettingsPanel() {
                     {row.settingsKey}
                   </span>
                   <div className="flex items-center space-x-2">
-                    {savedKey === row.settingsKey && (
-                      <FontAwesomeIcon icon={faCheck} className="w-4 h-4 text-green-500" />
-                    )}
                     {renderToggle(row)}
                   </div>
                 </div>
@@ -162,12 +166,6 @@ export default function AdminSettingsPanel() {
                       <div className="text-sm font-medium text-gray-900 dark:text-white break-words pr-3">
                         {row.settingsKey}
                       </div>
-                      {savedKey === row.settingsKey && (
-                        <span className="flex items-center text-xs text-green-600 dark:text-green-400 shrink-0">
-                          <FontAwesomeIcon icon={faCheck} className="w-3 h-3 mr-1" />
-                          Saved
-                        </span>
-                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="block">
