@@ -197,6 +197,10 @@ function objectToFormData(obj: Record<string, any>): string {
   return formData.toString();
 }
 
+function generateTraceId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
 // Utility functions
 const getAuthToken = (): string | null => {
   return localStorage.getItem('authToken');
@@ -426,6 +430,8 @@ export const authApi = {
   },
 
   updateAppData: async (setAppDataFunc?: (state: AppState) => void, forceRefresh: boolean = false) => {
+    const traceId = generateTraceId();
+    const t0 = performance.now();
     try {
       const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
       if (!token) throw new Error('No auth token found');
@@ -438,6 +444,7 @@ export const authApi = {
         },
         body: objectToFormData({
           token,
+          traceId,
           functionName: 'updateAppData',
           forceRefresh: forceRefresh ? 'true' : 'false'
         }),
@@ -538,12 +545,12 @@ export const authApi = {
           }
         }
         
+        console.info(`[req] functionName=updateAppData traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} size=${text.length}`);
         return result;
       } catch (e) {
-        // console.error('Failed to parse response:', text); // Removed console.error
-        throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
       }
     } catch (error) {
+      console.info(`[req] functionName=updateAppData traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} error=${(error as Error).message}`);
       // console.error('Failed to update app data:', error); // Removed console.error
       throw error;
     }
@@ -570,6 +577,9 @@ export const authApi = {
 
 export const securedApi = {
   callBackendFunction: async (data: SecuredApiRequest): Promise<SecuredApiResponse> => {
+    const traceId = generateTraceId();
+    const t0 = performance.now();
+    const fnName = (data as any)?.functionName || 'n/a';
     if (typeof window !== 'undefined' && !navigator.onLine) {
       alert("This action requires internet connectivity. Please connect and try again.");
       throw new Error("Offline write actions blocked");
@@ -590,6 +600,7 @@ export const securedApi = {
         body: objectToFormData({
           action: 'backendFunction',
           token, // Add token to params
+          traceId,
           forceRefresh: 'true',
           ...data
         }),
@@ -632,8 +643,10 @@ export const securedApi = {
         }
       }
 
+      console.info(`[req] functionName=${fnName} traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} size=${JSON.stringify(result).length}`);
       return result;
     } catch (error) {
+      console.info(`[req] functionName=${fnName} traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} error=${(error as Error).message}`);
       // Check for auth errors → trigger immediate logout
       if (error instanceof BackendError && 
           (error.message.includes('token') || error.message.includes('auth') || 
