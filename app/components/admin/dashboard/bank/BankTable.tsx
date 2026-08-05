@@ -62,11 +62,8 @@ export const BankTable: React.FC<BankTableProps> = ({
   };
 
   const formatTimestamp = (timestamp: string) => {
-    try {
-      return new Date(timestamp).toLocaleString();
-    } catch (error) {
-      return timestamp;
-    }
+    const t = new Date(timestamp);
+    return isNaN(t.getTime()) ? '—' : t.toLocaleString();
   };
 
   const handleCopy = (text: string, type: string) => {
@@ -93,7 +90,7 @@ export const BankTable: React.FC<BankTableProps> = ({
             const banks = getBankData(item.banks);
             return banks.map((bank: any, bankIndex: number) => (
               <tr 
-                key={`${item.id}-${bankIndex}`}
+                key={`${item.key ?? item.id}-${bankIndex}`}
                 onClick={() => onRowClick(item.id)}
                 className={`cursor-pointer ${getRowBackgroundColor(item)} ${selectedId === item.id ? '!bg-blue-50 dark:!bg-blue-900' : ''}`}
               >

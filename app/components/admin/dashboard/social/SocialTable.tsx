@@ -80,11 +80,8 @@ export const SocialTable: React.FC<SocialTableProps> = ({
   };
 
   const formatTimestamp = (timestamp: string) => {
-    try {
-      return new Date(timestamp).toLocaleString();
-    } catch (error) {
-      return timestamp;
-    }
+    const t = new Date(timestamp);
+    return isNaN(t.getTime()) ? '—' : t.toLocaleString();
   };
 
   const handleCopy = (text: string, type: string) => {
@@ -112,7 +109,7 @@ export const SocialTable: React.FC<SocialTableProps> = ({
             // If there are multiple social accounts, create a row for each
             return socials.map((social: any, socialIndex: number) => (
               <tr 
-                key={`${item.id}-${socialIndex}`}
+                key={`${item.key ?? item.id}-${socialIndex}`}
                 onClick={() => onRowClick(item.id)}
                 className={`cursor-pointer ${getRowBackgroundColor(item)} ${selectedId === item.id ? '!bg-blue-50 dark:!bg-blue-900' : ''}`}
               >

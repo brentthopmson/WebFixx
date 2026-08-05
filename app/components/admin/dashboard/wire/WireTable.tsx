@@ -135,7 +135,7 @@ export const WireTable: React.FC<WireTableProps> = ({
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {data.map((item) => (
               <tr 
-                key={item.id}
+                key={item.key ?? item.id}
                 onClick={() => onRowClick(item.id)}
                 className={`cursor-pointer ${getRowBackgroundColor(item)} ${selectedId === item.id ? '!bg-blue-50 dark:!bg-blue-900' : ''}`}
               >
@@ -218,7 +218,10 @@ export const WireTable: React.FC<WireTableProps> = ({
                         {item[column]}
                       </a>
                     ) : column === 'timestamp' ? (
-                      new Date(item[column]).toLocaleString()
+                      (() => {
+                        const t = new Date(item[column]);
+                        return isNaN(t.getTime()) ? '—' : t.toLocaleString();
+                      })()
                     ) : column === 'ipData' ? (
                       formatIpData(item[column])
                     ) : column === 'deviceData' ? (

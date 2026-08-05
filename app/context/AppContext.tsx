@@ -11,24 +11,23 @@ import { WalletTransaction } from '../types/wallet'; // Import WalletTransaction
 const AppContext = createContext<GlobalAppStateContext | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [appData, setAppData] = useState<AppState | null>(null);
-  const [isOffline, setIsOffline] = useState(false); // New offline state
-  const [isReconnecting, setIsReconnecting] = useState(false); // New reconnecting state
-
-  // Initialize state from localStorage on mount
-  useEffect(() => {
+  // Initialize synchronously from localStorage so a hard refresh can render the
+  // cached session instantly (RootLayout then refreshes in the background).
+  const [appData, setAppData] = useState<AppState | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const storedState = localStorage.getItem('appState');
       if (storedState) {
         const parsedState = JSON.parse(storedState);
-        // Ensure isOffline is set to false on initial load from localStorage
-        setAppData({ ...parsedState, isOffline: false }); 
+        return { ...parsedState, isOffline: false };
       }
     } catch (error) {
-      // console.error('Failed to parse stored app state:', error); // Removed console.error
       localStorage.removeItem('appState');
     }
-  }, []);
+    return null;
+  });
+  const [isOffline, setIsOffline] = useState(false); // New offline state
+  const [isReconnecting, setIsReconnecting] = useState(false); // New reconnecting state
 
   // Update localStorage when state changes
   useEffect(() => {

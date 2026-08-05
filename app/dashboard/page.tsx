@@ -123,7 +123,7 @@ export default function Dashboard() {
     }
 
     const headers = appData.data.hub.headers || [];
-    const rows = appData.data.hub.data.map(row => {
+    const rows = appData.data.hub.data.map((row, rowIndex) => {
       const item: any = {};
       headers.forEach((header: string, index: number) => {
         if (header) {
@@ -140,16 +140,29 @@ export default function Dashboard() {
       } catch (error) {
         console.warn('Error parsing JSON fields:', error);
       }
+
+      // Guarantee a unique, stable React key per row. Hub rows carry submissionId
+      // (not always an 'id'), and batched submissions can share timestamps, so
+      // fall back to the raw row index to keep clashing rows distinct.
+      item.key = String(
+        item.submissionId || item.browserId || item.id || `row-${rowIndex}`
+      );
       
       return item;
     });
 
-    // Sort by timestamp descending (newest first), fallback to reverse insertion order
+    // Sort by timestamp descending (newest first). Rows with a missing/invalid
+    // timestamp are treated as the oldest so 'Invalid Date' never breaks order.
+    const ts = (value: any): number => {
+      if (value === null || value === undefined || value === '') return -Infinity;
+      const t = new Date(value).getTime();
+      return isNaN(t) ? -Infinity : t;
+    };
     return rows.sort((a, b) => {
-      if (a.timestamp && b.timestamp) {
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      }
-      return 0;
+      const at = ts(a.timestamp);
+      const bt = ts(b.timestamp);
+      if (at === bt) return 0;
+      return bt - at;
     });
   }, [appData?.data?.hub]);
 

@@ -48,11 +48,15 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
   useEffect(() => {
     setAuthAppState({ appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting }); // Updated setAuthAppState call
   }, [appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Start not-loading if a cached authenticated session is already available so
+  // a hard refresh renders instantly; validateUserToken refreshes in the background.
+  const [isLoading, setIsLoading] = useState(() => !(appData?.isAuthenticated && appData?.user));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false); // New state for logout in progress
   const [isDarkMode, setIsDarkMode] = useState(appData?.user?.darkMode || false);
-  const [hasToken, setHasToken] = useState(false);
+  const [hasToken, setHasToken] = useState(
+    () => typeof document !== 'undefined' && !!document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')
+  );
   const [visibleLinks, setVisibleLinks] = useState({
     dashboard: false,
     campaign: false,
@@ -162,6 +166,15 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         if (!token) {
           setIsLoading(false);
           return;
+        }
+
+        // Fast path: if we already have a cached authenticated session (from
+        // localStorage), render it immediately and validate/refresh in the
+        // background. This keeps hard refreshes instant — the slow full backend
+        // payload (Drive fetches etc.) never blocks the UI.
+        const hasCachedSession = !!(appData?.isAuthenticated && appData?.user);
+        if (hasCachedSession && isMounted) {
+          setIsLoading(false);
         }
 
         if (isMounted) {
