@@ -3,6 +3,7 @@ import { securedApi } from '../../../../../utils/auth';
 import ConfirmationModal from '../../../ConfirmationModal';
 import LoadingSpinner from '../../../LoadingSpinner';
 import { useAppState } from '../../../../context/AppContext';
+import { isFeatureEnabled, featureDisabledMessage } from '../../../../../utils/featureFlags';
 import { authApi } from '../../../../../utils/auth';
 
 interface LinkData {
@@ -46,6 +47,10 @@ export default function RedirectProtectionSettings({ project, onSave }: Redirect
 
   const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedRedirectId(e.target.value);
+    if (!isFeatureEnabled(appData, 'allowRedirectCreation')) {
+      setError(featureDisabledMessage('allowRedirectCreation', 'redirect protection'));
+      return;
+    }
     setShowConfirmationModal(true);
     setError(null); // Clear error on new selection
   };

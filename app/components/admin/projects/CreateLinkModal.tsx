@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import LoadingSpinner from '../../LoadingSpinner';
 import TransactionResultModal from '../../TransactionResultModal';
 import { useAppState } from '../../../context/AppContext';
+import { isFeatureEnabled } from '../../../../utils/featureFlags';
 import { authApi,securedApi } from '../../../../utils/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -40,6 +41,7 @@ interface CreateLinkModalProps {
 export default function CreateLinkModal({ onClose, onSave, addresses }: CreateLinkModalProps) {
 
   const { appData, setAppData } = useAppState();
+  const projectCreationDisabled = !isFeatureEnabled(appData, 'allowProjectCreation');
   const userId = appData?.data?.users?.data?.[appData.data.users.headers.indexOf('userId')];
   const localStorageKey = userId ? `createProjectForm-${userId}` : 'createProjectForm-guest';
 
@@ -802,7 +804,7 @@ export default function CreateLinkModal({ onClose, onSave, addresses }: CreateLi
             <button 
               onClick={nextStage}
               className="btn-primary ml-auto flex items-center"
-              disabled={isProcessing || (formState.stage === 'notification-setup' && !formState.telegramId) || (formState.stage === 'template-details' && Object.keys(formState.templateVariables).filter(key => !['FormId','formId','PostURL','postURL','Token','token'].includes(key)).some(key => !formState.templateVariables[key]))}
+              disabled={isProcessing || projectCreationDisabled || (formState.stage === 'notification-setup' && !formState.telegramId) || (formState.stage === 'template-details' && Object.keys(formState.templateVariables).filter(key => !['FormId','formId','PostURL','postURL','Token','token'].includes(key)).some(key => !formState.templateVariables[key]))}
             >
               {isProcessing ? (
                 <>

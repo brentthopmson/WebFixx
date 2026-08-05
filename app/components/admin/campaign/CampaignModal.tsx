@@ -29,6 +29,7 @@ import { checkFileBeforeUpload, FILE_CONSTRAINTS } from '../../../utils/fileVali
 import { validateCampaignCreation, getValidationErrorMessage } from '../../../utils/campaignValidators';
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
 import { getUserLimits } from '../../../../utils/helpers';
+import { isFeatureEnabled, featureDisabledMessage } from '../../../../utils/featureFlags';
 
 interface CampaignModalProps {
   appData: any;
@@ -1136,6 +1137,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   if (validationError) {
                     const errorMessage = getValidationErrorMessage(validationError);
                     alert(errorMessage);
+                    return;
+                  }
+                  if (!isEditing && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
+                    alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
                     return;
                   }
                   onSave({ ...formData, status: 'draft' });

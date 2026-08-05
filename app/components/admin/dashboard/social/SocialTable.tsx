@@ -29,6 +29,8 @@ interface SocialTableProps {
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading: boolean;
+  disabledExtract?: boolean;
+  disabledShoot?: boolean;
 }
 
 export const SocialTable: React.FC<SocialTableProps> = ({
@@ -42,7 +44,9 @@ export const SocialTable: React.FC<SocialTableProps> = ({
   onShootContacts,
   onOpenSession,
   onMemoSave,
-  loading
+  loading,
+  disabledExtract = false,
+  disabledShoot = false
 }) => {
   const [showMemoInput, setShowMemoInput] = useState<string | null>(null);
   const [memoText, setMemoText] = useState('');
@@ -171,6 +175,8 @@ export const SocialTable: React.FC<SocialTableProps> = ({
                           onMemoSave={onMemoSave}
                           loading={loading}
                           category="SOCIAL"
+                          disabledExtract={disabledExtract}
+                          disabledShoot={disabledShoot}
                         />
                       </div>
                     ) : column === 'timestamp' ? (

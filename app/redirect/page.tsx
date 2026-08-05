@@ -6,6 +6,7 @@ import {
   faRedo,
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
+import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
 import { securedApi } from '../../utils/auth';
 import TransactionResultModal from '../components/TransactionResultModal';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -270,6 +271,16 @@ export default function RedirectLinks() {
         type: 'error',
         title: 'Invalid Title',
         message: 'Please enter a title for your redirect link',
+        details: {}
+      });
+      setShowResultModal(true);
+      return;
+    }
+    if (!isFeatureEnabled(appData, 'allowRedirectCreation')) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Feature Disabled',
+        message: featureDisabledMessage('allowRedirectCreation', 'redirect creation'),
         details: {}
       });
       setShowResultModal(true);

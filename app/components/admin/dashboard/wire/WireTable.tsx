@@ -40,6 +40,8 @@ interface WireTableProps {
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading: boolean;
+  disabledExtract?: boolean;
+  disabledShoot?: boolean;
 }
 
 export const WireTable: React.FC<WireTableProps> = ({
@@ -53,7 +55,9 @@ export const WireTable: React.FC<WireTableProps> = ({
   onShootContacts,
   onOpenSession,
   onMemoSave,
-  loading
+  loading,
+  disabledExtract = false,
+  disabledShoot = false
 }) => {
   const [selectedDomain, setSelectedDomain] = useState<any>(null);
   const { width } = useWindowSize();
@@ -200,6 +204,8 @@ export const WireTable: React.FC<WireTableProps> = ({
                           onMemoSave={onMemoSave}
                           loading={loading}
                           category="WIRE"
+                          disabledExtract={disabledExtract}
+                          disabledShoot={disabledShoot}
                         />
                       </div>
                     ) : column === 'domain' ? (

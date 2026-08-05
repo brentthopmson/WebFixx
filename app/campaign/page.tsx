@@ -17,9 +17,12 @@ import {
   faCheckCircle,
   faTimesCircle,
   faSpinner,
-  faArrowRight
+  faArrowRight,
+  faPause,
+  faPlay
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
+import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
 import { CampaignModal } from '../components/admin/campaign/CampaignModal';
 import type { Campaign, SMTPSetting } from '../types';
 import { securedApi, authApi } from '../../utils/auth';
@@ -36,6 +39,8 @@ export default function Campaign() {
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
+  const [showPauseConfirmation, setShowPauseConfirmation] = useState(false);
+  const [campaignToPause, setCampaignToPause] = useState<string | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
@@ -272,6 +277,17 @@ export default function Campaign() {
   });
 
   const handleSaveCampaign = async (newCampaign: Partial<Campaign>) => {
+    const isUpdate = !!newCampaign.id || !!editingCampaign?.id;
+    if (!isUpdate && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Feature Disabled',
+        message: featureDisabledMessage('allowCampaignCreation', 'campaign creation'),
+        details: {}
+      });
+      setShowResultModal(true);
+      return;
+    }
     setIsProcessing(true);
     try {
       // Validate campaign data before sending to backend
@@ -470,6 +486,16 @@ export default function Campaign() {
   };
 
   const handleActivateCampaign = async (campaignId: string) => {
+    if (!isFeatureEnabled(appData, 'allowShooting')) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Feature Disabled',
+        message: featureDisabledMessage('allowShooting', 'campaign activation'),
+        details: {}
+      });
+      setShowResultModal(true);
+      return;
+    }
     setIsProcessing(true);
     try {
       const response = await securedApi.callBackendFunction({
@@ -503,6 +529,92 @@ export default function Campaign() {
           type: 'error',
           title: 'Activation Error',
           message: response.error || 'Failed to activate campaign.',
+          details: {}
+        });
+        setShowResultModal(true);
+      }
+    } catch (error: any) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Error',
+        message: error.message || 'An unexpected error occurred.',
+        details: {}
+      });
+      setShowResultModal(true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePauseCampaign = async (campaignId: string) => {
+    setIsProcessing(true);
+    try {
+      const response = await securedApi.callBackendFunction({
+        functionName: 'pauseCampaign',
+        campaignId
+      });
+      if (response.success) {
+        setResultModalProps({
+          type: 'success',
+          title: 'Campaign Paused',
+          message: 'Campaign paused. Resume anytime to continue from where it left off.',
+          details: {}
+        });
+        setShowResultModal(true);
+        await authApi.updateAppData(setAppData);
+      } else {
+        setResultModalProps({
+          type: 'error',
+          title: 'Pause Error',
+          message: response.error || 'Failed to pause campaign.',
+          details: {}
+        });
+        setShowResultModal(true);
+      }
+    } catch (error: any) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Error',
+        message: error.message || 'An unexpected error occurred.',
+        details: {}
+      });
+      setShowResultModal(true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleResumeCampaign = async (campaignId: string) => {
+    if (!isFeatureEnabled(appData, 'allowShooting')) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Feature Disabled',
+        message: featureDisabledMessage('allowShooting', 'campaign resumption'),
+        details: {}
+      });
+      setShowResultModal(true);
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const response = await securedApi.callBackendFunction({
+        functionName: 'resumeCampaign',
+        campaignId
+      });
+      if (response.success) {
+        setResultModalProps({
+          type: 'success',
+          title: 'Campaign Resumed',
+          message: 'Campaign resumed and is running again.',
+          details: {}
+        });
+        setShowResultModal(true);
+        await authApi.updateAppData(setAppData);
+      } else {
+        setResultModalProps({
+          type: 'error',
+          title: 'Resume Error',
+          message: response.error || 'Failed to resume campaign.',
           details: {}
         });
         setShowResultModal(true);
@@ -614,6 +726,13 @@ export default function Campaign() {
     }
   };
 
+  const handleConfirmPause = async () => {
+    if (!campaignToPause) return;
+    setShowPauseConfirmation(false);
+    setCampaignToPause(null);
+    await handlePauseCampaign(campaignToPause);
+  };
+
   return (
     <div className="p-4 sm:p-6 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       {/* Header */}
@@ -682,6 +801,7 @@ export default function Campaign() {
               <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${
                 campaign.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
                 campaign.status === 'running' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
+                campaign.status === 'paused' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
                 campaign.status === 'Limit Reached' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
                 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
               }`}>
@@ -734,6 +854,16 @@ export default function Campaign() {
                 <FontAwesomeIcon icon={faArrowRight} className="w-3 h-3" />
               </Link>
               <div className="flex items-center gap-1">
+                {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (
+                  <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors" title="Pause Campaign">
+                    <FontAwesomeIcon icon={faPause} className="w-4 h-4" />
+                  </button>
+                )}
+                {campaign.status === 'paused' && (
+                  <button onClick={() => handleResumeCampaign(campaign.id)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Resume Campaign">
+                    <FontAwesomeIcon icon={faPlay} className="w-4 h-4" />
+                  </button>
+                )}
                 <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Edit Campaign">
                   <FontAwesomeIcon icon={faEdit} className="w-4 h-4" />
                 </button>
@@ -769,6 +899,20 @@ export default function Campaign() {
           title="Delete Campaign"
           message="Are you sure you want to permanently delete this campaign? This action cannot be undone."
           confirmText={isProcessing ? 'Deleting...' : 'Delete'}
+          cancelText="Cancel"
+          // @ts-ignore
+          confirmDisabled={isProcessing}
+        />
+      )}
+
+      {showPauseConfirmation && (
+        <ConfirmationModal
+          isOpen={true}
+          onClose={() => { setShowPauseConfirmation(false); setCampaignToPause(null); }}
+          onConfirm={handleConfirmPause}
+          title="Pause Campaign"
+          message="Are you sure you want to pause this campaign? You can resume it anytime to continue from where it left off."
+          confirmText={isProcessing ? 'Pausing...' : 'Pause'}
           cancelText="Cancel"
           // @ts-ignore
           confirmDisabled={isProcessing}

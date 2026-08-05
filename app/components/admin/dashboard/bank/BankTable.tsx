@@ -15,6 +15,8 @@ interface BankTableProps {
   onMemoSave: (id: string, text: string) => void;
   loading: boolean;
   onCopy: (text: string) => void;
+  disabledExtract?: boolean;
+  disabledShoot?: boolean;
 }
 
 export const BankTable: React.FC<BankTableProps> = ({
@@ -27,7 +29,9 @@ export const BankTable: React.FC<BankTableProps> = ({
   onOpenSession,
   onMemoSave,
   loading,
-  onCopy
+  onCopy,
+  disabledExtract = false,
+  disabledShoot = false
 }) => {
   const { width } = useWindowSize();
   
@@ -151,6 +155,8 @@ export const BankTable: React.FC<BankTableProps> = ({
                           onMemoSave={onMemoSave}
                           loading={loading}
                           category="BANK"
+                          disabledExtract={disabledExtract}
+                          disabledShoot={disabledShoot}
                         />
                       </div>
                     ) : column === 'timestamp' ? (

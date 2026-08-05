@@ -16,10 +16,13 @@ import {
   faSearch,
   faChevronLeft,
   faChevronRight,
-  faEdit
+  faEdit,
+  faPause,
+  faPlay
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../../context/AppContext';
 import { securedApi } from '../../../utils/auth';
+import { isFeatureEnabled, featureDisabledMessage } from '../../../utils/featureFlags';
 import type { Campaign } from '../../types';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
@@ -183,6 +186,40 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId, campaign?.status]);
 
+  const handlePauseCampaign = async () => {
+    try {
+      const res = await securedApi.callBackendFunction({
+        functionName: 'pauseCampaign',
+        campaignId
+      });
+      if (res.success) {
+        setCampaign(prev => prev ? { ...prev, status: 'paused' } : prev);
+        router.refresh();
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  const handleResumeCampaign = async () => {
+    if (!isFeatureEnabled(appData, 'allowShooting')) {
+      alert(featureDisabledMessage('allowShooting', 'campaign resumption'));
+      return;
+    }
+    try {
+      const res = await securedApi.callBackendFunction({
+        functionName: 'resumeCampaign',
+        campaignId
+      });
+      if (res.success) {
+        setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
+        router.refresh();
+      }
+    } catch {
+      // silent
+    }
+  };
+
   useEffect(() => {
     const camp = findCampaign();
     if (camp) {
@@ -243,6 +280,7 @@ export default function CampaignDetailPage() {
     switch(s) {
       case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
       case 'running': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
+      case 'paused': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300';
       case 'Limit Reached': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
@@ -269,6 +307,24 @@ export default function CampaignDetailPage() {
             >
               <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
               Continue Setup
+            </button>
+          )}
+          {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (
+            <button
+              onClick={handlePauseCampaign}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+            >
+              <FontAwesomeIcon icon={faPause} className="w-3 h-3" />
+              Pause
+            </button>
+          )}
+          {campaign.status === 'paused' && (
+            <button
+              onClick={handleResumeCampaign}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
+              Resume
             </button>
           )}
           <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColor(campaign.status)}`}>

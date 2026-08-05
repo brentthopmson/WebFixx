@@ -35,6 +35,8 @@ interface TableActionsProps {
   onMemoSave: (id: string, text: string) => void;
   loading?: boolean;
   category: 'WIRE' | 'BANK' | 'SOCIAL';
+  disabledExtract?: boolean;
+  disabledShoot?: boolean;
 }
 
 export const TableActions = ({
@@ -46,7 +48,9 @@ export const TableActions = ({
   onOpenSession,
   onMemoSave,
   loading,
-  category
+  category,
+  disabledExtract = false,
+  disabledShoot = false
 }: TableActionsProps) => {
   const [showMemoInput, setShowMemoInput] = useState(false);
   const [memoText, setMemoText] = useState(item.memo || '');
@@ -196,9 +200,9 @@ export const TableActions = ({
               e.stopPropagation();
               handleAction('extract');
             }}
-            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-            disabled={loading}
-            title="Extract"
+            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={loading || disabledExtract}
+            title={disabledExtract ? 'Extraction is disabled by admin' : 'Extract'}
           >
             <FontAwesomeIcon icon={faFileExport} />
             <span className="hidden lg:inline-block ml-1">Extract</span>
@@ -211,9 +215,9 @@ export const TableActions = ({
               e.stopPropagation();
               setShowShootContactsModal(true);
             }}
-            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-            disabled={loading}
-            title="Shoot"
+            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={loading || disabledShoot}
+            title={disabledShoot ? 'Shooting is disabled by admin' : 'Shoot'}
           >
             <FontAwesomeIcon icon={faPaperPlane} />
             <span className="hidden lg:inline-block ml-1">Shoot</span>
