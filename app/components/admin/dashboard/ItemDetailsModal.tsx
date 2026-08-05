@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { safeParseJSON } from '../../../../utils/helpers';
+import { isTrue } from '../../../../utils/parseResponseField';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faCheck, 
@@ -141,9 +142,9 @@ export const ItemDetailsModal = ({
 
   // Check if shoot contacts should be available
   const hasExtract = data[`${category.toLowerCase()}Extract`];
-  const canShootContacts = data?.fullAccess === 'TRUE' && 
-    data?.verifyAccess === 'TRUE' && 
-    data?.cookieAccess === 'TRUE' && 
+  const canShootContacts = isTrue(data?.fullAccess) && 
+    isTrue(data?.verifyAccess) && 
+    isTrue(data?.cookieAccess) && 
     hasExtract && 
     onShootContacts && 
     category !== null && 
@@ -231,7 +232,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {data.verifyAccess === 'TRUE' && data.cookieAccess === 'TRUE' && data.cookieJSON && (
+      {isTrue(data.verifyAccess) && isTrue(data.cookieAccess) && data.cookieJSON && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -247,7 +248,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {data.fullAccess === 'TRUE' && data.verifyAccess === 'TRUE' && data.cookieAccess === 'TRUE' && (
+      {isTrue(data.fullAccess) && isTrue(data.verifyAccess) && isTrue(data.cookieAccess) && (
         <button
           onClick={() => handleAction('extract')}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
@@ -269,7 +270,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {data.cookieAccess === 'TRUE' && data.cookieFileURL && data.cookieFileURL !== '' && onOpenSession && (
+      {isTrue(data.cookieAccess) && data.cookieFileURL && data.cookieFileURL !== '' && onOpenSession && (
         <button
           onClick={() => onOpenSession(data.submissionId || data.id)}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"

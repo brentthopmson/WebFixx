@@ -18,6 +18,7 @@ import {
   faFolderOpen // Added faFolderOpen
 } from '@fortawesome/free-solid-svg-icons';
 import ActionsHandler from '../components/admin/projects/ActionsHandler';
+import { parseResponseField } from '../../utils/parseResponseField';
 
 interface Project {
   id: string;
@@ -153,19 +154,13 @@ export default function ProjectLinks() {
               const responseDataStr = project[columnIndices.response] || '[]';
               // Handle different response formats
               if (typeof responseDataStr === 'string') {
-                // Remove any extra escaping
-                const cleanedResponseStr = responseDataStr
-                  .replace(/\\(?=")/g, '')
-                  .replace(/^"/, '')
-                  .replace(/"$/, '');
-                
-                // Try to parse as JSON
-                const parsedData = JSON.parse(cleanedResponseStr);
+                // Safe parse that unwraps nested string layers without mangling escapes
+                const parsedData = parseResponseField(responseDataStr);
                 
                 // Ensure parsed data is an array
                 if (Array.isArray(parsedData)) {
                   parsedResponses = parsedData;
-                } else if (typeof parsedData === 'object') {
+                } else if (typeof parsedData === 'object' && parsedData !== null) {
                   // If it's an object, wrap it in an array
                   parsedResponses = [parsedData];
                 } else {

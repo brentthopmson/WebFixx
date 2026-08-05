@@ -1,6 +1,7 @@
 import { useWindowSize } from '../../../../hooks/useWindowSize';
 import { TableActions } from '../TableActions';
 import { getLogoUrl } from '../../../../utils/logoUtils';
+import { isTrue } from '../../../../../utils/parseResponseField';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGlobe, faLaptop } from '@fortawesome/free-solid-svg-icons';
 
@@ -55,8 +56,8 @@ export const BankTable: React.FC<BankTableProps> = ({
   };
 
   const getRowBackgroundColor = (item: any) => {
-    if (item.verified === 'TRUE' && item.fullAccess === 'TRUE' && item.cookieAccess === 'TRUE') return 'bg-green-50 hover:bg-green-100 dark:bg-green-900 dark:hover:bg-green-800';
-    if (item.verified === 'TRUE') return 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-900 dark:hover:bg-amber-800';
+    if (isTrue(item.verified) && isTrue(item.fullAccess) && isTrue(item.cookieAccess)) return 'bg-green-50 hover:bg-green-100 dark:bg-green-900 dark:hover:bg-green-800';
+    if (isTrue(item.verified)) return 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-900 dark:hover:bg-amber-800';
     return 'bg-red-50 hover:bg-red-100 dark:bg-red-900 dark:hover:bg-red-800';
   };
 

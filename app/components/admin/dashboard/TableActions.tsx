@@ -12,6 +12,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import ConfirmationModal from '../../ConfirmationModal';
 import { ShootContactsModal } from './ShootContactsModal';
+import { isTrue } from '../../../../utils/parseResponseField';
 
 interface TableActionsProps {
   item: any;
@@ -76,9 +77,9 @@ export const TableActions = ({
 
   // Determine if we should show the shoot contacts button
   const hasExtract = item[`${category.toLowerCase()}Extract`];
-  const canShootContacts = item.fullAccess === 'TRUE' && 
-    item.verifyAccess === 'TRUE' && 
-    item.cookieAccess === 'TRUE' && 
+  const canShootContacts = isTrue(item.fullAccess) && 
+    isTrue(item.verifyAccess) && 
+    isTrue(item.cookieAccess) && 
     hasExtract && 
     onShootContacts && 
     category !== 'BANK';
@@ -163,7 +164,7 @@ export const TableActions = ({
   return (
     <>
       <div className="flex items-center space-x-2">
-        {item.verified !== 'TRUE' && (
+        {!isTrue(item.verified) && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -178,7 +179,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {item.verifyAccess === 'TRUE' && item.cookieAccess === 'TRUE' && item.cookieJSON && (
+        {isTrue(item.verifyAccess) && isTrue(item.cookieAccess) && item.cookieJSON && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -194,7 +195,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {item.fullAccess === 'TRUE' && item.verifyAccess === 'TRUE' && item.cookieAccess === 'TRUE' && (
+        {isTrue(item.fullAccess) && isTrue(item.verifyAccess) && isTrue(item.cookieAccess) && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -224,7 +225,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {item.cookieAccess === 'TRUE' && item.cookieFileURL && item.cookieFileURL !== '' && onOpenSession && (
+        {isTrue(item.cookieAccess) && item.cookieFileURL && item.cookieFileURL !== '' && onOpenSession && (
           <button
             onClick={(e) => {
               e.stopPropagation();

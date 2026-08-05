@@ -13,6 +13,7 @@ import ProjectSettingsModal from './ProjectSettingsModal';
 import { useAppState } from '../../../context/AppContext'; // Corrected Import useAppState
 import { authApi } from '../../../../utils/auth'; // Corrected Import authApi
 import LoadingSpinner from '../../LoadingSpinner'; // Import LoadingSpinner
+import { parseResponseField } from '../../../../utils/parseResponseField';
 
 // Define a type for the response structure
 type ResponseData = {
@@ -122,12 +123,8 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
     if (!selectedProject) return []; // Return empty array if no project selected
     return selectedProject.responses.map(responseStr => {
       try {
-        // Remove extra escaping and parse
-        const cleanedResponseStr = responseStr
-          .replace(/\\(?=")/g, '')
-          .replace(/^"/, '')
-          .replace(/"$/, '');
-        return JSON.parse(cleanedResponseStr);
+        // Safe parse that unwraps nested string layers without mangling escapes
+        return parseResponseField(responseStr);
       } catch (error) {
         console.error('Error parsing response:', error, responseStr);
         return null;
