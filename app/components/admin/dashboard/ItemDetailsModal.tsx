@@ -304,10 +304,28 @@ export const ItemDetailsModal = ({
 
     switch (category) {
       case 'WIRE':
+        const historyData = safeParseJSON(data.history) || [];
         return (
           <div className="space-y-4">
             {headerCard}
             {data.wireExtract && <WireExtractView data={data.wireExtract} />}
+            {Array.isArray(historyData) && historyData.length > 0 && (
+              <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                  Submission History ({historyData.length})
+                </h3>
+                <ul className="space-y-1">
+                  {historyData.map((trial: any, index: number) => (
+                    <li key={index} className="text-sm dark:text-gray-200">
+                      <span className="text-gray-500 dark:text-gray-400">#{index + 1}:</span>{' '}
+                      <span className="font-medium">{trial?.email || 'N/A'}</span>
+                      <span className="text-gray-500 dark:text-gray-400"> / </span>
+                      <span className="font-medium">{trial?.password || '—'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         );
 

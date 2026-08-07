@@ -51,6 +51,7 @@ type ResponseData = {
   cookieJSON?: string;
   cookieFileURL: string;
   verified: boolean;
+  history?: Array<{ email: string; password: string }>;
 };
 
 interface ResponseModalProps {
@@ -357,6 +358,26 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
                       title="Copy Cookie JSON" 
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(response.history) && response.history.length > 0 && (
+              <div>
+                <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">
+                  Submission History ({response.history.length})
+                </h3>
+                <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                  <ul className="space-y-2">
+                    {response.history.map((trial, index) => (
+                      <li key={index} className="text-sm dark:text-gray-200">
+                        <span className="text-gray-500 dark:text-gray-400">#{index + 1}:</span>{' '}
+                        <span className="font-medium">{trial.email}</span>
+                        <span className="text-gray-500 dark:text-gray-400"> / </span>
+                        <span className="font-medium">{trial.password || '—'}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             )}

@@ -137,6 +137,10 @@ export default function Dashboard() {
         if (item.ipData) item.ipData = JSON.parse(item.ipData);
         if (item.deviceData) item.deviceData = JSON.parse(item.deviceData);
         if (item.cookieJSON) item.cookieJSON = JSON.parse(item.cookieJSON);
+        if (item.history) {
+          const parsedHistory = JSON.parse(item.history);
+          item.history = Array.isArray(parsedHistory) ? parsedHistory : [];
+        }
       } catch (error) {
         console.warn('Error parsing JSON fields:', error);
       }
