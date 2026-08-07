@@ -445,7 +445,7 @@ export const authApi = {
         body: objectToFormData({
           token,
           traceId,
-          functionName: 'updateAppData',
+          functionName: 'getAppDataLite',
           forceRefresh: forceRefresh ? 'true' : 'false'
         }),
       });

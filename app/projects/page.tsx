@@ -152,10 +152,13 @@ export default function ProjectLinks() {
             // Safely parse responses
             let parsedResponses: any[] = [];
             const rawResponse = project[columnIndices.response];
-            let filePointer: { fileId?: string; downloadUrl?: string; count?: number } | null = null;
+            let filePointer: { fileId?: string; downloadUrl?: string; count?: number; projectId?: string; inline?: boolean } | null = null;
 
-            // Detect a Drive file pointer (large responses are stored as {fileId, count} on Drive)
-            if (rawResponse && typeof rawResponse === 'object' && rawResponse.fileId) {
+            // Detect a pointer object (large responses are stored as {fileId, count} on
+            // Drive; inline responses are replaced by {projectId, count, inline} pointers)
+            if (rawResponse && typeof rawResponse === 'object' && rawResponse.filePointer) {
+              filePointer = rawResponse;
+            } else if (rawResponse && typeof rawResponse === 'object' && rawResponse.fileId) {
               filePointer = rawResponse;
             } else {
               try {
@@ -166,7 +169,7 @@ export default function ProjectLinks() {
                   const parsedData = parseResponseField(responseDataStr);
 
                   // A file pointer may be stringified JSON, so re-check after parsing
-                  if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData) && parsedData.fileId) {
+                  if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData) && (parsedData.filePointer || parsedData.fileId)) {
                     filePointer = parsedData;
                   } else if (Array.isArray(parsedData)) {
                     parsedResponses = parsedData;

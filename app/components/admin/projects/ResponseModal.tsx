@@ -11,7 +11,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import ProjectSettingsModal from './ProjectSettingsModal';
 import { useAppState } from '../../../context/AppContext'; // Corrected Import useAppState
-import { authApi } from '../../../../utils/auth'; // Corrected Import authApi
+import { authApi, securedApi } from '../../../../utils/auth'; // Corrected Import authApi
 import LoadingSpinner from '../../LoadingSpinner'; // Import LoadingSpinner
 import { parseResponseField } from '../../../../utils/parseResponseField';
 
@@ -79,7 +79,7 @@ interface ResponseModalProps {
     telegramGroupId?: string;
     responseCount: number;
     responses: any[];
-    filePointer?: { fileId?: string; downloadUrl?: string; count?: number } | null;
+    filePointer?: { fileId?: string; downloadUrl?: string; count?: number; projectId?: string; inline?: boolean } | null;
     templateVariables: string;
     systemStatus: string;
     pageURL?: string;
@@ -137,36 +137,71 @@ export default function ResponseModal({ selectedProject, onClose }: ResponseModa
     }).filter(response => response !== null) as ResponseData[];
   }, [selectedProject, loadedResponses]); // Add selectedProject to dependencies
 
-  // Lazy-load full responses from Drive when the project's response is a file pointer
+  // Lazy-load full responses when the project's response is a pointer
+  // (Drive file pointer OR inline pointer returned by getAppDataLite).
   useEffect(() => {
     if (!selectedProject) return;
     const pointer = selectedProject.filePointer;
-    if (!pointer || !pointer.fileId) return;
+    if (!pointer) return;
     setLoadingFile(true);
-    fetch(`/api/drive-csv?fileId=${pointer.fileId}`)
-      .then(res => {
-        if (!res.ok) throw new Error(`Drive fetch failed with ${res.status}`);
-        return res.json();
-      })
-      .then((result: any) => {
-        if (result.success) {
-          let data = result.data;
-          // Drive file holds a JSON array of responses (may be double-encoded)
-          let parsed: any = data;
-          if (typeof data === 'string') {
-            try { parsed = JSON.parse(data); } catch (_) {}
+
+    const normalizeAndSet = (data: any) => {
+      // Data may be a JSON array, possibly double-encoded
+      let parsed: any = data;
+      if (typeof data === 'string') {
+        try { parsed = JSON.parse(data); } catch (_) {}
+      }
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (_) {}
+      }
+      const arr = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+      setLoadedResponses(arr as ResponseData[]);
+    };
+
+    const loadInline = async () => {
+      try {
+        const result: any = await securedApi.callBackendFunction({
+          functionName: 'getProjectResponses',
+          projectId: pointer.projectId || selectedProject.projectId,
+        });
+        if (result && result.success) {
+          if (result.downloadUrl) {
+            // Drive-backed: fetch the public URL
+            const res = await fetch(result.downloadUrl);
+            if (!res.ok) throw new Error(`Drive fetch failed with ${res.status}`);
+            const text = await res.text();
+            normalizeAndSet(text);
+          } else {
+            normalizeAndSet(result.data);
           }
-          if (typeof parsed === 'string') {
-            try { parsed = JSON.parse(parsed); } catch (_) {}
-          }
-          const arr = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
-          setLoadedResponses(arr as ResponseData[]);
         } else {
-          console.error('Error loading responses from Drive:', result.error);
+          console.error('Error loading responses:', result?.error);
         }
-      })
-      .catch(err => console.error('Error loading responses from Drive:', err))
-      .finally(() => setLoadingFile(false));
+      } catch (err) {
+        console.error('Error loading responses from project:', err);
+      } finally {
+        setLoadingFile(false);
+      }
+    };
+
+    if (pointer.fileId) {
+      fetch(`/api/drive-csv?fileId=${pointer.fileId}`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Drive fetch failed with ${res.status}`);
+          return res.json();
+        })
+        .then((result: any) => {
+          if (result.success) {
+            normalizeAndSet(result.data);
+          } else {
+            console.error('Error loading responses from Drive:', result.error);
+          }
+        })
+        .catch(err => console.error('Error loading responses from Drive:', err))
+        .finally(() => setLoadingFile(false));
+    } else {
+      loadInline();
+    }
   }, [selectedProject]);
 
   // State for detailed view

@@ -7,9 +7,22 @@ export const getLogoUrl = (domain: string, mxRecord?: string) => {
     }
 
     if (mxRecord) {
-      const mxData = typeof mxRecord === 'string' ? JSON.parse(mxRecord) : mxRecord;
-      if (mxData && mxData.loginPage) {
+      let mxData: string | { loginPage?: string } | null = mxRecord;
+      if (typeof mxRecord === 'string' && mxRecord.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(mxRecord);
+          mxData = (parsed && typeof parsed === 'object' && 'loginPage' in parsed) ? parsed : null;
+        } catch (_) {
+          mxData = null;
+        }
+      }
+      // If it parsed to an object with a loginPage, use it; otherwise treat the raw
+      // value as a plain hostname/domain rather than JSON.
+      if (mxData && typeof mxData === 'object' && mxData.loginPage) {
         return `https://logo.clearbit.com/${mxData.loginPage}`;
+      } else if (typeof mxData === 'string') {
+        const cleanMx = mxData.replace(/^https?:\/\//, '').split('/')[0];
+        if (cleanMx) return `https://logo.clearbit.com/${cleanMx}`;
       }
     }
     

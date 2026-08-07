@@ -179,36 +179,40 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
 
         if (isMounted) {
           const response = await securedApi.callBackendFunction({
-            functionName: 'validateUserToken',
+            functionName: 'getAppDataLite',
             token
           });
 
-          if (response.success && response.data?.user && isMounted) {
-            console.log('[RestoreSession] response.data keys:', Object.keys(response.data), 'has campaigns:', !!response.data.campaigns);
-            console.log('[RestoreSession] campaigns data:', response.data.campaigns);
+          if (response.success && response.user && isMounted) {
+            // getAppDataLite returns a light bundle: user + appData with project
+            // pointers (heavy responses loaded lazily on demand).
+            const userData = response.user;
+            const data = response.appData || {};
+            console.log('[RestoreSession] response keys:', Object.keys(response), 'has campaigns:', !!data.campaigns);
+            console.log('[RestoreSession] campaigns data:', data.campaigns);
             // Only update if we have valid user data
             setAppData({
-              user: response.data.user,
+              user: userData,
               isOffline: false, // Ensure isOffline is false on successful session restore
               data: {
-                transactions: response.data.transactions || [],
-                projects: response.data.projects || [],
-                template: response.data.template || [],
-                hub: response.data.hub || [],
-                redirect: response.data.redirect || [],
-                custom: response.data.custom || [],
-                sender: response.data.sender || [],
-                limits: response.data.limits || [],
-                campaigns: response.data.campaigns || [],
-                users: response.data.users || [],
-                apis: response.data.apis || [],
-                settings: response.data.settings || []
+                transactions: data.transactions || [],
+                projects: data.projects || [],
+                template: data.template || [],
+                hub: data.hub || [],
+                redirect: data.redirect || [],
+                custom: data.custom || [],
+                sender: data.sender || [],
+                limits: data.limits || [],
+                campaigns: data.campaigns || [],
+                users: data.users || [],
+                apis: data.apis || [],
+                settings: data.settings || []
               },
               isAuthenticated: true
             });
 
             // Update verification status cookie
-            document.cookie = `verifyStatus=${response.data.user.verifyStatus}; path=/; max-age=2592000`;
+            document.cookie = `verifyStatus=${userData.verifyStatus}; path=/; max-age=2592000`;
           } else {
             // Only logout if the token is actually invalid
             if (response.error === 'Token expired' || response.error === 'Invalid token') {

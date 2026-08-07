@@ -28,6 +28,14 @@ export interface SecuredApiResponse<T = any> {
     needsVerification?: boolean;
     transactionId?: string;
     newBalance?: string;
+    user?: any;
+    appData?: any;
+    message?: string;
+    campaignId?: string;
+    fileUrl?: string;
+    downloadUrl?: string;
+    fileId?: string;
+    cached?: boolean;
 }
 
 export interface AppState {
