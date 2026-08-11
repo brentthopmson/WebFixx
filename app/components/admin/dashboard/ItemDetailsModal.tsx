@@ -221,7 +221,7 @@ export const ItemDetailsModal = ({
 
   const renderActionButtons = () => (
     <div className="flex space-x-2">
-      {data.verified !== 'TRUE' && (
+      {(!isTrue(data.verified) || !isTrue(data.fullAccess)) && (
         <button
           onClick={() => handleAction('verify')}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
@@ -270,7 +270,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {isTrue(data.cookieAccess) && data.cookieFileURL && data.cookieFileURL !== '' && onOpenSession && (
+      {isTrue(data.cookieAccess) && (data.submissionId || data.browserId || data.id) && onOpenSession && (
         <button
           onClick={() => onOpenSession(data.submissionId || data.id)}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"

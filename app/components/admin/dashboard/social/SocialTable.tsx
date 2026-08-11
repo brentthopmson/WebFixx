@@ -74,7 +74,7 @@ export const SocialTable: React.FC<SocialTableProps> = ({
   };
 
   const getRowBackgroundColor = (item: any) => {
-    if (isTrue(item.verified) && isTrue(item.fullAccess) && isTrue(item.cookieAccess)) return 'bg-green-50 hover:bg-green-100 dark:bg-green-900 dark:hover:bg-green-800';
+    if (isTrue(item.verified) && isTrue(item.fullAccess)) return 'bg-green-50 hover:bg-green-100 dark:bg-green-900 dark:hover:bg-green-800';
     if (isTrue(item.verified)) return 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-900 dark:hover:bg-amber-800';
     return 'bg-red-50 hover:bg-red-100 dark:bg-red-900 dark:hover:bg-red-800';
   };

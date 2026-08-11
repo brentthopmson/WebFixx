@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAppState } from '../context/AppContext';
 import { DashboardTabs } from '../components/admin/dashboard/DashboardTabs';
 import { DashboardFilterBar, type StatusFilter } from '../components/admin/dashboard/DashboardFilterBar';
+import { ColorLegend } from '../components/admin/dashboard/ColorLegend';
 import { ItemDetailsModal } from '../components/admin/dashboard/ItemDetailsModal';
 import { Pagination } from '../components/admin/dashboard/Pagination';
 import { WireTable } from '../components/admin/dashboard/wire/WireTable';
@@ -222,7 +223,7 @@ export default function Dashboard() {
       case 'UNVERIFIED':
         return !verified;
       case 'FULL_ACCESS':
-        return verified && item.fullAccess === 'TRUE' && item.cookieAccess === 'TRUE';
+        return verified && item.fullAccess === 'TRUE';
       default:
         return true;
     }
@@ -587,6 +588,8 @@ export default function Dashboard() {
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
           />
+
+          <ColorLegend />
 
           <div className="mt-6">
             <DashboardFilterBar

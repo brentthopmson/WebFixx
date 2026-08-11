@@ -164,7 +164,7 @@ export const TableActions = ({
   return (
     <>
       <div className="flex items-center space-x-2">
-        {!isTrue(item.verified) && (
+        {(!isTrue(item.verified) || !isTrue(item.fullAccess)) && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -225,7 +225,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {isTrue(item.cookieAccess) && item.cookieFileURL && item.cookieFileURL !== '' && onOpenSession && (
+        {isTrue(item.cookieAccess) && (item.submissionId || item.browserId || item.id) && onOpenSession && (
           <button
             onClick={(e) => {
               e.stopPropagation();
