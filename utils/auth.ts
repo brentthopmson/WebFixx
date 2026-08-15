@@ -201,6 +201,48 @@ function generateTraceId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+// Shared in-flight memo for getAppDataLite. Session restore (RootLayout), the
+// AppContext mount, and the dashboard "Get Update" all fetch the same heavy
+// bundle; coalescing means only ONE backend request fires at a time.
+let _inflightAppDataLite: Promise<SecuredApiResponse> | null = null;
+
+async function _fetchAppDataLite(token: string, forceRefresh: boolean): Promise<SecuredApiResponse> {
+  if (!_inflightAppDataLite) {
+    _inflightAppDataLite = (async () => {
+      const response = await fetch(`${API_BASE_URL}/backend-function`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
+        body: objectToFormData({
+          token,
+          traceId: generateTraceId(),
+          functionName: 'getAppDataLite',
+          forceRefresh: forceRefresh ? 'true' : 'false',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new BackendError(
+          (errorData && errorData.error) || `HTTP error! status: ${response.status}`,
+          errorData && errorData.details
+        );
+      }
+
+      const text = await response.text();
+      if (!text) {
+        throw new Error('Empty response from server');
+      }
+      return JSON.parse(text);
+    })().finally(() => {
+      _inflightAppDataLite = null;
+    });
+  }
+  return _inflightAppDataLite;
+}
+
 // Utility functions
 const getAuthToken = (): string | null => {
   return localStorage.getItem('authToken');
@@ -436,41 +478,10 @@ export const authApi = {
       const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
       if (!token) throw new Error('No auth token found');
 
-      const response = await fetch(`${API_BASE_URL}/backend-function`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        },
-        body: objectToFormData({
-          token,
-          traceId,
-          functionName: 'getAppDataLite',
-          forceRefresh: forceRefresh ? 'true' : 'false'
-        }),
-      });
+      const bundle = await _fetchAppDataLite(token, forceRefresh);
+      const text = JSON.stringify(bundle);
 
-      if (!response.ok) {
-        // Check for auth errors before throwing
-        try {
-          const errorData = await response.json();
-          if (errorData.error && 
-              (errorData.error.includes('token') || errorData.error.includes('auth') || 
-               errorData.error.includes('expired') || errorData.error.includes('invalid'))) {
-            const appState = getAppState();
-            if (appState?.clearAppData) {
-              appState.clearAppData();
-              window.location.href = '/';
-            }
-          }
-        } catch {}
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const text = await response.text();
-      // console.log('Raw API response:', text); // Debug log
-
-      if (!text) {
+      if (!bundle) {
         throw new Error('Empty response from server');
       }
 
@@ -592,27 +603,35 @@ export const securedApi = {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/backend-function`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: objectToFormData({
-          action: 'backendFunction',
-          token, // Add token to params
-          traceId,
-          forceRefresh: 'true',
-          ...data
-        }),
-      });
+      let result: SecuredApiResponse;
+      if (fnName === 'getAppDataLite') {
+        // Use the per-user Flask cache (no force) and coalesce with any
+        // concurrent restore/updateAppData call instead of a second 10MB
+        // Apps Script round-trip.
+        result = await _fetchAppDataLite(token, false);
+      } else {
+        const response = await fetch(`${API_BASE_URL}/backend-function`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: objectToFormData({
+            action: 'backendFunction',
+            token, // Add token to params
+            traceId,
+            forceRefresh: 'true',
+            ...data
+          }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        // Throw a custom error with details
-        throw new BackendError(errorData.error || 'API request failed', errorData.details);
+        if (!response.ok) {
+          const errorData = await response.json();
+          // Throw a custom error with details
+          throw new BackendError(errorData.error || 'API request failed', errorData.details);
+        }
+
+        result = await response.json();
       }
-
-      const result = await response.json();
 
       // If the backend call was successful, trigger a full app data refresh
       if (result && result.success) {
