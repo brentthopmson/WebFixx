@@ -25,6 +25,7 @@ import { securedApi } from '../../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage } from '../../../utils/featureFlags';
 import type { Campaign } from '../../types';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import { CampaignProgressView } from '../../components/admin/campaign/CampaignProgressView';
 
 interface CSVRow {
   [key: string]: string;
@@ -43,8 +44,14 @@ export default function CampaignDetailPage() {
   const [csvLoading, setCsvLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<'progress' | 'table'>('progress');
   const rowsPerPage = 50;
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // CSV data refresh runs via /api/drive-csv (Next.js -> Drive API, no AppScript),
+  // so it can poll fast during an active run without touching the AppScript quota.
+  const getRefreshInterval = (status?: string) =>
+    status === 'running' || status === 'Limit Reached' ? 20000 : 60000;
 
   // Find campaign from appData or fetch directly
   const findCampaign = useCallback(() => {
@@ -114,7 +121,7 @@ export default function CampaignDetailPage() {
   }, [appData, campaignId]);
 
   // Fetch CSV via local API route (no CORS)
-  const fetchCSV = useCallback(async (url: string, forceNetwork = false) => {
+  const fetchCSV = useCallback(async (url: string, forceNetwork = false, refreshInterval = 60000) => {
     if (!url) return;
 
     const cacheKey = `campaign_csv_${campaignId}`;
@@ -159,9 +166,9 @@ export default function CampaignDetailPage() {
         localStorage.setItem(cacheKey, JSON.stringify({ headers, rows, timestamp: Date.now() }));
       } catch {}
 
-      // Schedule next refresh in 60s
+      // Schedule next refresh
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = setTimeout(() => fetchCSV(url, true), 60000);
+      refreshTimeoutRef.current = setTimeout(() => fetchCSV(url, true, refreshInterval), refreshInterval);
     } catch (err) {
       console.error('Failed to fetch CSV:', err);
     } finally {
@@ -224,7 +231,7 @@ export default function CampaignDetailPage() {
     const camp = findCampaign();
     if (camp) {
       setCampaign(camp);
-      if (camp.fileUrl) fetchCSV(camp.fileUrl);
+      if (camp.fileUrl) fetchCSV(camp.fileUrl, false, getRefreshInterval(camp.status));
     }
     setLoading(false);
   }, [findCampaign, fetchCSV]);
@@ -331,7 +338,7 @@ export default function CampaignDetailPage() {
             {campaign.status}
           </span>
           <button
-            onClick={() => { if (campaign.fileUrl) fetchCSV(campaign.fileUrl, true); }}
+            onClick={() => { if (campaign.fileUrl) fetchCSV(campaign.fileUrl, true, getRefreshInterval(campaign.status)); }}
             className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             title="Refresh Data"
           >
@@ -403,6 +410,20 @@ export default function CampaignDetailPage() {
             {csvLoading && <FontAwesomeIcon icon={faSpinner} className="ml-2 w-3.5 h-3.5 text-blue-500 animate-spin" />}
           </h3>
           <div className="flex items-center space-x-2">
+            <div className="flex items-center rounded-lg overflow-hidden border dark:border-gray-600">
+              <button
+                onClick={() => setViewMode('progress')}
+                className={`px-3 py-1.5 text-xxs font-semibold transition-colors ${viewMode === 'progress' ? 'bg-blue-600 text-white' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              >
+                Progress
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 text-xxs font-semibold transition-colors ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              >
+                Raw Data
+              </button>
+            </div>
             <div className="relative">
               <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
               <input
@@ -416,59 +437,65 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
-          {csvHeaders.length > 0 ? (
-            <table className="min-w-full text-xxs">
-              <thead className="bg-gray-50 dark:bg-gray-900/60 sticky top-0">
-                <tr>
-                  {csvHeaders.map((h, idx) => (
-                    <th key={idx} className="px-3 py-2 text-left font-bold text-gray-600 dark:text-gray-300 border-b dark:border-gray-700 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedData.map((row, i) => (
-                  <tr key={`${currentPage}-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 border-b dark:border-gray-700/50">
-                    {csvHeaders.map((h, idx) => (
-                      <td key={idx} className="px-3 py-1.5 dark:text-gray-300 whitespace-nowrap max-w-[200px] truncate">{row[h]}</td>
+        {viewMode === 'progress' ? (
+          <CampaignProgressView campaign={campaign} rows={csvData} loading={csvLoading} />
+        ) : (
+          <>
+            <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+              {csvHeaders.length > 0 ? (
+                <table className="min-w-full text-xxs">
+                  <thead className="bg-gray-50 dark:bg-gray-900/60 sticky top-0">
+                    <tr>
+                      {csvHeaders.map((h, idx) => (
+                        <th key={idx} className="px-3 py-2 text-left font-bold text-gray-600 dark:text-gray-300 border-b dark:border-gray-700 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedData.map((row, i) => (
+                      <tr key={`${currentPage}-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 border-b dark:border-gray-700/50">
+                        {csvHeaders.map((h, idx) => (
+                          <td key={idx} className="px-3 py-1.5 dark:text-gray-300 whitespace-nowrap max-w-[200px] truncate">{row[h]}</td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="p-8 text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {csvLoading ? 'Loading CSV data...' : campaign.fileUrl ? 'No CSV data loaded.' : 'No CSV file uploaded for this campaign.'}
-              </p>
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {csvLoading ? 'Loading CSV data...' : campaign.fileUrl ? 'No CSV data loaded.' : 'No CSV file uploaded for this campaign.'}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between p-3 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
-            <p className="text-xxs text-gray-500 dark:text-gray-400">
-              Showing {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length} rows
-            </p>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-30"
-              >
-                <FontAwesomeIcon icon={faChevronLeft} className="w-3 h-3" />
-              </button>
-              <span className="text-xxs text-gray-600 dark:text-gray-300">{currentPage} / {totalPages}</span>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-30"
-              >
-                <FontAwesomeIcon icon={faChevronRight} className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between p-3 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                <p className="text-xxs text-gray-500 dark:text-gray-400">
+                  Showing {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length} rows
+                </p>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-30"
+                  >
+                    <FontAwesomeIcon icon={faChevronLeft} className="w-3 h-3" />
+                  </button>
+                  <span className="text-xxs text-gray-600 dark:text-gray-300">{currentPage} / {totalPages}</span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-30"
+                  >
+                    <FontAwesomeIcon icon={faChevronRight} className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

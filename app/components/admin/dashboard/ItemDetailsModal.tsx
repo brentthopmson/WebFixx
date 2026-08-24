@@ -145,6 +145,7 @@ export const ItemDetailsModal = ({
   const canShootContacts = isTrue(data?.fullAccess) && 
     isTrue(data?.verifyAccess) && 
     isTrue(data?.cookieAccess) && 
+    !!data?.cookieFileURL &&
     hasExtract && 
     onShootContacts && 
     category !== null && 
@@ -232,7 +233,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {isTrue(data.verifyAccess) && isTrue(data.cookieAccess) && data.cookieJSON && (
+      {isTrue(data.verifyAccess) && isTrue(data.cookieAccess) && data.cookieJSON && data.cookieFileURL && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -248,7 +249,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {isTrue(data.fullAccess) && isTrue(data.verifyAccess) && isTrue(data.cookieAccess) && (
+      {isTrue(data.fullAccess) && isTrue(data.verifyAccess) && isTrue(data.cookieAccess) && data.cookieFileURL && (
         <button
           onClick={() => handleAction('extract')}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
@@ -270,7 +271,7 @@ export const ItemDetailsModal = ({
         </button>
       )}
 
-      {isTrue(data.cookieAccess) && (data.submissionId || data.browserId || data.id) && onOpenSession && (
+      {isTrue(data.cookieAccess) && data.cookieFileURL && (data.submissionId || data.browserId || data.id) && onOpenSession && (
         <button
           onClick={() => onOpenSession(data.submissionId || data.id)}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"

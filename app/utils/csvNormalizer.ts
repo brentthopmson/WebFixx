@@ -4,7 +4,7 @@ export const STANDARD_88_COLUMNS = [
   'BUSINESSNAME', 'BUSINESSADDRESS', 'BUSINESSCITY', 'BUSINESSSTATE', 'BUSINESSCOUNTRY', 'BUSINESSZIPCODE', 'BUSINESSPHONE', 'BUSINESSEMAIL',
   'SOCIALPLATFORM', 'SOCIALUSERNAME', 'SOCIALPHONE',
   'CONTEXT',
-  '', '', '', '', '', '',
+  'URL', '', '', '', '', '',
   'campaignType', 'engine', 'provider',
   'shooterFirstName', 'shooterLastName', 'shooterEmail', 'shooterAddress', 'shooterCity', 'shooterState', 'shooterCountry', 'shooterZipCode', 'shooterPhone', 'shooterSex',
   'smtp', 'port', 'username', 'password', 'appPassword', 'backupCode', 'oAuth2ClientId', 'oAuth2ClientSecret', 'oAuth2RefreshToken',
@@ -43,7 +43,8 @@ const FUZZY_MAP: Record<string, string[]> = {
   BUSINESSEMAIL: ['BUSINESS EMAIL', 'COMPANY EMAIL'],
   SOCIALPLATFORM: ['SOCIAL', 'SOCIAL PLATFORM', 'PLATFORM'],
   SOCIALUSERNAME: ['SOCIAL USERNAME', 'USERNAME', 'HANDLE', 'SOCIAL HANDLE'],
-  SOCIALPHONE: ['SOCIAL PHONE']
+  SOCIALPHONE: ['SOCIAL PHONE'],
+  URL: ['URL', 'LINK', 'WEBSITE', 'WEB', 'REFERENCE']
 };
 
 function parseCSV(text: string): string[][] {

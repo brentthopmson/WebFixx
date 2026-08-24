@@ -80,6 +80,7 @@ export const TableActions = ({
   const canShootContacts = isTrue(item.fullAccess) && 
     isTrue(item.verifyAccess) && 
     isTrue(item.cookieAccess) && 
+    !!item.cookieFileURL &&
     hasExtract && 
     onShootContacts && 
     category !== 'BANK';
@@ -179,7 +180,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {isTrue(item.verifyAccess) && isTrue(item.cookieAccess) && item.cookieJSON && (
+        {isTrue(item.verifyAccess) && isTrue(item.cookieAccess) && item.cookieJSON && item.cookieFileURL && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -195,7 +196,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {isTrue(item.fullAccess) && isTrue(item.verifyAccess) && isTrue(item.cookieAccess) && (
+        {isTrue(item.fullAccess) && isTrue(item.verifyAccess) && isTrue(item.cookieAccess) && item.cookieFileURL && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -225,7 +226,7 @@ export const TableActions = ({
           </button>
         )}
 
-        {isTrue(item.cookieAccess) && (item.submissionId || item.browserId || item.id) && onOpenSession && (
+        {isTrue(item.cookieAccess) && item.cookieFileURL && (item.submissionId || item.browserId || item.id) && onOpenSession && (
           <button
             onClick={(e) => {
               e.stopPropagation();
