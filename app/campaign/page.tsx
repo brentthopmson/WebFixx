@@ -19,7 +19,12 @@ import {
   faSpinner,
   faArrowRight,
   faPause,
-  faPlay
+  faPlay,
+  faShieldAlt,
+  faSearch,
+  faMagic,
+  faRocket,
+  faComments
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
@@ -546,6 +551,44 @@ export default function Campaign() {
     }
   };
 
+  const handleInteractCampaign = async (campaignId: string) => {
+    setIsProcessing(true);
+    try {
+      const response = await securedApi.callBackendFunction({
+        functionName: 'interactCampaign',
+        campaignId
+      });
+      if (response.success) {
+        setResultModalProps({
+          type: 'success',
+          title: 'Interaction Monitoring Started',
+          message: 'Campaign inbox monitoring and auto-reply has been activated.',
+          details: response.data || {}
+        });
+        setShowResultModal(true);
+        await authApi.updateAppData(setAppData);
+      } else {
+        setResultModalProps({
+          type: 'error',
+          title: 'Interaction Error',
+          message: response.error || 'Failed to start interaction monitoring.',
+          details: {}
+        });
+        setShowResultModal(true);
+      }
+    } catch (error: any) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Error',
+        message: error.message || 'An unexpected error occurred.',
+        details: {}
+      });
+      setShowResultModal(true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handlePauseCampaign = async (campaignId: string) => {
     setIsProcessing(true);
     try {
@@ -826,6 +869,7 @@ export default function Campaign() {
                   { label: 'Validation', staged: campaign.validationStaged, status: campaign.validationStatus },
                   { label: 'Enrichment', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
                   { label: 'AI Person.', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
+                  { label: 'Interact', staged: campaign.status === 'completed' || campaign.status === 'Limit Reached', status: (campaign as any).interactionStatus || 'idle' },
                 ].map(s => {
                   const si = stageIcon(s.staged, s.status);
                   return (
@@ -843,6 +887,74 @@ export default function Campaign() {
                 <span className="text-xxs text-gray-500 dark:text-gray-400 shrink-0">{sent.toLocaleString()} / {limit.toLocaleString()}</span>
               </div>
             </div>
+
+            {/* Stage trigger buttons */}
+            {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'completed' || campaign.status === 'Limit Reached') && (
+              <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+                {campaign.validationStaged && campaign.validationStatus !== 'processing' && (
+                  <button
+                    onClick={() => handleValidateCampaign(campaign.id)}
+                    disabled={isProcessing}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg transition-colors ${
+                      campaign.validationStatus === 'completed'
+                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
+                        : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faShieldAlt} className="w-3 h-3" />
+                    {campaign.validationStatus === 'completed' ? 'Re-validate' : 'Validate'}
+                  </button>
+                )}
+                {campaign.enrichmentStaged && campaign.enrichmentStatus !== 'processing' && (campaign.validationStatus === 'completed' || !campaign.validationStaged) && (
+                  <button
+                    onClick={() => handleEnrichCampaign(campaign.id)}
+                    disabled={isProcessing}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg transition-colors ${
+                      campaign.enrichmentStatus === 'completed'
+                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
+                        : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faSearch} className="w-3 h-3" />
+                    {campaign.enrichmentStatus === 'completed' ? 'Re-enrich' : 'Enrich'}
+                  </button>
+                )}
+                {campaign.aiPersonalizationStaged && campaign.personalizationStatus !== 'processing' && (campaign.enrichmentStatus === 'completed' || !campaign.enrichmentStaged) && (
+                  <button
+                    onClick={() => handlePersonalizeCampaign(campaign.id)}
+                    disabled={isProcessing}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg transition-colors ${
+                      campaign.personalizationStatus === 'completed'
+                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
+                        : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faMagic} className="w-3 h-3" />
+                    {campaign.personalizationStatus === 'completed' ? 'Re-personalize' : 'Personalize'}
+                  </button>
+                )}
+                {(campaign.status === 'draft' || campaign.status === 'paused') && (
+                  <button
+                    onClick={() => handleActivateCampaign(campaign.id)}
+                    disabled={isProcessing}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                  >
+                    <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+                    Execute
+                  </button>
+                )}
+                {(campaign.status === 'completed' || campaign.status === 'Limit Reached') && (
+                  <button
+                    onClick={() => handleInteractCampaign(campaign.id)}
+                    disabled={isProcessing}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                  >
+                    <FontAwesomeIcon icon={faComments} className="w-3 h-3" />
+                    Interact
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Actions row */}
             <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border-t dark:border-gray-700">
