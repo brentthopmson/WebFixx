@@ -77,6 +77,9 @@ export interface Campaign {
   interactionStopAfterHours?: number; // Default: 72
   interactionMaxReplies?: number; // Default: 100
 
+  // Setup completion tracking
+  isSetupComplete?: boolean; // True when campaign setup wizard is fully completed
+
   linkType?: 'project' | 'redirect'; // Tracking link source
   linkId?: string; // Identifier of linked project/redirect
   

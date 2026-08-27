@@ -254,7 +254,7 @@ export function validateSMTPSettings(
 
 /**
  * Validates campaign before creation
- * Main orchestrator function
+ * Main orchestrator function — checks all required fields for setup completion
  */
 export function validateCampaignCreation(campaign: Partial<Campaign>): ValidationError | null {
   // Required fields
@@ -266,6 +266,11 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
 
   const typeError = validateCampaignType(campaign.type || '');
   if (typeError) return typeError;
+
+  // Project/link required
+  if (!campaign.projectId || typeof campaign.projectId !== 'string' || campaign.projectId.trim().length === 0) {
+    return { field: 'projectId', message: 'Project or redirect link is required' };
+  }
 
   // Channel-specific validations
   const subjectError = validateCampaignSubject(campaign.subject || '', campaign.channel || '');
@@ -285,6 +290,35 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
 
     const smtpError = validateSMTPSettings(campaign.smtpSettings, deliveryMethod);
     if (smtpError) return smtpError;
+  }
+
+  // At least one pipeline stage must be selected
+  const hasAnyStage = campaign.validationStaged || campaign.enrichmentStaged ||
+    campaign.aiPersonalizationStaged || campaign.executeStaged || campaign.interactionStaged;
+  if (!hasAnyStage) {
+    return { field: 'pipeline', message: 'At least one pipeline stage must be selected' };
+  }
+
+  // AI personalization requires a prompt
+  if (campaign.aiPersonalizationStaged && (!campaign.aiPersonalizationPrompt || campaign.aiPersonalizationPrompt.trim().length === 0)) {
+    return { field: 'aiPersonalizationPrompt', message: 'AI personalization prompt is required when personalization stage is enabled' };
+  }
+
+  // Social channel requires strategy
+  if (campaign.channel === 'social') {
+    if (!campaign.socialStrategyPrompt || campaign.socialStrategyPrompt.trim().length === 0) {
+      return { field: 'socialStrategyPrompt', message: 'Social strategy prompt is required for social campaigns' };
+    }
+  }
+
+  // Interaction stage requires limits
+  if (campaign.interactionStaged) {
+    if (!campaign.interactionStopAfterHours || campaign.interactionStopAfterHours <= 0) {
+      return { field: 'interactionStopAfterHours', message: 'Stop after hours is required when interaction stage is enabled' };
+    }
+    if (!campaign.interactionMaxReplies || campaign.interactionMaxReplies <= 0) {
+      return { field: 'interactionMaxReplies', message: 'Max replies is required when interaction stage is enabled' };
+    }
   }
 
   return null;

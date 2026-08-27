@@ -655,12 +655,12 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 <div className="p-4 space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Campaign Name</label>
-                    <input type="text" placeholder="e.g. Q2 Customer Outreach Strategy" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.name || ''} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} />
+                    <input type="text" placeholder="e.g. Q2 Customer Outreach Strategy" className={`w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none ${isEditing ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-70' : ''}`} value={formData.name || ''} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} disabled={isEditing} />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Niche Category</label>
-                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))}>
+                      <select className={`w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none ${isEditing ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-70' : ''}`} value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))} disabled={isEditing}>
                         <option value="general">General Niche</option>
                         <option value="email_logs">Email Logs</option>
                         <option value="bank_logs">Bank Logs</option>
@@ -1035,13 +1035,15 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border dark:border-gray-600 space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-sm text-gray-950 dark:text-white">Contacts Database Preview</h3>
-                  <button
-                    onClick={() => setStep(1)}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs font-semibold"
-                  >
-                    <FontAwesomeIcon icon={faEdit} className="w-3.5 h-3.5 mr-1" />
-                    Reupload
-                  </button>
+                  {!isEditing && (
+                    <button
+                      onClick={() => setStep(1)}
+                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs font-semibold"
+                    >
+                      <FontAwesomeIcon icon={faEdit} className="w-3.5 h-3.5 mr-1" />
+                      Reupload
+                    </button>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -1171,7 +1173,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
                     return;
                   }
-                  onSave({ ...formData, status: 'draft' });
+                  onSave({ ...formData, status: 'draft', isSetupComplete: true });
                 }}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
                 disabled={loading}

@@ -88,6 +88,11 @@ export interface UserLimits {
   shootContactsLimit: number;
   interactionLimit: number;
   campaignFileSize: number;
+  // Campaign-specific limits
+  validateLimit: number;
+  enrichLimit: number;
+  personalizeLimit: number;
+  shootCampaignLimit: number;
 }
 
 export const getUserLimits = (appData: any): UserLimits | null => {
@@ -133,7 +138,12 @@ export const getUserLimits = (appData: any): UserLimits | null => {
       extractionLimit: Number(getColumnValue('extractionLimit')) || 0,
       shootContactsLimit: Number(getColumnValue('shootContactsLimit')) || 0,
       interactionLimit: Number(getColumnValue('interactionLimit')) || 0,
-      campaignFileSize: Number(getColumnValue('campaignFileSize')) || 100
+      campaignFileSize: Number(getColumnValue('campaignFileSize')) || 100,
+      // Campaign-specific limits
+      validateLimit: Number(getColumnValue('validateLimit')) || 0,
+      enrichLimit: Number(getColumnValue('enrichLimit')) || 0,
+      personalizeLimit: Number(getColumnValue('personalizeLimit')) || 0,
+      shootCampaignLimit: Number(getColumnValue('shootCampaignLimit')) || 0,
     };
   } catch (error) {
     console.error('Error getting user limits:', error);

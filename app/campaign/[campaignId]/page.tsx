@@ -118,6 +118,7 @@ export default function CampaignDetailPage() {
       template: settingsObj.template || '',
       templateId: settingsObj.templateId || '',
       templateContent: settingsObj.templateContent || '',
+      isSetupComplete: settingsObj.isSetupComplete || false,
       created_at: row[createdOnIdx] || '',
       status: row[statusIdx] || 'draft',
       analytics: {
@@ -356,7 +357,8 @@ export default function CampaignDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-3">
-          {campaign.status === 'draft' && (
+          {/* Draft + setup incomplete: Continue Setup */}
+          {campaign.status === 'draft' && !campaign.isSetupComplete && (
             <button
               onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
@@ -365,6 +367,28 @@ export default function CampaignDetailPage() {
               Continue Setup
             </button>
           )}
+          {/* Draft + setup complete: Execute Pipeline */}
+          {campaign.status === 'draft' && campaign.isSetupComplete && (
+            <button
+              onClick={handleExecutePipeline}
+              disabled={!isFeatureEnabled(appData, 'allowShooting')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+              Execute Pipeline
+            </button>
+          )}
+          {/* Draft + setup complete: Edit Settings */}
+          {campaign.status === 'draft' && campaign.isSetupComplete && (
+            <button
+              onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+              Edit Settings
+            </button>
+          )}
+          {/* Running or Limit Reached: Pause */}
           {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (
             <button
               onClick={handlePauseCampaign}
@@ -374,6 +398,7 @@ export default function CampaignDetailPage() {
               Pause
             </button>
           )}
+          {/* Paused: Resume */}
           {campaign.status === 'paused' && (
             <button
               onClick={handleResumeCampaign}
@@ -425,7 +450,7 @@ export default function CampaignDetailPage() {
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pipeline Stages</h3>
-          {(campaign.status === 'draft' || campaign.status === 'paused') && (
+          {((campaign.status === 'draft' && !campaign.isSetupComplete) || campaign.status === 'paused') && (
             <button
               onClick={handleExecutePipeline}
               disabled={isStageProcessing}
@@ -452,12 +477,12 @@ export default function CampaignDetailPage() {
               : item.status === 'processing' ? 'text-blue-500'
               : item.status === 'failed' ? 'text-red-500'
               : 'text-gray-400';
-            const isDraft = campaign.status === 'draft';
+            const isEditable = campaign.status === 'draft' && !campaign.isSetupComplete;
             return (
               <div key={item.label} className={`p-3 rounded-lg border dark:border-gray-700 ${item.staged ? 'bg-gray-50 dark:bg-gray-900/40' : 'opacity-50'}`}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-1.5">
-                    {isDraft ? (
+                    {isEditable ? (
                       <input
                         type="checkbox"
                         className="form-checkbox text-blue-600 rounded w-3.5 h-3.5"

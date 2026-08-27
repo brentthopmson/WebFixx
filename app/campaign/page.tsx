@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faPlus,
@@ -18,7 +18,8 @@ import {
   faArrowRight,
   faPause,
   faPlay,
-  faComments
+  faComments,
+  faRocket
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
@@ -59,6 +60,7 @@ export default function Campaign() {
   });
 
   const searchParams = useSearchParams();
+  const router = useRouter();
   const editCampaignId = searchParams.get('edit');
 
   // Auto-open CampaignModal in edit mode when ?edit=campaignId is present
@@ -154,11 +156,11 @@ export default function Campaign() {
       }
 
       const totalSent = statsObj.interactions || 0;
-      const limitVal = userLimits?.shootContactsLimit || 500;
+      const limitVal = userLimits?.shootCampaignLimit || 0;
 
       // Dynamically pause/flag if limit reached
       let resolvedStatus = row[columnIndices.status] || 'draft';
-      if (totalSent >= limitVal && resolvedStatus !== 'completed' && resolvedStatus !== 'draft') {
+      if (limitVal > 0 && totalSent >= limitVal && resolvedStatus !== 'completed' && resolvedStatus !== 'draft') {
         resolvedStatus = 'Limit Reached';
       }
 
@@ -197,6 +199,7 @@ export default function Campaign() {
         socialInteractionTypes: settingsObj.socialInteractionTypes || [],
         socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
         socialKeywords: settingsObj.socialKeywords || [],
+        isSetupComplete: settingsObj.isSetupComplete || false,
         
         context: contextObj,
         status: resolvedStatus,
@@ -560,8 +563,8 @@ export default function Campaign() {
             return { icon: faClock, color: 'text-gray-400 dark:text-gray-500' };
           };
           const sent = campaign.analytics?.sent || 0;
-          const limit = userLimits?.shootContactsLimit || 500;
-          const pct = Math.min(100, Math.round((sent / limit) * 100));
+          const limit = userLimits?.shootCampaignLimit || 0;
+          const pct = limit > 0 ? Math.min(100, Math.round((sent / limit) * 100)) : 0;
           const created = campaign.created_at ? new Date(campaign.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
           return (
           <div key={campaign.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-100 dark:border-gray-700 animate-fadeIn overflow-hidden">
@@ -655,19 +658,33 @@ export default function Campaign() {
                 <FontAwesomeIcon icon={faArrowRight} className="w-3 h-3" />
               </Link>
               <div className="flex items-center gap-1">
+                {/* Draft + setup incomplete: Continue Setup */}
+                {campaign.status === 'draft' && !campaign.isSetupComplete && (
+                  <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors" title="Continue Setup">
+                    <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+                    Continue Setup
+                  </button>
+                )}
+                {/* Draft + setup complete: Execute */}
+                {campaign.status === 'draft' && campaign.isSetupComplete && (
+                  <button onClick={() => router.push(`/campaign/${campaign.id}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" title="Execute Campaign">
+                    <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+                    Execute
+                  </button>
+                )}
+                {/* Running or Limit Reached: Pause */}
                 {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (
                   <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors" title="Pause Campaign">
                     <FontAwesomeIcon icon={faPause} className="w-4 h-4" />
                   </button>
                 )}
+                {/* Paused: Resume */}
                 {campaign.status === 'paused' && (
                   <button onClick={() => handleResumeCampaign(campaign.id)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Resume Campaign">
                     <FontAwesomeIcon icon={faPlay} className="w-4 h-4" />
                   </button>
                 )}
-                <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Edit Campaign">
-                  <FontAwesomeIcon icon={faEdit} className="w-4 h-4" />
-                </button>
+                {/* Delete always shown */}
                 <button onClick={() => { setCampaignToDelete(campaign.id); setShowDeleteConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Delete Campaign">
                   <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
                 </button>
