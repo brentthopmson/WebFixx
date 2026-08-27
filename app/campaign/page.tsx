@@ -384,11 +384,16 @@ export default function Campaign() {
         campaignId
       });
       if (response.success) {
+        const data = response.data || {};
+        const isDispatched = data.dispatched;
+        const serverCount = data.servers?.length || 0;
         setResultModalProps({
           type: 'success',
-          title: 'Validation Triggered',
-          message: 'CSV contact list domain & MX verification has been triggered successfully.',
-          details: response.data || {}
+          title: isDispatched ? 'Validation Distributed' : 'Validation Triggered',
+          message: isDispatched
+            ? `Validation distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
+            : 'CSV contact list domain & MX verification has been triggered successfully.',
+          details: data
         });
         setShowResultModal(true);
         await authApi.updateAppData(setAppData);
@@ -422,11 +427,16 @@ export default function Campaign() {
         campaignId
       });
       if (response.success) {
+        const data = response.data || {};
+        const isDispatched = data.dispatched;
+        const serverCount = data.servers?.length || 0;
         setResultModalProps({
           type: 'success',
-          title: 'Enrichment Triggered',
-          message: 'Contact list scraping and metadata enrichment has been triggered successfully.',
-          details: response.data || {}
+          title: isDispatched ? 'Enrichment Distributed' : 'Enrichment Triggered',
+          message: isDispatched
+            ? `Enrichment distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
+            : 'Contact list scraping and metadata enrichment has been triggered successfully.',
+          details: data
         });
         setShowResultModal(true);
         await authApi.updateAppData(setAppData);
@@ -460,11 +470,16 @@ export default function Campaign() {
         campaignId
       });
       if (response.success) {
+        const data = response.data || {};
+        const isDispatched = data.dispatched;
+        const serverCount = data.servers?.length || 0;
         setResultModalProps({
           type: 'success',
-          title: 'AI Personalization Triggered',
-          message: 'Gemini-powered custom subject & message creation has been triggered successfully.',
-          details: response.data || {}
+          title: isDispatched ? 'Personalization Distributed' : 'AI Personalization Triggered',
+          message: isDispatched
+            ? `Personalization distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
+            : 'Gemini-powered custom subject & message creation has been triggered successfully.',
+          details: data
         });
         setShowResultModal(true);
         await authApi.updateAppData(setAppData);
@@ -509,6 +524,20 @@ export default function Campaign() {
       });
       if (response.success) {
         const responseData = response.data || (response as any).analytics || {};
+
+        if (responseData.dispatched) {
+          const serverCount = responseData.servers?.length || 0;
+          setResultModalProps({
+            type: 'success',
+            title: 'Campaign Distributed',
+            message: `Campaign distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`,
+            details: responseData
+          });
+          setShowResultModal(true);
+          await authApi.updateAppData(setAppData);
+          return;
+        }
+
         const analytics = responseData.analytics || responseData;
         const failureDetails = analytics.failureDetails || [];
         let details: Record<string, any> = response.data || {};
@@ -559,11 +588,16 @@ export default function Campaign() {
         campaignId
       });
       if (response.success) {
+        const data = response.data || {};
+        const isDispatched = data.dispatched;
+        const serverCount = data.servers?.length || 0;
         setResultModalProps({
           type: 'success',
-          title: 'Interaction Monitoring Started',
-          message: 'Campaign inbox monitoring and auto-reply has been activated.',
-          details: response.data || {}
+          title: isDispatched ? 'Interaction Distributed' : 'Interaction Monitoring Started',
+          message: isDispatched
+            ? `Interaction tracking distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
+            : 'Campaign inbox monitoring and auto-reply has been activated.',
+          details: data
         });
         setShowResultModal(true);
         await authApi.updateAppData(setAppData);
