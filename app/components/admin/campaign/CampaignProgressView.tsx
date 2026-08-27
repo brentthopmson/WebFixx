@@ -124,23 +124,38 @@ function getRowProgress(row: CSVRow, channel: string): RowProgress {
   const sendStamp = (row['sendStamp'] || '').trim();
   const provider = (row['providerMXResult'] || '').trim();
   const valStatus = (row['validation_status'] || '').trim();
+  const interactStatus = (row['interactStatus'] || '').trim().toLowerCase();
+  const interactCount = (row['interactCount'] || '').trim();
+  const interactStamp = (row['interactStamp'] || '').trim();
 
   let status: RowStatus = 'waiting';
   if (validation === 'failed') status = 'failed';
   else if (validation === 'sent') status = 'done';
 
-  const detail = status === 'failed'
+  let detail = status === 'failed'
     ? (provider || 'Delivery failed')
     : status === 'done'
       ? (provider ? `Sent via ${provider}` : 'Sent')
       : (valStatus ? `Validation: ${valStatus}` : 'Queued for delivery');
+
+  if (status === 'done' && interactStatus) {
+    if (interactStatus === 'monitoring') {
+      detail += ` · Monitoring${interactCount ? ` (${interactCount} replies)` : ''}`;
+    } else if (interactStatus === 'executed' || interactStatus === 'messaged') {
+      detail += ` · Interacted${interactCount ? ` (${interactCount})` : ''}`;
+    } else if (interactStatus === 'failed') {
+      detail += ' · Interaction failed';
+    }
+  }
+
+  const timestamp = interactStamp || sendStamp;
 
   return {
     status,
     identity: email || username || fullName || '—',
     secondary: fullName || company || platform,
     detail,
-    timestamp: sendStamp,
+    timestamp,
     sn,
     url,
     context,

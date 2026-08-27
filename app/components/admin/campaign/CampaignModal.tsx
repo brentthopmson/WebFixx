@@ -11,10 +11,6 @@ import {
   faCheckCircle,
   faEnvelope,
   faRobot,
-  faLink,
-  faSearch,
-  faSlidersH,
-  faPaperPlane,
   faInfoCircle,
   faExclamationTriangle,
   faChevronDown,
@@ -105,6 +101,11 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         aiPersonalizationStaged: campaignToEdit.aiPersonalizationStaged || false,
         aiPersonalizationPrompt: campaignToEdit.aiPersonalizationPrompt || '',
         personalizationStatus: campaignToEdit.personalizationStatus || 'idle',
+        executeStaged: campaignToEdit.executeStaged ?? true,
+        interactionStaged: campaignToEdit.interactionStaged || false,
+        interactionStatus: campaignToEdit.interactionStatus || 'idle',
+        interactionStopAfterHours: campaignToEdit.interactionStopAfterHours || 72,
+        interactionMaxReplies: campaignToEdit.interactionMaxReplies || 100,
         deliveryMethod: campaignToEdit.deliveryMethod || 'smtp',
         linkType: campaignToEdit.linkType || 'project',
         linkId: campaignToEdit.linkId || '',
@@ -137,6 +138,11 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       aiPersonalizationStaged: false,
       aiPersonalizationPrompt: '',
       personalizationStatus: 'idle',
+      executeStaged: true,
+      interactionStaged: false,
+      interactionStatus: 'idle',
+      interactionStopAfterHours: 72,
+      interactionMaxReplies: 100,
       deliveryMethod: 'smtp',
       linkType: 'project',
       linkId: '',
@@ -872,20 +878,40 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     </>
                   ) : (
                     <>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700">
                         <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
                           <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.validationStaged || false} onChange={e => setFormData(prev => ({ ...prev, validationStaged: e.target.checked }))} />
-                          <span className="text-xs font-semibold dark:text-gray-300">Stage list Validation</span>
+                          <span className="text-xs font-semibold dark:text-gray-300">Validation</span>
                         </label>
                         <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
                           <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.enrichmentStaged || false} onChange={e => setFormData(prev => ({ ...prev, enrichmentStaged: e.target.checked }))} />
-                          <span className="text-xs font-semibold dark:text-gray-300">Stage Lead Enrichment</span>
+                          <span className="text-xs font-semibold dark:text-gray-300">Enrichment</span>
                         </label>
                         <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
                           <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.aiPersonalizationStaged || false} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationStaged: e.target.checked }))} />
-                          <span className="text-xs font-semibold dark:text-gray-300">Stage AI Personalization</span>
+                          <span className="text-xs font-semibold dark:text-gray-300">AI Personalization</span>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
+                          <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.executeStaged ?? true} onChange={e => setFormData(prev => ({ ...prev, executeStaged: e.target.checked }))} />
+                          <span className="text-xs font-semibold dark:text-gray-300">Execute</span>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
+                          <input type="checkbox" className="form-checkbox text-purple-600 rounded w-4 h-4" checked={formData.interactionStaged || false} onChange={e => setFormData(prev => ({ ...prev, interactionStaged: e.target.checked }))} />
+                          <span className="text-xs font-semibold dark:text-gray-300">Interaction</span>
                         </label>
                       </div>
+                      {formData.interactionStaged && (
+                        <div className="animate-fadeIn grid grid-cols-2 gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
+                          <div>
+                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
+                            <input type="number" min="1" max="720" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionStopAfterHours || 72} onChange={e => setFormData(prev => ({ ...prev, interactionStopAfterHours: parseInt(e.target.value) || 72 }))} />
+                          </div>
+                          <div>
+                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Max Replies</label>
+                            <input type="number" min="1" max="10000" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionMaxReplies || 100} onChange={e => setFormData(prev => ({ ...prev, interactionMaxReplies: parseInt(e.target.value) || 100 }))} />
+                          </div>
+                        </div>
+                      )}
                       {formData.aiPersonalizationStaged && (
                         <div className="animate-fadeIn">
                           <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Gemini 2.5 Flash Mail-Merge prompt</label>
@@ -957,12 +983,14 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{(formData.smtpSettings || []).length} servers</p>
                     </div>
                     <div className="col-span-1 sm:col-span-2">
-                      <p className="text-gray-400 font-medium">Staging Pipeline Checkpoints</p>
+                      <p className="text-gray-400 font-medium">Pipeline Stages</p>
                       <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5 leading-relaxed">
-                        {formData.validationStaged ? '✓ Domain MX verification ' : ''}
-                        {formData.enrichmentStaged ? '✓ Metadata Lead Enrichment ' : ''}
-                        {formData.aiPersonalizationStaged ? '✓ Gemini custom mail-merge ' : ''}
-                        {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged ? 'Direct Send without preparation' : ''}
+                        {formData.validationStaged ? '✓ Validation ' : ''}
+                        {formData.enrichmentStaged ? '✓ Enrichment ' : ''}
+                        {formData.aiPersonalizationStaged ? '✓ AI Personalization ' : ''}
+                        {(formData.executeStaged ?? true) ? '✓ Execute ' : ''}
+                        {formData.interactionStaged ? `✓ Interaction (${formData.interactionStopAfterHours || 72}h / ${formData.interactionMaxReplies || 100} replies) ` : ''}
+                        {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged ? 'No stages selected' : ''}
                       </p>
                     </div>
                     <div className="col-span-1 sm:col-span-2">

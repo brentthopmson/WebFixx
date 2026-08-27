@@ -10,8 +10,6 @@ import {
   faEdit,
   faTrash,
   faClock,
-  faPaperPlane,
-  faExternalLinkAlt,
   faEnvelope,
   faRobot,
   faCheckCircle,
@@ -20,16 +18,12 @@ import {
   faArrowRight,
   faPause,
   faPlay,
-  faShieldAlt,
-  faSearch,
-  faMagic,
-  faRocket,
   faComments
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
 import { CampaignModal } from '../components/admin/campaign/CampaignModal';
-import type { Campaign, SMTPSetting } from '../types';
+import type { Campaign } from '../types';
 import { securedApi, authApi } from '../../utils/auth';
 import { getUserLimits } from '../../utils/helpers';
 import { validateCampaignCreation, getValidationErrorMessage } from '../utils/campaignValidators';
@@ -190,6 +184,11 @@ export default function Campaign() {
         aiPersonalizationStaged: settingsObj.aiPersonalizationStaged || false,
         aiPersonalizationPrompt: settingsObj.aiPersonalizationPrompt || '',
         personalizationStatus: settingsObj.personalizationStatus || 'idle',
+        executeStaged: settingsObj.executeStaged ?? true,
+        interactionStaged: settingsObj.interactionStaged || false,
+        interactionStatus: settingsObj.interactionStatus || 'idle',
+        interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
+        interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
         deliveryMethod: settingsObj.deliveryMethod || 'smtp',
         
         linkType: settingsObj.linkType || 'project',
@@ -272,6 +271,11 @@ export default function Campaign() {
     aiPersonalizationStaged: campaign.aiPersonalizationStaged || false,
     aiPersonalizationPrompt: campaign.aiPersonalizationPrompt || '',
     personalizationStatus: campaign.personalizationStatus || 'idle',
+    executeStaged: campaign.executeStaged ?? true,
+    interactionStaged: campaign.interactionStaged || false,
+    interactionStatus: campaign.interactionStatus || 'idle',
+    interactionStopAfterHours: campaign.interactionStopAfterHours || 72,
+    interactionMaxReplies: campaign.interactionMaxReplies || 100,
     deliveryMethod: campaign.deliveryMethod || 'smtp',
     linkType: campaign.linkType || 'project',
     linkId: campaign.linkId || '',
@@ -312,9 +316,9 @@ export default function Campaign() {
       }
 
       const campaignId = editingCampaign?.id || newCampaign.id || '';
-      const isUpdate = campaignId.length > 0;
+      const isUpdateExisting = campaignId.length > 0;
       const strategyContext = buildStrategyContext(newCampaign);
-      console.log(`[Campaign] Sending to backend — ${isUpdate ? 'UPDATE' : 'CREATE'}`, {
+      console.log(`[Campaign] Sending to backend — ${isUpdateExisting ? 'UPDATE' : 'CREATE'}`, {
         campaignId: campaignId || '(new)',
         strategyContextLength: strategyContext.length
       });
@@ -373,253 +377,6 @@ export default function Campaign() {
       setIsProcessing(false);
       setShowCampaignModal(false);
       setEditingCampaign(null);
-    }
-  };
-
-  const handleValidateCampaign = async (campaignId: string) => {
-    setIsProcessing(true);
-    try {
-      const response = await securedApi.callBackendFunction({
-        functionName: 'validateCampaignEmails',
-        campaignId
-      });
-      if (response.success) {
-        const data = response.data || {};
-        const isDispatched = data.dispatched;
-        const serverCount = data.servers?.length || 0;
-        setResultModalProps({
-          type: 'success',
-          title: isDispatched ? 'Validation Distributed' : 'Validation Triggered',
-          message: isDispatched
-            ? `Validation distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
-            : 'CSV contact list domain & MX verification has been triggered successfully.',
-          details: data
-        });
-        setShowResultModal(true);
-        await authApi.updateAppData(setAppData);
-      } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Validation Error',
-          message: response.error || 'Failed to trigger list validation.',
-          details: {}
-        });
-        setShowResultModal(true);
-      }
-    } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleEnrichCampaign = async (campaignId: string) => {
-    setIsProcessing(true);
-    try {
-      const response = await securedApi.callBackendFunction({
-        functionName: 'enrichCampaignLeads',
-        campaignId
-      });
-      if (response.success) {
-        const data = response.data || {};
-        const isDispatched = data.dispatched;
-        const serverCount = data.servers?.length || 0;
-        setResultModalProps({
-          type: 'success',
-          title: isDispatched ? 'Enrichment Distributed' : 'Enrichment Triggered',
-          message: isDispatched
-            ? `Enrichment distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
-            : 'Contact list scraping and metadata enrichment has been triggered successfully.',
-          details: data
-        });
-        setShowResultModal(true);
-        await authApi.updateAppData(setAppData);
-      } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Enrichment Error',
-          message: response.error || 'Failed to trigger enrichment.',
-          details: {}
-        });
-        setShowResultModal(true);
-      }
-    } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handlePersonalizeCampaign = async (campaignId: string) => {
-    setIsProcessing(true);
-    try {
-      const response = await securedApi.callBackendFunction({
-        functionName: 'personalizeCampaignEmails',
-        campaignId
-      });
-      if (response.success) {
-        const data = response.data || {};
-        const isDispatched = data.dispatched;
-        const serverCount = data.servers?.length || 0;
-        setResultModalProps({
-          type: 'success',
-          title: isDispatched ? 'Personalization Distributed' : 'AI Personalization Triggered',
-          message: isDispatched
-            ? `Personalization distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
-            : 'Gemini-powered custom subject & message creation has been triggered successfully.',
-          details: data
-        });
-        setShowResultModal(true);
-        await authApi.updateAppData(setAppData);
-      } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Personalization Error',
-          message: response.error || 'Failed to trigger AI personalization.',
-          details: {}
-        });
-        setShowResultModal(true);
-      }
-    } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleActivateCampaign = async (campaignId: string) => {
-    if (!isFeatureEnabled(appData, 'allowShooting')) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Feature Disabled',
-        message: featureDisabledMessage('allowShooting', 'campaign activation'),
-        details: {}
-      });
-      setShowResultModal(true);
-      return;
-    }
-    setIsProcessing(true);
-    try {
-      const response = await securedApi.callBackendFunction({
-        functionName: 'executeCampaign',
-        campaignId
-      });
-      if (response.success) {
-        const responseData = response.data || (response as any).analytics || {};
-
-        if (responseData.dispatched) {
-          const serverCount = responseData.servers?.length || 0;
-          setResultModalProps({
-            type: 'success',
-            title: 'Campaign Distributed',
-            message: `Campaign distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`,
-            details: responseData
-          });
-          setShowResultModal(true);
-          await authApi.updateAppData(setAppData);
-          return;
-        }
-
-        const analytics = responseData.analytics || responseData;
-        const failureDetails = analytics.failureDetails || [];
-        let details: Record<string, any> = response.data || {};
-        if (failureDetails.length > 0) {
-          details = {
-            ...details,
-            _warnings: `Campaign completed with ${analytics.failed} failed delivery(ies).`,
-            failureExamples: failureDetails.slice(0, 5)
-          };
-        }
-        setResultModalProps({
-          type: failureDetails.length > analytics.sent / 2 ? 'warning' : 'success',
-          title: failureDetails.length > analytics.sent / 2 ? 'Campaign Completed with Warnings' : 'Campaign Activated',
-          message: failureDetails.length > 0
-            ? `Campaign finished: ${analytics.sent} sent, ${analytics.delivered} delivered, ${analytics.failed} failed.`
-            : 'Your campaign has been successfully activated and has started running.',
-          details
-        });
-        setShowResultModal(true);
-        await authApi.updateAppData(setAppData);
-      } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Activation Error',
-          message: response.error || 'Failed to activate campaign.',
-          details: {}
-        });
-        setShowResultModal(true);
-      }
-    } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleInteractCampaign = async (campaignId: string) => {
-    setIsProcessing(true);
-    try {
-      const response = await securedApi.callBackendFunction({
-        functionName: 'interactCampaign',
-        campaignId
-      });
-      if (response.success) {
-        const data = response.data || {};
-        const isDispatched = data.dispatched;
-        const serverCount = data.servers?.length || 0;
-        setResultModalProps({
-          type: 'success',
-          title: isDispatched ? 'Interaction Distributed' : 'Interaction Monitoring Started',
-          message: isDispatched
-            ? `Interaction tracking distributed across ${serverCount} server${serverCount !== 1 ? 's' : ''}. Workers are processing in parallel.`
-            : 'Campaign inbox monitoring and auto-reply has been activated.',
-          details: data
-        });
-        setShowResultModal(true);
-        await authApi.updateAppData(setAppData);
-      } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Interaction Error',
-          message: response.error || 'Failed to start interaction monitoring.',
-          details: {}
-        });
-        setShowResultModal(true);
-      }
-    } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -701,58 +458,6 @@ export default function Campaign() {
         type: 'error',
         title: 'Error',
         message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleUpdateCampaignSMTP = async (campaignId: string, smtpSettings: SMTPSetting[]) => {
-    setIsProcessing(true);
-    try {
-      const currentCampaign = campaigns.find(c => c.id === campaignId);
-      if (!currentCampaign) return;
-
-      const settings = JSON.stringify({
-        accounts: currentCampaign.accounts || [],
-        subject: currentCampaign.subject || '',
-        body: currentCampaign.body || '',
-        fileUrl: currentCampaign.fileUrl || '',
-        smtpSettings
-      });
-
-      const response = await securedApi.callBackendFunction({
-        functionName: 'updateCampaign',
-        campaignId,
-        settings,
-        status: currentCampaign.status || 'draft'
-      });
-
-      if (response.success) {
-        setResultModalProps({
-          type: 'success',
-          title: 'Campaign Updated',
-          message: 'Campaign SMTP servers have been successfully updated.',
-          details: {}
-        });
-        setShowResultModal(true);
-        await authApi.updateAppData(setAppData);
-      } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Error Updating Campaign',
-          message: response.error || 'An unexpected error occurred.',
-          details: {}
-        });
-        setShowResultModal(true);
-      }
-    } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'Failed to update campaign.',
         details: {}
       });
       setShowResultModal(true);
@@ -900,10 +605,11 @@ export default function Campaign() {
             <div className="px-4 pb-3 flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2.5 text-xxs">
                 {[
-                  { label: 'Validation', staged: campaign.validationStaged, status: campaign.validationStatus },
-                  { label: 'Enrichment', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
-                  { label: 'AI Person.', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
-                  { label: 'Interact', staged: campaign.status === 'completed' || campaign.status === 'Limit Reached', status: (campaign as any).interactionStatus || 'idle' },
+                  { label: 'Validate', staged: campaign.validationStaged, status: campaign.validationStatus },
+                  { label: 'Enrich', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
+                  { label: 'AI', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
+                  { label: 'Execute', staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
+                  { label: 'Interact', staged: campaign.interactionStaged, status: (campaign as any).interactionStatus || 'idle' },
                 ].map(s => {
                   const si = stageIcon(s.staged, s.status);
                   return (
@@ -922,71 +628,20 @@ export default function Campaign() {
               </div>
             </div>
 
-            {/* Stage trigger buttons */}
-            {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'completed' || campaign.status === 'Limit Reached') && (
-              <div className="px-4 pb-3 flex flex-wrap gap-1.5">
-                {campaign.validationStaged && campaign.validationStatus !== 'processing' && (
-                  <button
-                    onClick={() => handleValidateCampaign(campaign.id)}
-                    disabled={isProcessing}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg transition-colors ${
-                      campaign.validationStatus === 'completed'
-                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
-                        : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faShieldAlt} className="w-3 h-3" />
-                    {campaign.validationStatus === 'completed' ? 'Re-validate' : 'Validate'}
-                  </button>
-                )}
-                {campaign.enrichmentStaged && campaign.enrichmentStatus !== 'processing' && (campaign.validationStatus === 'completed' || !campaign.validationStaged) && (
-                  <button
-                    onClick={() => handleEnrichCampaign(campaign.id)}
-                    disabled={isProcessing}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg transition-colors ${
-                      campaign.enrichmentStatus === 'completed'
-                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
-                        : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faSearch} className="w-3 h-3" />
-                    {campaign.enrichmentStatus === 'completed' ? 'Re-enrich' : 'Enrich'}
-                  </button>
-                )}
-                {campaign.aiPersonalizationStaged && campaign.personalizationStatus !== 'processing' && (campaign.enrichmentStatus === 'completed' || !campaign.enrichmentStaged) && (
-                  <button
-                    onClick={() => handlePersonalizeCampaign(campaign.id)}
-                    disabled={isProcessing}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg transition-colors ${
-                      campaign.personalizationStatus === 'completed'
-                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
-                        : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faMagic} className="w-3 h-3" />
-                    {campaign.personalizationStatus === 'completed' ? 'Re-personalize' : 'Personalize'}
-                  </button>
-                )}
-                {(campaign.status === 'draft' || campaign.status === 'paused') && (
-                  <button
-                    onClick={() => handleActivateCampaign(campaign.id)}
-                    disabled={isProcessing}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                  >
-                    <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
-                    Execute
-                  </button>
-                )}
-                {(campaign.status === 'completed' || campaign.status === 'Limit Reached') && (
-                  <button
-                    onClick={() => handleInteractCampaign(campaign.id)}
-                    disabled={isProcessing}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xxs font-semibold rounded-lg bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-                  >
+            {/* Interaction stats */}
+            {campaign.interactionStaged && (campaign as any).interactionStatus && (
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-3 text-xxs text-purple-600 dark:text-purple-400">
+                  <span className="flex items-center gap-1">
                     <FontAwesomeIcon icon={faComments} className="w-3 h-3" />
-                    Interact
-                  </button>
-                )}
+                    Interaction: {(campaign as any).interactionStatus}
+                  </span>
+                  {(campaign as any).interactionStoppedReason && (
+                    <span className="text-amber-500 dark:text-amber-400">
+                      ({(campaign as any).interactionStoppedReason.replace(/_/g, ' ')})
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 

@@ -67,7 +67,16 @@ export interface Campaign {
   aiPersonalizationStaged?: boolean; // AI personalization toggle
   aiPersonalizationPrompt?: string; // Prompt for dynamic row generation
   personalizationStatus?: 'idle' | 'processing' | 'completed' | 'failed';
-  
+  executeStaged?: boolean; // Whether to include execute stage
+  interactionStaged?: boolean; // Whether to include interaction stage
+  interactionStatus?: 'idle' | 'monitoring' | 'completed' | 'failed';
+  interactionStartedAt?: string;
+  interactionStoppedReason?: 'time_limit_reached' | 'reply_limit_reached' | 'admin_stopped';
+
+  // Per-campaign interaction limits
+  interactionStopAfterHours?: number; // Default: 72
+  interactionMaxReplies?: number; // Default: 100
+
   linkType?: 'project' | 'redirect'; // Tracking link source
   linkId?: string; // Identifier of linked project/redirect
   

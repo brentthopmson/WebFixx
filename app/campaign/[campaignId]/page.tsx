@@ -104,6 +104,11 @@ export default function CampaignDetailPage() {
       aiPersonalizationStaged: settingsObj.aiPersonalizationStaged || false,
       aiPersonalizationPrompt: settingsObj.aiPersonalizationPrompt || '',
       personalizationStatus: settingsObj.personalizationStatus || 'idle',
+      executeStaged: settingsObj.executeStaged ?? true,
+      interactionStaged: settingsObj.interactionStaged || false,
+      interactionStatus: settingsObj.interactionStatus || 'idle',
+      interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
+      interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
       linkType: settingsObj.linkType || 'project',
       linkId: settingsObj.linkId || '',
       socialInteractionTypes: settingsObj.socialInteractionTypes || [],
@@ -233,90 +238,35 @@ export default function CampaignDetailPage() {
 
   const [isStageProcessing, setIsStageProcessing] = useState(false);
 
-  const handleValidate = async () => {
-    setIsStageProcessing(true);
+  const handleToggleStage = async (field: 'validationStaged' | 'enrichmentStaged' | 'aiPersonalizationStaged' | 'executeStaged' | 'interactionStaged', value: boolean) => {
+    setCampaign(prev => prev ? { ...prev, [field]: value } : prev);
     try {
-      const res = await securedApi.callBackendFunction({
-        functionName: 'validateCampaignEmails',
-        campaignId
+      await securedApi.callBackendFunction({
+        functionName: 'updateCampaign',
+        campaignId,
+        settings: JSON.stringify({ [field]: value }),
+        status: campaign?.status || 'draft'
       });
-      if (res.success) {
-        setCampaign(prev => prev ? { ...prev, validationStatus: 'completed' } : prev);
-        router.refresh();
-      }
     } catch {
-      // silent
-    } finally {
-      setIsStageProcessing(false);
+      setCampaign(prev => prev ? { ...prev, [field]: !value } : prev);
     }
   };
 
-  const handleEnrich = async () => {
-    setIsStageProcessing(true);
-    try {
-      const res = await securedApi.callBackendFunction({
-        functionName: 'enrichCampaignLeads',
-        campaignId
-      });
-      if (res.success) {
-        setCampaign(prev => prev ? { ...prev, enrichmentStatus: 'completed' } : prev);
-        router.refresh();
-      }
-    } catch {
-      // silent
-    } finally {
-      setIsStageProcessing(false);
-    }
-  };
-
-  const handlePersonalize = async () => {
-    setIsStageProcessing(true);
-    try {
-      const res = await securedApi.callBackendFunction({
-        functionName: 'personalizeCampaignEmails',
-        campaignId
-      });
-      if (res.success) {
-        setCampaign(prev => prev ? { ...prev, personalizationStatus: 'completed' } : prev);
-        router.refresh();
-      }
-    } catch {
-      // silent
-    } finally {
-      setIsStageProcessing(false);
-    }
-  };
-
-  const handleExecute = async () => {
+  const handleExecutePipeline = async () => {
     if (!isFeatureEnabled(appData, 'allowShooting')) {
       alert(featureDisabledMessage('allowShooting', 'campaign execution'));
       return;
     }
     setIsStageProcessing(true);
     try {
-      const res = await securedApi.callBackendFunction({
-        functionName: 'executeCampaign',
-        campaignId
+      const res = await fetch('/campaign/pipeline-orchestrator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId })
       });
-      if (res.success) {
+      const data = await res.json();
+      if (data.success) {
         setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
-        router.refresh();
-      }
-    } catch {
-      // silent
-    } finally {
-      setIsStageProcessing(false);
-    }
-  };
-
-  const handleInteract = async () => {
-    setIsStageProcessing(true);
-    try {
-      const res = await securedApi.callBackendFunction({
-        functionName: 'interactCampaign',
-        campaignId
-      });
-      if (res.success) {
         router.refresh();
       }
     } catch {
@@ -471,15 +421,28 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Staging Status */}
+      {/* Unified Pipeline View */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Staging Pipeline Status</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pipeline Stages</h3>
+          {(campaign.status === 'draft' || campaign.status === 'paused') && (
+            <button
+              onClick={handleExecutePipeline}
+              disabled={isStageProcessing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+              Execute Pipeline
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
-            { label: 'Validation', staged: campaign.validationStaged, status: campaign.validationStatus },
-            { label: 'Enrichment', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
-            { label: 'AI Personalization', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
-            { label: 'Interaction', staged: campaign.status === 'completed' || campaign.status === 'Limit Reached', status: (campaign as any).interactionStatus || 'idle' },
+            { label: 'Validation', icon: faShieldAlt, staged: campaign.validationStaged, status: campaign.validationStatus, field: 'validationStaged' as const },
+            { label: 'Enrichment', icon: faSearch, staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus, field: 'enrichmentStaged' as const },
+            { label: 'AI Personalization', icon: faMagic, staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus, field: 'aiPersonalizationStaged' as const },
+            { label: 'Execute', icon: faRocket, staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle', field: 'executeStaged' as const },
+            { label: 'Interaction', icon: faComments, staged: campaign.interactionStaged, status: campaign.interactionStatus || 'idle', field: 'interactionStaged' as const },
           ].map(item => {
             const statusIcon = item.status === 'completed' ? faCheckCircle
               : item.status === 'processing' ? faSpinner
@@ -489,89 +452,38 @@ export default function CampaignDetailPage() {
               : item.status === 'processing' ? 'text-blue-500'
               : item.status === 'failed' ? 'text-red-500'
               : 'text-gray-400';
+            const isDraft = campaign.status === 'draft';
             return (
               <div key={item.label} className={`p-3 rounded-lg border dark:border-gray-700 ${item.staged ? 'bg-gray-50 dark:bg-gray-900/40' : 'opacity-50'}`}>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold dark:text-gray-300">{item.label}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5">
+                    {isDraft ? (
+                      <input
+                        type="checkbox"
+                        className="form-checkbox text-blue-600 rounded w-3.5 h-3.5"
+                        checked={item.staged || false}
+                        onChange={e => handleToggleStage(item.field, e.target.checked)}
+                      />
+                    ) : (
+                      <FontAwesomeIcon icon={item.icon} className="w-3.5 h-3.5 text-gray-400" />
+                    )}
+                    <p className="text-xs font-semibold dark:text-gray-300">{item.label}</p>
+                  </div>
                   <FontAwesomeIcon icon={statusIcon} className={`w-3.5 h-3.5 ${statusColor} ${item.status === 'processing' ? 'animate-spin' : ''}`} />
                 </div>
-                <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1 capitalize">{item.staged ? (item.status || 'pending') : 'Not staged'}</p>
+                <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1 capitalize">
+                  {item.staged ? (item.status || 'pending') : 'Not staged'}
+                </p>
               </div>
             );
           })}
         </div>
-      </div>
-
-      {/* Stage Trigger Buttons */}
-      {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'completed' || campaign.status === 'Limit Reached') && (
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Pipeline Actions</h3>
-          <div className="flex flex-wrap gap-2">
-            {campaign.validationStaged && campaign.validationStatus !== 'processing' && (
-              <button
-                onClick={handleValidate}
-                disabled={isStageProcessing}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                  campaign.validationStatus === 'completed'
-                    ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
-                    : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <FontAwesomeIcon icon={faShieldAlt} className="w-3.5 h-3.5" />
-                {campaign.validationStatus === 'completed' ? 'Re-validate' : 'Run Validation'}
-              </button>
-            )}
-            {campaign.enrichmentStaged && campaign.enrichmentStatus !== 'processing' && (campaign.validationStatus === 'completed' || !campaign.validationStaged) && (
-              <button
-                onClick={handleEnrich}
-                disabled={isStageProcessing}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                  campaign.enrichmentStatus === 'completed'
-                    ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
-                    : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <FontAwesomeIcon icon={faSearch} className="w-3.5 h-3.5" />
-                {campaign.enrichmentStatus === 'completed' ? 'Re-enrich' : 'Run Enrichment'}
-              </button>
-            )}
-            {campaign.aiPersonalizationStaged && campaign.personalizationStatus !== 'processing' && (campaign.enrichmentStatus === 'completed' || !campaign.enrichmentStaged) && (
-              <button
-                onClick={handlePersonalize}
-                disabled={isStageProcessing}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                  campaign.personalizationStatus === 'completed'
-                    ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50'
-                    : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <FontAwesomeIcon icon={faMagic} className="w-3.5 h-3.5" />
-                {campaign.personalizationStatus === 'completed' ? 'Re-personalize' : 'Run Personalization'}
-              </button>
-            )}
-            {(campaign.status === 'draft' || campaign.status === 'paused') && (
-              <button
-                onClick={handleExecute}
-                disabled={isStageProcessing}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-              >
-                <FontAwesomeIcon icon={faRocket} className="w-3.5 h-3.5" />
-                Execute Campaign
-              </button>
-            )}
-            {(campaign.status === 'completed' || campaign.status === 'Limit Reached') && (
-              <button
-                onClick={handleInteract}
-                disabled={isStageProcessing}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-              >
-                <FontAwesomeIcon icon={faComments} className="w-3.5 h-3.5" />
-                Start Interaction Monitoring
-              </button>
-            )}
+        {campaign.interactionStaged && (
+          <div className="mt-3 text-xxs text-purple-500 dark:text-purple-400">
+            Interaction limits: {campaign.interactionStopAfterHours || 72}h / {campaign.interactionMaxReplies || 100} replies
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* CSV Data Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden">
