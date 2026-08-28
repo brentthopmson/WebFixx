@@ -267,9 +267,11 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
   const typeError = validateCampaignType(campaign.type || '');
   if (typeError) return typeError;
 
-  // Project/link required
-  if (!campaign.projectId || typeof campaign.projectId !== 'string' || campaign.projectId.trim().length === 0) {
-    return { field: 'projectId', message: 'Project or redirect link is required' };
+  // Project/link required for wire/mixed delivery
+  if (campaign.deliveryMethod !== 'smtp') {
+    if (!campaign.projectId || typeof campaign.projectId !== 'string' || campaign.projectId.trim().length === 0) {
+      return { field: 'projectId', message: 'Project or redirect link is required for WIRE/Mixed delivery' };
+    }
   }
 
   // Channel-specific validations

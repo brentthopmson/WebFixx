@@ -1186,7 +1186,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert('Please input a campaign name to proceed.');
                       return;
                     }
-                    if (!formData.projectId) {
+                    if (formData.deliveryMethod !== 'smtp' && !formData.projectId) {
                       alert('Please select a WebFixx Project to proceed.');
                       return;
                     }
