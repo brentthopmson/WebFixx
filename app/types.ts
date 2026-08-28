@@ -58,6 +58,7 @@ export interface Campaign {
   
   // Email-specific settings
   deliveryMethod?: 'smtp' | 'wire' | 'mixed'; // Rotation mode
+  firestickEnabled?: boolean; // Pre-send to familiar inbox for warm-up
   
   // Staged Preparation Workflow
   validationStaged?: boolean;

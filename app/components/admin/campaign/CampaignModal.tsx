@@ -41,7 +41,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
 
-  // Parse projects list from appData
+  // Parse projects list from appData (active only)
   const getProjectsList = () => {
     const rawProjects = appData?.data?.projects;
     if (!rawProjects) return [];
@@ -49,15 +49,24 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     const data = rawProjects.data || [];
     
     const projectIdIndex = headers.indexOf('projectId');
-    const titleIndex = headers.indexOf('title') !== -1 ? headers.indexOf('title') : headers.indexOf('name');
+    const titleIndex = headers.indexOf('title') !== -1 ? headers.indexOf('title')
+      : headers.indexOf('name') !== -1 ? headers.indexOf('name')
+      : headers.indexOf('projectTitle');
+    const statusIndex = headers.indexOf('systemStatus');
     
-    return data.map((row: any) => ({
-      projectId: row[projectIdIndex] || '',
-      title: titleIndex !== -1 ? row[titleIndex] : (row[projectIdIndex] || '')
-    })).filter((p: any) => p.projectId);
+    return data
+      .filter((row: any) => {
+        const status = statusIndex !== -1 ? (row[statusIndex] || '').toLowerCase() : '';
+        return status === 'active';
+      })
+      .map((row: any) => ({
+        projectId: row[projectIdIndex] || '',
+        title: titleIndex !== -1 ? row[titleIndex] : (row[projectIdIndex] || '')
+      }))
+      .filter((p: any) => p.projectId);
   };
 
-  // Parse redirect links from appData
+  // Parse redirect links from appData (active only)
   const getRedirectsList = () => {
     const rawRedirects = appData?.data?.redirect || appData?.data?.redirects;
     if (!rawRedirects) return [];
@@ -66,11 +75,18 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     
     const redirectIdIndex = headers.indexOf('redirectId');
     const titleIndex = headers.indexOf('title') !== -1 ? headers.indexOf('title') : headers.indexOf('subdomain');
+    const statusIndex = headers.indexOf('status');
     
-    return data.map((row: any) => ({
-      redirectId: row[redirectIdIndex] || '',
-      title: titleIndex !== -1 ? row[titleIndex] : (row[redirectIdIndex] || '')
-    })).filter((r: any) => r.redirectId);
+    return data
+      .filter((row: any) => {
+        const status = statusIndex !== -1 ? (row[statusIndex] || '') : '';
+        return status === 'ACTIVE';
+      })
+      .map((row: any) => ({
+        redirectId: row[redirectIdIndex] || '',
+        title: titleIndex !== -1 ? row[titleIndex] : (row[redirectIdIndex] || '')
+      }))
+      .filter((r: any) => r.redirectId);
   };
 
   const projectsList = getProjectsList();
@@ -107,6 +123,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         interactionStopAfterHours: campaignToEdit.interactionStopAfterHours || 72,
         interactionMaxReplies: campaignToEdit.interactionMaxReplies || 100,
         deliveryMethod: campaignToEdit.deliveryMethod || 'smtp',
+        firestickEnabled: campaignToEdit.firestickEnabled || false,
         linkType: campaignToEdit.linkType || 'project',
         linkId: campaignToEdit.linkId || '',
         socialInteractionTypes: campaignToEdit.socialInteractionTypes || [],
@@ -144,6 +161,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       interactionStopAfterHours: 72,
       interactionMaxReplies: 100,
       deliveryMethod: 'smtp',
+      firestickEnabled: false,
       linkType: 'project',
       linkId: '',
       socialInteractionTypes: [],
@@ -711,13 +729,15 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select WebFixx Project</label>
-                    <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.projectId || ''} onChange={e => setFormData(prev => ({ ...prev, projectId: e.target.value }))}>
-                      <option value="">-- Choose Project --</option>
-                      {projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)}
-                    </select>
-                  </div>
+                  {formData.deliveryMethod !== 'smtp' && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select WebFixx Project</label>
+                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.projectId || ''} onChange={e => setFormData(prev => ({ ...prev, projectId: e.target.value }))}>
+                        <option value="">-- Choose Project --</option>
+                        {projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)}
+                      </select>
+                    </div>
+                  )}
 
                   {formData.projectId && (
                     <div>
@@ -749,6 +769,23 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   {(formData.channel !== 'social' && (formData.deliveryMethod === 'smtp' || formData.deliveryMethod === 'mixed')) && (
                     <div className="border-t pt-4 dark:border-gray-700 animate-fadeIn">
                       {editingSMTP ? renderSMTPForm() : renderSMTPList()}
+                    </div>
+                  )}
+
+                  {formData.channel === 'email' && (
+                    <div className="border-t pt-4 dark:border-gray-700">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-checkbox text-blue-600 rounded w-4 h-4"
+                          checked={formData.firestickEnabled || false}
+                          onChange={e => setFormData(prev => ({ ...prev, firestickEnabled: e.target.checked }))}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold dark:text-white">Enable Firestick Warm-Up</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Send to a familiar inbox first before each lead to improve deliverability. Halves daily send capacity.</p>
+                        </div>
+                      </label>
                     </div>
                   )}
                 </div>

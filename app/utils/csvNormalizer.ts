@@ -255,15 +255,15 @@ export function generateSampleCSV(): string {
   const columns = [
     'FIRSTNAME', 'LASTNAME', 'EMAIL', 'ADDRESS', 'CITY', 'STATE', 'COUNTRY', 'ZIPCODE', 'PHONE', 'SEX',
     'BUSINESSNAME', 'BUSINESSADDRESS', 'BUSINESSCITY', 'BUSINESSSTATE', 'BUSINESSCOUNTRY', 'BUSINESSZIPCODE', 'BUSINESSPHONE', 'BUSINESSEMAIL',
-    'SOCIALPLATFORM', 'SOCIALUSERNAME', 'SOCIALPHONE', 'CONTEXT'
+    'SOCIALPLATFORM', 'SOCIALUSERNAME', 'SOCIALPHONE', 'CONTEXT', 'URL'
   ];
 
   const sampleRows = [
-    'Robert,Anderson,robert.anderson@email.com,4521 Westbrook Ave,Chicago,IL,USA,60601,+13125551234,M,Pinnacle Solutions,890 Commerce Blvd,Chicago,IL,USA,60602,+13125559876,robert@pinnacle.com,LinkedIn,robert-anderson,,Interested in enterprise plan',
-    'Maria,Garcia,maria.garcia@email.com,7823 Elm Street,Los Angeles,CA,USA,90001,+12135559876,F,Garcia Associates,456 Sunset Blvd,Los Angeles,CA,USA,90002,+12135551234,maria@garciaassoc.com,Twitter,@maria_garcia,,Requested product demo',
-    'James,Williams,james.williams@email.com,234 Pine Ridge Rd,Houston,TX,USA,77001,+17135552345,M,Williams Tech,1200 Main St,Houston,TX,USA,77002,+17135556789,james@williams.tech,Facebook,james.williams,,Follow up Q2 proposal',
-    'Patricia,Brown,patricia.brown@email.com,567 Maple Drive,Phoenix,AZ,USA,85001,+14805553456,F,Brown Consulting,8900 Camelback Rd,Phoenix,AZ,USA,85002,+14805557890,patricia@brownconsulting.com,Instagram,@patricia_brown,,Partnership inquiry',
-    'Michael,Davis,michael.davis@email.com,890 Cedar Lane,Dallas,TX,USA,75201,+12145564567,M,Davis Enterprises,3200 Ross Ave,Dallas,TX,USA,75202,+12145568901,michael@davisco.com,LinkedIn,michael-davis,,Contract renewal'
+    'Robert,Anderson,robert.anderson@email.com,4521 Westbrook Ave,Chicago,IL,USA,60601,+13125551234,M,Pinnacle Solutions,890 Commerce Blvd,Chicago,IL,USA,60602,+13125559876,robert@pinnacle.com,LinkedIn,robert-anderson,,Interested in enterprise plan,https://linkedin.com/in/robert-anderson',
+    'Maria,Garcia,maria.garcia@email.com,7823 Elm Street,Los Angeles,CA,USA,90001,+12135559876,F,Garcia Associates,456 Sunset Blvd,Los Angeles,CA,USA,90002,+12135551234,maria@garciaassoc.com,Twitter,@maria_garcia,,Requested product demo,https://twitter.com/maria_garcia',
+    'James,Williams,james.williams@email.com,234 Pine Ridge Rd,Houston,TX,USA,77001,+17135552345,M,Williams Tech,1200 Main St,Houston,TX,USA,77002,+17135556789,james@williams.tech,Facebook,james.williams,,Follow up Q2 proposal,https://facebook.com/james.williams',
+    'Patricia,Brown,patricia.brown@email.com,567 Maple Drive,Phoenix,AZ,USA,85001,+14805553456,F,Brown Consulting,8900 Camelback Rd,Phoenix,AZ,USA,85002,+14805557890,patricia@brownconsulting.com,Instagram,@patricia_brown,,Partnership inquiry,https://instagram.com/patricia_brown',
+    'Michael,Davis,michael.davis@email.com,890 Cedar Lane,Dallas,TX,USA,75201,+12145564567,M,Davis Enterprises,3200 Ross Ave,Dallas,TX,USA,75202,+12145568901,michael@davisco.com,LinkedIn,michael-davis,,Contract renewal,https://linkedin.com/in/michael-davis'
   ];
 
   return [columns.join(','), ...sampleRows].join('\n');
