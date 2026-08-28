@@ -303,6 +303,7 @@ export default function Campaign() {
       return;
     }
     setIsProcessing(true);
+    const campaignId = editingCampaign?.id || newCampaign.id || '';
     try {
       // Validate campaign data before sending to backend
       const validationError = validateCampaignCreation(newCampaign);
@@ -320,7 +321,6 @@ export default function Campaign() {
         return;
       }
 
-      const campaignId = editingCampaign?.id || newCampaign.id || '';
       const isUpdateExisting = campaignId.length > 0;
       const strategyContext = buildStrategyContext(newCampaign);
       console.log(`[Campaign] Sending to backend — ${isUpdateExisting ? 'UPDATE' : 'CREATE'}`, {
@@ -382,6 +382,9 @@ export default function Campaign() {
       setIsProcessing(false);
       setShowCampaignModal(false);
       setEditingCampaign(null);
+      if (isUpdate && campaignId) {
+        router.push(`/campaign/${campaignId}`);
+      }
     }
   };
 
