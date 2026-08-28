@@ -27,6 +27,7 @@ import {
 import { useAppState } from '../../context/AppContext';
 import { securedApi } from '../../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage } from '../../../utils/featureFlags';
+import { toast } from 'sonner';
 import type { Campaign } from '../../types';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { CampaignProgressView } from '../../components/admin/campaign/CampaignProgressView';
@@ -238,6 +239,29 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const handleExecutePipeline = async () => {
+    if (!isFeatureEnabled(appData, 'allowShooting')) {
+      alert(featureDisabledMessage('allowShooting', 'campaign execution'));
+      return;
+    }
+    try {
+      const res = await fetch('/campaign/pipeline-orchestrator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Pipeline Started', { description: 'Campaign execution has begun.' });
+        setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
+      } else {
+        toast.error('Failed to start pipeline', { description: data.message });
+      }
+    } catch {
+      toast.error('Failed to start pipeline');
+    }
+  };
+
   useEffect(() => {
     const camp = findCampaign();
     if (camp) {
@@ -336,6 +360,16 @@ export default function CampaignDetailPage() {
             >
               <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
               Edit Settings
+            </button>
+          )}
+          {/* Draft + setup complete: Execute Pipeline */}
+          {campaign.status === 'draft' && campaign.isSetupComplete && (
+            <button
+              onClick={handleExecutePipeline}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+            >
+              <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+              Execute Pipeline
             </button>
           )}
           {/* Running or Limit Reached: Pause */}
