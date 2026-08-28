@@ -237,46 +237,6 @@ export default function CampaignDetailPage() {
     }
   };
 
-  const [isStageProcessing, setIsStageProcessing] = useState(false);
-
-  const handleToggleStage = async (field: 'validationStaged' | 'enrichmentStaged' | 'aiPersonalizationStaged' | 'executeStaged' | 'interactionStaged', value: boolean) => {
-    setCampaign(prev => prev ? { ...prev, [field]: value } : prev);
-    try {
-      await securedApi.callBackendFunction({
-        functionName: 'updateCampaign',
-        campaignId,
-        settings: JSON.stringify({ [field]: value }),
-        status: campaign?.status || 'draft'
-      });
-    } catch {
-      setCampaign(prev => prev ? { ...prev, [field]: !value } : prev);
-    }
-  };
-
-  const handleExecutePipeline = async () => {
-    if (!isFeatureEnabled(appData, 'allowShooting')) {
-      alert(featureDisabledMessage('allowShooting', 'campaign execution'));
-      return;
-    }
-    setIsStageProcessing(true);
-    try {
-      const res = await fetch('/campaign/pipeline-orchestrator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
-        router.refresh();
-      }
-    } catch {
-      // silent
-    } finally {
-      setIsStageProcessing(false);
-    }
-  };
-
   useEffect(() => {
     const camp = findCampaign();
     if (camp) {
@@ -367,17 +327,6 @@ export default function CampaignDetailPage() {
               Continue Setup
             </button>
           )}
-          {/* Draft + setup complete: Execute Pipeline */}
-          {campaign.status === 'draft' && campaign.isSetupComplete && (
-            <button
-              onClick={handleExecutePipeline}
-              disabled={!isFeatureEnabled(appData, 'allowShooting')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
-              Execute Pipeline
-            </button>
-          )}
           {/* Draft + setup complete: Edit Settings */}
           {campaign.status === 'draft' && campaign.isSetupComplete && (
             <button
@@ -450,16 +399,6 @@ export default function CampaignDetailPage() {
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pipeline Stages</h3>
-          {((campaign.status === 'draft' && !campaign.isSetupComplete) || campaign.status === 'paused') && (
-            <button
-              onClick={handleExecutePipeline}
-              disabled={isStageProcessing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            >
-              <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
-              Execute Pipeline
-            </button>
-          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
@@ -477,21 +416,11 @@ export default function CampaignDetailPage() {
               : item.status === 'processing' ? 'text-blue-500'
               : item.status === 'failed' ? 'text-red-500'
               : 'text-gray-400';
-            const isEditable = campaign.status === 'draft' && !campaign.isSetupComplete;
             return (
               <div key={item.label} className={`p-3 rounded-lg border dark:border-gray-700 ${item.staged ? 'bg-gray-50 dark:bg-gray-900/40' : 'opacity-50'}`}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-1.5">
-                    {isEditable ? (
-                      <input
-                        type="checkbox"
-                        className="form-checkbox text-blue-600 rounded w-3.5 h-3.5"
-                        checked={item.staged || false}
-                        onChange={e => handleToggleStage(item.field, e.target.checked)}
-                      />
-                    ) : (
-                      <FontAwesomeIcon icon={item.icon} className="w-3.5 h-3.5 text-gray-400" />
-                    )}
+                    <FontAwesomeIcon icon={item.icon} className="w-3.5 h-3.5 text-gray-400" />
                     <p className="text-xs font-semibold dark:text-gray-300">{item.label}</p>
                   </div>
                   <FontAwesomeIcon icon={statusIcon} className={`w-3.5 h-3.5 ${statusColor} ${item.status === 'processing' ? 'animate-spin' : ''}`} />
