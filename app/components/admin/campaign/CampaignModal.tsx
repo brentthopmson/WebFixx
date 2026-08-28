@@ -1194,7 +1194,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert('Please input an email subject line to proceed.');
                       return;
                     }
-                    if (!formData.accounts || formData.accounts.length === 0) {
+                    if ((formData.channel === 'social' || formData.deliveryMethod !== 'smtp') && (!formData.accounts || formData.accounts.length === 0)) {
                       alert('Please select at least one active profile/account to proceed.');
                       return;
                     }
