@@ -26,6 +26,7 @@ import { validateCampaignCreation, getValidationErrorMessage } from '../../../ut
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
 import { getUserLimits } from '../../../../utils/helpers';
 import { isFeatureEnabled, featureDisabledMessage } from '../../../../utils/featureFlags';
+import ConfirmationModal from '../../../components/ConfirmationModal';
 
 interface CampaignModalProps {
   appData: any;
@@ -40,6 +41,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const campaignFileSize = userLimits?.campaignFileSize;
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
+  const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
 
   // Parse projects list from appData (active only)
   const getProjectsList = () => {
@@ -1351,26 +1353,12 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 </button>
                 {isEditing && (campaignToEdit?.status === 'draft' || formData.status === 'draft') && (campaignToEdit?.isSetupComplete || formData.isSetupComplete) && (
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       if (!isFeatureEnabled(appData, 'allowShooting')) {
                         alert(featureDisabledMessage('allowShooting', 'campaign execution'));
                         return;
                       }
-                      try {
-                        const res = await fetch('/campaign/pipeline-orchestrator', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ campaignId: campaignToEdit.id })
-                        });
-                        const data = await res.json();
-                        if (data.success) {
-                          onSave({ ...formData, status: 'running', isSetupComplete: true });
-                        } else {
-                          alert(data.message || 'Failed to start pipeline');
-                        }
-                      } catch {
-                        alert('Failed to start pipeline');
-                      }
+                      setShowExecuteConfirm(true);
                     }}
                     className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
                     disabled={loading}
@@ -1378,6 +1366,30 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     Execute Pipeline
                   </button>
                 )}
+                <ConfirmationModal
+                  isOpen={showExecuteConfirm}
+                  onClose={() => setShowExecuteConfirm(false)}
+                  onConfirm={async () => {
+                    setShowExecuteConfirm(false);
+                    try {
+                      const data: any = await securedApi.callBackendFunction({
+                        functionName: 'runCampaignPipeline',
+                        campaignId: campaignToEdit?.id
+                      });
+                      if (data.success) {
+                        onSave({ ...formData, status: 'running', isSetupComplete: true });
+                      } else {
+                        alert(data.message || data.error || 'Failed to start pipeline');
+                      }
+                    } catch (err: any) {
+                      alert(err?.message || 'Failed to start pipeline');
+                    }
+                  }}
+                  title="Start Pipeline?"
+                  message="This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?"
+                  confirmText={loading ? 'Starting...' : 'Start Pipeline'}
+                  cancelText="Cancel"
+                />
               </div>
             )}
           </div>

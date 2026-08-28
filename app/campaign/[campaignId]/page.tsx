@@ -31,6 +31,7 @@ import { toast } from 'sonner';
 import type { Campaign } from '../../types';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { CampaignProgressView } from '../../components/admin/campaign/CampaignProgressView';
+import ConfirmationModal from '../../components/ConfirmationModal';
 
 interface CSVRow {
   [key: string]: string;
@@ -43,6 +44,7 @@ export default function CampaignDetailPage() {
   const { appData } = useAppState();
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,20 +250,20 @@ export default function CampaignDetailPage() {
       return;
     }
     try {
-      const res = await fetch('/campaign/pipeline-orchestrator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId })
+      const data: any = await securedApi.callBackendFunction({
+        functionName: 'runCampaignPipeline',
+        campaignId
       });
-      const data = await res.json();
       if (data.success) {
-        toast.success('Pipeline Started', { description: 'Campaign execution has begun.' });
+        toast.success('Pipeline Started', { description: data.message || 'Campaign execution has begun.' });
         setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
       } else {
-        toast.error('Failed to start pipeline', { description: data.message });
+        toast.error(data.message || data.error || 'Failed to start pipeline', {
+          description: data.error || data.message
+        });
       }
-    } catch {
-      toast.error('Failed to start pipeline');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to start pipeline');
     }
   };
 
@@ -368,7 +370,7 @@ export default function CampaignDetailPage() {
           {/* Draft + setup complete: Execute Pipeline */}
           {campaign.status === 'draft' && campaign.isSetupComplete && (
             <button
-              onClick={handleExecutePipeline}
+              onClick={() => setShowExecuteConfirm(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
             >
               <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
@@ -573,6 +575,16 @@ export default function CampaignDetailPage() {
           </>
         )}
       </div>
+
+      <ConfirmationModal
+        isOpen={showExecuteConfirm}
+        onClose={() => setShowExecuteConfirm(false)}
+        onConfirm={handleExecutePipeline}
+        title="Start Pipeline?"
+        message="This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?"
+        confirmText="Start Pipeline"
+        cancelText="Cancel"
+      />
     </div>
   );
 }
