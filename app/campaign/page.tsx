@@ -193,6 +193,7 @@ export default function Campaign() {
         interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
         interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
         interactionAccounts: settingsObj.interactionAccounts || [],
+        firestickEnabled: settingsObj.firestickEnabled || false,
         deliveryMethod: settingsObj.deliveryMethod || 'smtp',
         
         linkType: settingsObj.linkType || 'project',
@@ -201,7 +202,9 @@ export default function Campaign() {
         socialInteractionTypes: settingsObj.socialInteractionTypes || [],
         socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
         socialKeywords: settingsObj.socialKeywords || [],
-        isSetupComplete: settingsObj.isSetupComplete || false,
+        isSetupComplete: settingsObj.isSetupComplete ||
+          !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
+             settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
         
         context: contextObj,
         status: resolvedStatus,
@@ -282,13 +285,15 @@ export default function Campaign() {
     interactionStopAfterHours: campaign.interactionStopAfterHours || 72,
     interactionMaxReplies: campaign.interactionMaxReplies || 100,
     interactionAccounts: campaign.interactionAccounts || [],
+    firestickEnabled: campaign.firestickEnabled || false,
     deliveryMethod: campaign.deliveryMethod || 'smtp',
     linkType: campaign.linkType || 'project',
     linkId: campaign.linkId || '',
     socialInteractionTypes: campaign.socialInteractionTypes || [],
     socialStrategyPrompt: campaign.socialStrategyPrompt || '',
     socialKeywords: campaign.socialKeywords || [],
-    shouldSendMessage: campaign.shouldSendMessage || false
+    shouldSendMessage: campaign.shouldSendMessage || false,
+    isSetupComplete: campaign.isSetupComplete || false
   });
 
   const handleSaveCampaign = async (newCampaign: Partial<Campaign>) => {

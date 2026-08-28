@@ -111,6 +111,7 @@ export default function CampaignDetailPage() {
       interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
       interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
       interactionAccounts: settingsObj.interactionAccounts || [],
+      firestickEnabled: settingsObj.firestickEnabled || false,
       linkType: settingsObj.linkType || 'project',
       linkId: settingsObj.linkId || '',
       socialInteractionTypes: settingsObj.socialInteractionTypes || [],
@@ -120,7 +121,9 @@ export default function CampaignDetailPage() {
       template: settingsObj.template || '',
       templateId: settingsObj.templateId || '',
       templateContent: settingsObj.templateContent || '',
-      isSetupComplete: settingsObj.isSetupComplete || false,
+      isSetupComplete: settingsObj.isSetupComplete ||
+        !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
+           settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
       created_at: row[createdOnIdx] || '',
       status: row[statusIdx] || 'draft',
       analytics: {
