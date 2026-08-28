@@ -191,6 +191,7 @@ export default function Campaign() {
         interactionStatus: settingsObj.interactionStatus || 'idle',
         interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
         interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
+        interactionAccounts: settingsObj.interactionAccounts || [],
         deliveryMethod: settingsObj.deliveryMethod || 'smtp',
         
         linkType: settingsObj.linkType || 'project',
@@ -279,6 +280,7 @@ export default function Campaign() {
     interactionStatus: campaign.interactionStatus || 'idle',
     interactionStopAfterHours: campaign.interactionStopAfterHours || 72,
     interactionMaxReplies: campaign.interactionMaxReplies || 100,
+    interactionAccounts: campaign.interactionAccounts || [],
     deliveryMethod: campaign.deliveryMethod || 'smtp',
     linkType: campaign.linkType || 'project',
     linkId: campaign.linkId || '',

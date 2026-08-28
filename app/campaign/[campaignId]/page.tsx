@@ -109,6 +109,7 @@ export default function CampaignDetailPage() {
       interactionStatus: settingsObj.interactionStatus || 'idle',
       interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
       interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
+      interactionAccounts: settingsObj.interactionAccounts || [],
       linkType: settingsObj.linkType || 'project',
       linkId: settingsObj.linkId || '',
       socialInteractionTypes: settingsObj.socialInteractionTypes || [],

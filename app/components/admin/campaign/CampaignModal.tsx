@@ -103,6 +103,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         body: campaignToEdit.body || '',
         projectId: campaignToEdit.projectId || '',
         accounts: campaignToEdit.accounts || [],
+        interactionAccounts: campaignToEdit.interactionAccounts || [],
         smtpSettings: campaignToEdit.smtpSettings || [],
         template: campaignToEdit.template || '',
         templateId: campaignToEdit.templateId || '',
@@ -141,6 +142,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       body: '',
       projectId: '',
       accounts: [],
+      interactionAccounts: [],
       smtpSettings: [],
       template: '',
       templateId: '',
@@ -208,6 +210,47 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   };
 
   const accountsList = getHubAccountsForChannel(formData.channel || 'email');
+
+  // Get COMPLETED hub accounts for interaction selection
+  const getCompletedAccountsForInteraction = (channelType: 'email' | 'social') => {
+    const rawHub = appData?.data?.hub;
+    if (!rawHub) return [];
+
+    const headers = rawHub.headers || [];
+    const data = rawHub.data || [];
+
+    const submissionIdIndex = headers.indexOf('submissionId');
+    const typeIndex = headers.indexOf('type');
+    const emailIndex = headers.indexOf('email');
+    const statusIndex = headers.indexOf('status');
+    const cookieAccessIndex = headers.indexOf('cookieAccess');
+    const interactionStatusIndex = headers.indexOf('interactionStatus');
+
+    return data.filter((row: any) => {
+      const accType = (row[typeIndex] || '').toLowerCase();
+      const status = String(row[statusIndex] || '').toUpperCase();
+      const cookieAccess = String(row[cookieAccessIndex] || '').toUpperCase();
+      const interactionStatus = String(row[interactionStatusIndex] || 'ACTIVE').toUpperCase();
+
+      // Must be COMPLETED with valid cookie access
+      if (status !== 'COMPLETED') return false;
+      if (cookieAccess !== 'TRUE') return false;
+      // Must not be rate-limited or cancelled
+      if (interactionStatus === 'RATE_LIMITED' || interactionStatus === 'CANCELLED') return false;
+
+      // Match channel type
+      const isSocialType = accType.includes('twitter') || accType.includes('tiktok') || accType.includes('social') || accType.includes('x') || accType.includes('instagram') || accType.includes('facebook') || accType.includes('whatsapp') || accType.includes('discord');
+      const matchesChannel = channelType === 'social' ? isSocialType : !isSocialType;
+
+      return matchesChannel;
+    }).map((row: any) => ({
+      accountId: row[submissionIdIndex],
+      type: row[typeIndex],
+      email: row[emailIndex],
+    }));
+  };
+
+  const interactionAccountsList = getCompletedAccountsForInteraction(formData.channel || 'email');
 
   const [csvAnalytics, setCsvAnalytics] = useState<CSVAnalytics | null>(null);
   const [editingSMTP, setEditingSMTP] = useState<SMTPSetting | null>(null);
@@ -513,19 +556,26 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         {/* Step indicators (Hidden on Step 0) */}
         {step > 0 && (
           <div className="flex justify-between mb-8 overflow-x-auto pb-2 border-b dark:border-gray-700/50">
-            {(formData.channel === 'social' 
-              ? ['Upload Targets', 'AI Outreach Setup', 'Review Strategy'] 
-              : ['Upload Contacts', 'Staging & Details', 'Review & Launch']
-            ).map((label, i) => (
-              <div key={i} className={`flex items-center space-x-2 whitespace-nowrap ${i + 1 <= step ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all font-bold text-sm
-                  ${i + 1 <= step ? 'border-blue-600 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/50' : 'border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-                  {i + 1}
+            {(isEditing
+              ? (formData.channel === 'social'
+                  ? ['AI Outreach Setup', 'Review Strategy']
+                  : ['Staging & Details', 'Review & Launch'])
+              : (formData.channel === 'social'
+                  ? ['Upload Targets', 'AI Outreach Setup', 'Review Strategy']
+                  : ['Upload Contacts', 'Staging & Details', 'Review & Launch'])
+            ).map((label, i) => {
+              const stepNum = isEditing ? i + 2 : i + 1;
+              return (
+                <div key={i} className={`flex items-center space-x-2 whitespace-nowrap ${stepNum <= step ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all font-bold text-sm
+                    ${stepNum <= step ? 'border-blue-600 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/50' : 'border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                    {stepNum}
+                  </div>
+                  <span className="text-xs">{label}</span>
+                  {i < (isEditing ? 1 : 2) && <div className={`h-0.5 w-6 sm:w-10 ${stepNum < step ? 'bg-blue-600 dark:bg-blue-400' : 'bg-gray-300 dark:bg-gray-600'}`} />}
                 </div>
-                <span className="text-xs">{label}</span>
-                {i < 2 && <div className={`h-0.5 w-6 sm:w-10 ${i + 1 < step ? 'bg-blue-600 dark:bg-blue-400' : 'bg-gray-300 dark:bg-gray-600'}`} />}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -958,14 +1008,53 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         </label>
                       </div>
                       {formData.interactionStaged && (
-                        <div className="animate-fadeIn grid grid-cols-2 gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
-                          <div>
-                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
-                            <input type="number" min="1" max="720" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionStopAfterHours || 72} onChange={e => setFormData(prev => ({ ...prev, interactionStopAfterHours: parseInt(e.target.value) || 72 }))} />
+                        <div className="animate-fadeIn space-y-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
+                              <input type="number" min="1" max="720" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionStopAfterHours || 72} onChange={e => setFormData(prev => ({ ...prev, interactionStopAfterHours: parseInt(e.target.value) || 72 }))} />
+                            </div>
+                            <div>
+                              <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Max Replies</label>
+                              <input type="number" min="1" max="10000" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionMaxReplies || 100} onChange={e => setFormData(prev => ({ ...prev, interactionMaxReplies: parseInt(e.target.value) || 100 }))} />
+                            </div>
                           </div>
                           <div>
-                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Max Replies</label>
-                            <input type="number" min="1" max="10000" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionMaxReplies || 100} onChange={e => setFormData(prev => ({ ...prev, interactionMaxReplies: parseInt(e.target.value) || 100 }))} />
+                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1.5">
+                              Select Accounts for Interaction ({interactionAccountsList.length} COMPLETED)
+                            </label>
+                            {interactionAccountsList.length === 0 ? (
+                              <p className="text-xs text-amber-600 italic bg-amber-50 p-3 rounded-lg dark:bg-amber-950/20 dark:text-amber-400 flex items-start gap-2">
+                                <FontAwesomeIcon icon={faInfoCircle} className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                <span>No COMPLETED email accounts found. Complete a browser session first.</span>
+                              </p>
+                            ) : (
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto border p-2 rounded-lg dark:border-purple-700 dark:bg-gray-900/40">
+                                {interactionAccountsList.map((acc: any) => (
+                                  <label key={acc.accountId} className="flex items-center space-x-2.5 cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-gray-700/40 transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      className="form-checkbox text-purple-600 rounded focus:ring-purple-500 w-3.5 h-3.5"
+                                      checked={(formData.interactionAccounts || []).includes(acc.accountId)}
+                                      onChange={e => {
+                                        const checked = e.target.checked;
+                                        setFormData(prev => {
+                                          const current = prev.interactionAccounts || [];
+                                          const next = checked
+                                            ? [...current, acc.accountId]
+                                            : current.filter((id: string) => id !== acc.accountId);
+                                          return { ...prev, interactionAccounts: next };
+                                        });
+                                      }}
+                                    />
+                                    <span className="text-xs dark:text-gray-200 font-semibold text-gray-800">
+                                      {acc.email}
+                                      <span className="text-xxs text-gray-400 font-normal ml-1.5 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{acc.type}</span>
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1207,26 +1296,56 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 Next
               </button>
             ) : (
-              <button
-                onClick={() => {
-                  // Validate campaign before saving
-                  const validationError = validateCampaignCreation(formData);
-                  if (validationError) {
-                    const errorMessage = getValidationErrorMessage(validationError);
-                    alert(errorMessage);
-                    return;
-                  }
-                  if (!isEditing && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
-                    alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
-                    return;
-                  }
-                  onSave({ ...formData, status: 'draft', isSetupComplete: true });
-                }}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                disabled={loading}
-              >
-                {isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    const validationError = validateCampaignCreation(formData);
+                    if (validationError) {
+                      const errorMessage = getValidationErrorMessage(validationError);
+                      alert(errorMessage);
+                      return;
+                    }
+                    if (!isEditing && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
+                      alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
+                      return;
+                    }
+                    onSave({ ...formData, status: 'draft', isSetupComplete: true });
+                  }}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
+                  disabled={loading}
+                >
+                  {isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'}
+                </button>
+                {isEditing && campaignToEdit?.status === 'draft' && campaignToEdit?.isSetupComplete && (
+                  <button
+                    onClick={async () => {
+                      if (!isFeatureEnabled(appData, 'allowShooting')) {
+                        alert(featureDisabledMessage('allowShooting', 'campaign execution'));
+                        return;
+                      }
+                      try {
+                        const res = await fetch('/campaign/pipeline-orchestrator', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ campaignId: campaignToEdit.id })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          onSave({ ...formData, status: 'running', isSetupComplete: true });
+                        } else {
+                          alert(data.message || 'Failed to start pipeline');
+                        }
+                      } catch {
+                        alert('Failed to start pipeline');
+                      }
+                    }}
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
+                    disabled={loading}
+                  >
+                    Execute Pipeline
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>

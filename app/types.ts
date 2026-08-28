@@ -49,6 +49,7 @@ export interface Campaign {
   body?: string; // Added for editor content
   projectId?: string; // Added for project association
   accounts?: string[]; // Selected active Hub Account IDs (WIRE or SOCIAL)
+  interactionAccounts?: string[]; // Hub Account IDs selected for interaction step
   smtpSettings: SMTPSetting[];
   fileUrl: string; // Made required
   summary?: string;
