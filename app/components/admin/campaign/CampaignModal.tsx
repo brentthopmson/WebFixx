@@ -1160,9 +1160,34 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 <div className="col-span-1 sm:col-span-2">
                   <p className="text-gray-400 font-medium">Outreach injection Target Link</p>
                   <p className="font-bold text-sm text-blue-600 dark:text-blue-400 mt-0.5 font-mono">
-                    {formData.linkId ? `Linked via ${formData.linkType}: ${formData.linkId}` : 'No redirect tracking injected'}
+                    {formData.linkId ? `Linked via ${formData.linkType}: ${
+                      formData.linkType === 'project'
+                        ? projectsList.find((p: any) => p.projectId === formData.linkId)?.title || formData.linkId
+                        : redirectsList.find((r: any) => r.redirectId === formData.linkId)?.title || formData.linkId
+                    }` : 'No redirect tracking injected'}
                   </p>
                 </div>
+
+                {formData.interactionStaged && (
+                  <div className="col-span-1 sm:col-span-2">
+                    <p className="text-gray-400 font-medium">Selected Interaction Accounts</p>
+                    {(formData.interactionAccounts || []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {(formData.interactionAccounts || []).map((accId: string) => {
+                          const acc = interactionAccountsList.find((a: any) => a.accountId === accId);
+                          return (
+                            <span key={accId} className="inline-flex items-center gap-1.5 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-1 rounded-full">
+                              <span className="font-mono">{acc?.email || accId}</span>
+                              <span className="text-[10px] bg-purple-200 dark:bg-purple-800/50 px-1 rounded">{acc?.type || 'unknown'}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">No accounts selected</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
