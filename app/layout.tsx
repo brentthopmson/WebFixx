@@ -6,6 +6,7 @@ import ManifestLoader from './components/ManifestLoader'
 import RegisterSW from './components/RegisterSW'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 import HideSplash from './components/HideSplash'
+import { Toaster } from 'sonner'
 
 // Offline fallback for next/font/google
 const inter = { className: 'font-sans' }
@@ -55,6 +56,7 @@ export default function Layout({
             <RootLayout inter={inter}>
               {children}
             </RootLayout>
+            <Toaster richColors position="top-right" />
           </AppProvider>
         </LoadingProvider>
         <ManifestLoader />

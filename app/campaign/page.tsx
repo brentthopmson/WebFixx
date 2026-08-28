@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { toast } from 'sonner';
 import { 
   faPlus,
   faSync,
@@ -349,15 +350,11 @@ export default function Campaign() {
       console.log('[Campaign] Backend response:', response);
 
       if (response.success) {
-        setResultModalProps({
-          type: 'success',
-          title: isUpdate ? 'Campaign Updated' : 'Campaign Created',
-          message: isUpdate
+        toast.success(isUpdate ? 'Campaign Updated' : 'Campaign Created', {
+          description: isUpdate
             ? 'Your campaign settings have been saved.'
             : 'Your campaign has been successfully created.',
-          details: response.data || {}
         });
-        setShowResultModal(true);
         await authApi.updateAppData(setAppData);
       } else {
         console.error('[Campaign] Backend returned error:', response.error);
