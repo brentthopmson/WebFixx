@@ -1268,11 +1268,19 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
           >
             Cancel
           </button>
-          <div className="space-x-2">
-            {step > 0 && (
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              step === 3 && (
+                <button
+                  onClick={() => setStep(2)}
+                  className="px-4 py-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors font-bold text-xs"
+                >
+                  Back
+                </button>
+              )
+            ) : step > 0 && (
               <button
                 onClick={() => {
-                  // Req 7: If draft created from CSV upload, skip back to upload view
                   if (step === 2 && formData.id && csvAnalytics) {
                     setStep(0);
                   } else {
@@ -1341,7 +1349,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 >
                   {isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'}
                 </button>
-                {isEditing && campaignToEdit?.status === 'draft' && campaignToEdit?.isSetupComplete && (
+                {isEditing && (campaignToEdit?.status === 'draft' || formData.status === 'draft') && (campaignToEdit?.isSetupComplete || formData.isSetupComplete) && (
                   <button
                     onClick={async () => {
                       if (!isFeatureEnabled(appData, 'allowShooting')) {
