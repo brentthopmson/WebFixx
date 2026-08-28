@@ -218,8 +218,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [expandedSection, setExpandedSection] = useState<string | null>('basic');
   const [templateSource, setTemplateSource] = useState<'existing' | 'custom'>(campaignToEdit?.templateId ? 'existing' : 'custom');
   const [templatePreview, setTemplatePreview] = useState<string>('');
+  const [previewMode, setPreviewMode] = useState<'html' | 'code'>('html');
 
-  // Parse templates list from appData
+  // Parse templates list from appData (EMAIL category only)
   const templatesList = useMemo(() => {
     const raw = appData?.data?.template;
     if (!raw) return [];
@@ -229,11 +230,17 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     const nameIdx = headers.indexOf('name');
     const codeIdx = headers.indexOf('code');
     const code2Idx = headers.indexOf('templateCode');
+    const categoryIdx = headers.indexOf('category');
+    const nicheIdx = headers.indexOf('niche');
+    const typeIdx = headers.indexOf('type');
     return data.map((row: any) => ({
       templateId: row[idIdx] || '',
       name: row[nameIdx] || '',
-      code: row[codeIdx] || row[code2Idx] || ''
-    })).filter((t: any) => t.templateId);
+      code: row[codeIdx] || row[code2Idx] || '',
+      category: row[categoryIdx] || '',
+      niche: row[nicheIdx] || '',
+      type: row[typeIdx] || '',
+    })).filter((t: any) => t.templateId && t.category.toUpperCase() === 'EMAIL');
   }, [appData]);
 
   // Validate placeholders in body against CSV headers
@@ -824,15 +831,28 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         <>
                           <div>
                             <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select Email Template</label>
-                            <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.templateId || ''} onChange={e => { const tpl = templatesList.find((t: any) => t.templateId === e.target.value); setFormData(prev => ({ ...prev, templateId: e.target.value, body: tpl?.code || prev.body, templateContent: tpl?.code || '' })); setTemplatePreview(tpl?.code || ''); }}>
+                            <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.templateId || ''} onChange={e => { const tpl = templatesList.find((t: any) => t.templateId === e.target.value); setFormData(prev => ({ ...prev, templateId: e.target.value, body: tpl?.code || prev.body, templateContent: tpl?.code || '' })); setTemplatePreview(tpl?.code || ''); setPreviewMode('html'); }}>
                               <option value="">-- Select Template --</option>
-                              {templatesList.map((t: any) => <option key={t.templateId} value={t.templateId}>{t.name}</option>)}
+                              {templatesList.map((t: any) => <option key={t.templateId} value={t.templateId}>{t.name} — {t.type || 'HTML'}</option>)}
                             </select>
                           </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Subject</label>
+                            <input type="text" placeholder="e.g. Quick question regarding operations" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.subject || ''} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} />
+                          </div>
                           {templatePreview && (
-                            <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border dark:border-gray-700 max-h-48 overflow-y-auto">
-                              <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider mb-1">Preview</p>
-                              <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">{templatePreview.substring(0, 500)}</pre>
+                            <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border dark:border-gray-700">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">Preview</p>
+                                <button type="button" onClick={() => setPreviewMode(prev => prev === 'html' ? 'code' : 'html')} className="text-xxs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold">
+                                  {previewMode === 'html' ? 'View Code' : 'View HTML'}
+                                </button>
+                              </div>
+                              {previewMode === 'html' ? (
+                                <iframe srcDoc={templatePreview} className="w-full h-64 border rounded-lg bg-white dark:bg-gray-900" sandbox="allow-same-origin" title="Template Preview" />
+                              ) : (
+                                <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto bg-white dark:bg-gray-900 p-2 rounded-lg border dark:border-gray-600">{templatePreview}</pre>
+                              )}
                             </div>
                           )}
                         </>
@@ -951,18 +971,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       )}
                       {formData.aiPersonalizationStaged && (
                         <div className="animate-fadeIn">
-                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Gemini 2.5 Flash Mail-Merge prompt</label>
+                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Mail-Merge prompt</label>
                           <textarea placeholder="Define personalized instructions using columns like {{first_name}} and {{company}} (e.g. Write a custom icebreaker about their company {{company}} in a friendly tone, vary subject lines)" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[80px]" value={formData.aiPersonalizationPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationPrompt: e.target.value }))} />
-                        </div>
-                      )}
-                      {templateSource === 'custom' && (
-                        <div>
-                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Template Layout</label>
-                          <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white" value={formData.template || ''} onChange={e => setFormData(prev => ({ ...prev, template: e.target.value }))}>
-                            <option value="">Plain Text Layout</option>
-                            <option value="premium_branding">Premium Corporate Layout (Glassmorphism Styled)</option>
-                            <option value="minimalist">Modern Minimalist Layout</option>
-                          </select>
                         </div>
                       )}
                     </>
