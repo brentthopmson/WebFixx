@@ -304,6 +304,7 @@ export default function Campaign() {
     }
     setIsProcessing(true);
     const campaignId = editingCampaign?.id || newCampaign.id || '';
+    let response: any = null;
     try {
       // Validate campaign data before sending to backend
       const validationError = validateCampaignCreation(newCampaign);
@@ -328,7 +329,6 @@ export default function Campaign() {
         strategyContextLength: strategyContext.length
       });
 
-      let response;
       if (isUpdate) {
         response = await securedApi.callBackendFunction({
           functionName: 'updateCampaign',
@@ -382,8 +382,9 @@ export default function Campaign() {
       setIsProcessing(false);
       setShowCampaignModal(false);
       setEditingCampaign(null);
-      if (isUpdate && campaignId) {
-        router.push(`/campaign/${campaignId}`);
+      const navigateId = isUpdate ? campaignId : response?.data?.campaignId || campaignId;
+      if (navigateId) {
+        router.push(`/campaign/${navigateId}`);
       }
     }
   };
