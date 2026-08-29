@@ -100,7 +100,7 @@ export default function Campaign() {
     };
 
     const parseErrors: string[] = [];
-    return processedData.map((row: any) => {
+    const result = processedData.map((row: any) => {
       let settingsObj: any = { accounts: [], subject: '', body: '', smtpSettings: [], fileUrl: '' };
       let contextObj = { strategy: '', identities: [] };
       let statsObj = { interactions: 0, conversions: 0, inbox: 0 };
@@ -218,6 +218,10 @@ export default function Campaign() {
         updated_at: row[columnIndices.updatedOn] || ''
       } as Campaign;
     });
+    if (parseErrors.length) {
+      console.warn('[Campaigns][DIAG] transformCampaignData parseErrors:', parseErrors);
+    }
+    return result;
   };
 
   useEffect(() => {
@@ -226,6 +230,11 @@ export default function Campaign() {
         setLoading(true);
         const rawData = appData?.data?.campaigns?.data || [];
         const rawHeaders = appData?.data?.campaigns?.headers || [];
+        // [DIAG] campaign list debugging
+        console.log('[Campaigns][DIAG] appData present:', !!appData, '| appData.data keys:', appData?.data ? Object.keys(appData.data) : 'NO appData.data');
+        console.log('[Campaigns][DIAG] raw campaigns field:', appData?.data?.campaigns);
+        console.log('[Campaigns][DIAG] rawData.length =', rawData.length, '| rawHeaders =', rawHeaders);
+        console.log('[Campaigns][DIAG] refreshAttemptedRef =', refreshAttemptedRef.current);
         if (rawData.length === 0 && appData?.data && !refreshAttemptedRef.current) {
           refreshAttemptedRef.current = true;
           try {
@@ -239,9 +248,10 @@ export default function Campaign() {
           refreshAttemptedRef.current = false;
         }
         const transformed = transformCampaignData(rawData, rawHeaders);
+        console.log('[Campaigns][DIAG] transformed count =', transformed.length, transformed.slice(0, 2));
         setCampaigns(transformed);
       } catch (error) {
-        console.error("Error transforming campaign data:", error);
+        console.error('[Campaigns][DIAG] Error transforming campaign data:', error);
         setCampaigns([]);
       } finally {
         setLoading(false);
@@ -552,6 +562,18 @@ export default function Campaign() {
           <span className="hidden sm:inline">New Campaign</span>
         </button>
       </div>
+
+      {/* [DIAG] Debug panel — visible only with ?debug=1 */}
+      {typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1' && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-400 rounded-lg text-xs font-mono whitespace-pre-wrap overflow-auto max-h-96">
+          <div className="font-bold mb-1">[Campaigns Debug] appData.data keys:</div>
+          {JSON.stringify(appData?.data ? Object.keys(appData.data) : 'NO appData.data')}
+          <div className="font-bold mt-2 mb-1">[Campaigns Debug] appData.data.campaigns (raw):</div>
+          {JSON.stringify(appData?.data?.campaigns, null, 2) ?? 'undefined'}
+          <div className="font-bold mt-2 mb-1">[Campaigns Debug] campaigns state length:</div>
+          {campaigns.length}
+        </div>
+      )}
 
       {/* Campaigns List */}
       <div className="space-y-4">
