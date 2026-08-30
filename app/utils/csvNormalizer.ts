@@ -14,12 +14,14 @@ export const STANDARD_88_COLUMNS = [
   'emailSubject', 'emailBody', 'socialMessage', 'replyTo',
   '', '', '',
   'validation', 'providerMXResult', 'enhancedSubject', 'enhancedBody', 'enhancedSocialMessage',
-  '', '',
+  'enrichmentStatus',
+  '',
   'sendDate', 'sendTime', 'sendStamp',
   '', '', '',
   'searchKeys', 'searchCount', 'searchStatus', 'searchStamp',
   '',
-  'profileToInteract', 'interactCount', 'interactStatus', 'interactStamp'
+  'profileToInteract', 'interactCount', 'interactStatus', 'interactStamp',
+  '', 'personalizationStatus', 'executionStatus'
 ];
 
 const FUZZY_MAP: Record<string, string[]> = {
