@@ -355,7 +355,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         fileContent: base64Content,
         fileSize: file.size,
         fileMimeType: file.type,
-        campaignFileSize
+        campaignFileSize,
+        userId: appData?.user?.userId || ''
       });
 
       console.log('[CampaignModal] Draft creation response:', response);

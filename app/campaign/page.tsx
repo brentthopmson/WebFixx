@@ -358,7 +358,8 @@ export default function Campaign() {
           projectId: newCampaign.projectId || '',
           accountIds: newCampaign.accounts || [],
           status: newCampaign.status || 'draft',
-          strategyContext
+          strategyContext,
+          userId: appData?.user?.userId || ''
         });
       }
 
