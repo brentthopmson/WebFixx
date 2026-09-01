@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faUpload, 
@@ -37,6 +38,7 @@ interface CampaignModalProps {
 
 export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: CampaignModalProps) {
   const isEditing = !!campaignToEdit;
+  const router = useRouter();
   const userLimits = getUserLimits(appData);
   const campaignFileSize = userLimits?.campaignFileSize;
   const [step, setStep] = useState(isEditing ? 2 : 0);
@@ -388,7 +390,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         fileUrl,
         name: prev.name || campaignName
       }));
-      setStep(2);
+      onClose();
+      if (draftId) {
+        router.push(`/campaign/${draftId}`);
+      }
     } catch (error) {
       console.error('Error uploading file:', error);
       setUploadError(
