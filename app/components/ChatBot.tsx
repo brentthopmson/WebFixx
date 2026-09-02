@@ -519,17 +519,41 @@ export default function ChatBot() {
         <div className="flex-1 overflow-y-auto">
           {/* Topic Select */}
           {chatState === "topic-select" && (
-            <div className="p-4 grid grid-cols-2 gap-3">
-              {TOPICS.map((topic) => (
-                <button
-                  key={topic.key}
-                  onClick={() => selectTopic(topic.key)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${topic.bgColor} dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600`}
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {TOPICS.map((topic) => (
+                  <button
+                    key={topic.key}
+                    onClick={() => selectTopic(topic.key)}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${topic.bgColor} dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600`}
+                  >
+                    <FontAwesomeIcon icon={topic.icon} className={`text-2xl ${topic.color}`} />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{topic.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Telegram links */}
+              <div className="border-t dark:border-gray-700 pt-4 space-y-2">
+                <a
+                  href={`https://t.me/${telegramUsername.replace("@", "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 px-4 rounded-lg transition-colors"
                 >
-                  <FontAwesomeIcon icon={topic.icon} className={`text-2xl ${topic.color}`} />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{topic.label}</span>
-                </button>
-              ))}
+                  <FontAwesomeIcon icon={faTelegram} />
+                  Contact {telegramUsername}
+                </a>
+                <a
+                  href={telegramLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                >
+                  <FontAwesomeIcon icon={faTelegram} />
+                  Join Group
+                </a>
+              </div>
             </div>
           )}
 
