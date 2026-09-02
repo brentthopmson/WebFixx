@@ -12,7 +12,8 @@ import {
   faEdit,
   faSync,
   faSpinner,
-  faCheckCircle
+  faCheckCircle,
+  faHeadset
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import type { AppState } from '../../utils/authTypes'; // Import AppState from authTypes
@@ -31,6 +32,7 @@ import { ApiKeyModalProps } from '../components/admin/settings/ApiKeyModal';
 import { DestroyAccountModalProps } from '../components/admin/settings/DestroyAccountModal';
 import UpgradePlanModal from '../components/admin/settings/UpgradePlanModal'; // Import the actual UpgradePlanModal
 import TwoFactorModal from '../components/admin/settings/TwoFactorModal'; // Import the actual TwoFactorModal
+import SupportHistory from '../components/admin/support/SupportHistory';
 
 
 export default function UserSettings() {
@@ -491,6 +493,9 @@ export default function UserSettings() {
             Destroy Account
           </button>
         </div>
+
+        {/* Support */}
+        <SupportHistory />
       </div>
 
       {/* Modals */}
