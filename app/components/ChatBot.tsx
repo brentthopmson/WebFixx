@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faTimes,
@@ -36,6 +36,18 @@ interface TopicConfig {
   color: string;
   bgColor: string;
   subCategories: { value: string; label: string }[];
+}
+
+interface UserContext {
+  username: string;
+  email: string;
+  plan: string;
+  planExpiry: string;
+  balance: string;
+  pendingBalance: string;
+  campaignCount: number;
+  activeCampaigns: number;
+  projectCount: number;
 }
 
 // ---- Topic Configs ----
@@ -125,65 +137,60 @@ const TOPICS: TopicConfig[] = [
   },
 ];
 
-// ---- Knowledge Base (System Prompt) ----
-const KNOWLEDGE_BASE = `## WebFixx System Reference — CONFIRMED FACTS ONLY
+// ---- Topic-Scoped Knowledge Base ----
+const KB_SECTIONS: Record<Topic, string> = {
+  campaigns: `### CAMPAIGNS
+Pipeline: VALIDATE → ENRICH → PERSONALIZE → EXECUTE → INTERACT
+Status: staged, running, processing, paused, completed, failed, "Limit Reached"
+Errors: "fetch failed"=browser error, 429=rate limited, stops after enrich=check personalize, no emails=check SMTP/limit
+Settings keys: channel, fileUrl, userId, accounts, wireAccount, platform, validationStatus, enrichmentStatus`,
 
-### CAMPAIGNS
-**Sheet:** campaigns
-**Columns:** campaignId, status, settings (JSON blob), fileUrl, updatedOn
-**Status values:** staged, running, processing, paused, completed, failed, "Limit Reached"
+  billing: `### WALLET & BILLING
+Fields: balance, pendingBalance, btcAddress, ethAddress, usdtAddress
+Deposit: send crypto to displayed address. Withdraw: enter amount + destination
+Transactions sheet tracks all deposit/withdrawal records`,
 
-**Pipeline stages (strict order):**
-1. VALIDATE → 2. ENRICH → 3. PERSONALIZE → 4. EXECUTE → 5. INTERACT
+  projects: `### PROJECTS
+Sheet columns: projectId, userId, projectTitle, templateType, telegramGroupId, response
+Template types: COOKIE. Response stored in sheet or Google Drive if >45KB`,
 
-**Stage details:**
-- VALIDATE: Downloads CSV, checks email format, DNS MX record lookup, optional browser verification. Results: valid_mx, no_mx, invalid_domain, invalid_format, empty, duplicate, verified_exists, not_exists
-- ENRICH: Scrapes URLs, Google search fallback, AI batch analysis. Adds context. Results: enriched
-- PERSONALIZE: AI generates subject lines and email bodies per row. Results: personalized
-- EXECUTE: Sends emails via SMTP or browser (wire). Checkpoint saves every N rows. Results: sent, failed
-- INTERACT: Monitors replies, classifies responses, generates auto-replies
+  account: `### USER ACCOUNT
+Sheet columns: userId, email, username, role, plan, planExpiry, balance, pendingBalance, twoFactorAuth, apiToken
+Roles: USER, ADMIN. Plans: Free, Basic, Pro, Enterprise`,
 
-**Settings JSON key fields:** channel, fileUrl, userId, accounts, wireAccount, platform, validationStatus, enrichmentStatus, personalizationStatus, executeStaged, interactionStaged
+  technical: `### TECHNICAL
+For bugs: ask for campaignId/projectId, gather error details, raise ticket
+System errors may relate to pipeline stages, SMTP, or browser automation`,
 
-**Common errors:**
-- "fetch failed" during validate = browser verification error
-- 429 during enrich = Google search rate limited
-- Pipeline stops after enrich = check if personalize is enabled
-- "Campaign paused" = user paused it
-- No emails sent = check executeStaged, SMTP settings, shootCampaignLimit
+  general: `### GENERAL
+WebFixx is an outreach platform with campaigns, projects, wallet, and user management
+Use tickets for issues requiring backend investigation`,
+};
 
-### PROJECTS
-**Sheet:** projects
-**Columns:** projectId, userId, projectTitle, templateType, telegramGroupId, response
-**Template types:** COOKIE
-**Response storage:** JSON in response column, or Google Drive file if >45KB
+const RESPONSE_RULES = `### RULES
+- Only use confirmed facts. If unsure: "I'll check with our team" + offer ticket
+- Never guess IDs/statuses/errors. Ask for campaignId/projectId for bugs
+- If user says "raise ticket" or "I need help", respond with ESCALATE_TICKET
+- Always offer ticket for issues needing backend investigation`;
 
-### WALLET & BILLING
-**User fields:** balance, pendingBalance, btcAddress, ethAddress, usdtAddress
-**Transactions sheet:** deposit/withdrawal records
-**Deposit:** Send crypto to displayed address
-**Withdraw:** Enter amount and destination
+// ---- Helpers ----
+function isComplexQuery(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower.includes("error") || lower.includes("bug") || lower.includes("fail") ||
+    lower.includes("stuck") || lower.includes("pipeline") || lower.includes("campaign") ||
+    lower.includes("project") || lower.includes("ticket") || lower.split(" ").length > 8;
+}
 
-### USER ACCOUNT
-**Sheet:** user
-**Columns:** userId, email, username, role, plan, planExpiry, balance, pendingBalance, twoFactorAuth, apiToken
-**Roles:** USER, ADMIN
-**Plans:** Free, Basic, Pro, Enterprise
-
-### SUPPORT SYSTEM
-**Sheet:** support
-**Columns:** supportId, timestamp, userId, category, subCategory, entityId, messages, address, amount, reference, updatedOn, status
-**Categories:** campaigns, billing, projects, account, technical, general
-**Statuses:** open, in_progress, resolved, closed
-
-### RESPONSE RULES
-- Only use facts from this reference
-- If unsure, say "I'll need to check this with our team" and offer to raise a ticket
-- Never guess IDs, statuses, or error messages
-- For bugs, ask for campaignId/projectId and raise a ticket
-- For billing, check balance/transaction history
-- Always offer to raise a ticket for issues requiring backend investigation
-- If user says "raise ticket" or "I need help", respond with ESCALATE_TICKET`;
+function buildUserContextBlock(ctx: UserContext | null, fallback: any): string {
+  const u = (ctx || {}) as UserContext;
+  const fb = fallback || {};
+  return `## User Context
+- User: ${u.username || fb.username || "User"} (${u.email || fb.email || ""})
+- Plan: ${u.plan || fb.plan || "free"}
+- Balance: $${u.balance || fb.balance || "0"}
+- Active Campaigns: ${u.activeCampaigns || 0}
+- Projects: ${u.projectCount || 0}`;
+}
 
 // ---- SubCategory type for ticket form ----
 interface TicketFormData {
@@ -203,6 +210,7 @@ export default function ChatBot() {
   const [isTyping, setIsTyping] = useState(false);
   const [aiAvailable, setAiAvailable] = useState(true);
   const [telegramLink, setTelegramLink] = useState("https://t.me/your_telegram_group");
+  const [telegramUsername, setTelegramUsername] = useState("@ytsibmm");
   const [ticketForm, setTicketForm] = useState<TicketFormData>({
     subject: "",
     description: "",
@@ -212,6 +220,7 @@ export default function ChatBot() {
   });
   const [ticketSubmitting, setTicketSubmitting] = useState(false);
   const [ticketResult, setTicketResult] = useState<string | null>(null);
+  const [userContext, setUserContext] = useState<UserContext | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -224,15 +233,16 @@ export default function ChatBot() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ---- Load chat context + support settings on open ----
+  // ---- Load chat context + support settings + user context ONCE on open ----
   useEffect(() => {
     if (chatState === "closed" || !userId) return;
 
     const loadData = async () => {
       try {
-        const [chatResult, settingsResult] = await Promise.all([
+        const [chatResult, settingsResult, ctxResult] = await Promise.all([
           securedApi.callBackendFunction({ functionName: "getChatContext", userId }),
           securedApi.callBackendFunction({ functionName: "getSupportSettings" }),
+          securedApi.callBackendFunction({ functionName: "getUserSupportContext", userId }),
         ]);
 
         if (chatResult?.success && (chatResult as any)?.chat?.lastMessages?.length > 0) {
@@ -242,6 +252,13 @@ export default function ChatBot() {
 
         if (settingsResult?.success && (settingsResult as any)?.telegramGroupLink) {
           setTelegramLink((settingsResult as any).telegramGroupLink);
+        }
+        if (settingsResult?.success && (settingsResult as any)?.telegramUsername) {
+          setTelegramUsername((settingsResult as any).telegramUsername);
+        }
+
+        if (ctxResult?.success) {
+          setUserContext(ctxResult as any);
         }
       } catch (e) {
         console.error("[ChatBot] Failed to load context:", e);
@@ -266,6 +283,14 @@ export default function ChatBot() {
     }
   }, [userId]);
 
+  // ---- Build system prompt (topic-scoped) ----
+  const buildSystemPrompt = useCallback((topic: Topic | null): string => {
+    const topicKey = topic || "general";
+    const kb = KB_SECTIONS[topicKey] || KB_SECTIONS.general;
+    const userBlock = buildUserContextBlock(userContext, userData);
+    return `${kb}\n\n${RESPONSE_RULES}\n\n${userBlock}\n\nTopic: ${topicKey}`;
+  }, [userContext, userData]);
+
   // ---- Send message to AI ----
   const sendMessage = async () => {
     if (!inputValue.trim() || isTyping) return;
@@ -282,18 +307,7 @@ export default function ChatBot() {
     setIsTyping(true);
 
     try {
-      // Build user context
-      const ctxResult = await securedApi.callBackendFunction({
-        functionName: "getUserSupportContext",
-        userId,
-      });
-
-      const ctx = ctxResult?.success ? (ctxResult as any) : {};
-      const userContextBlock = `## User Context\n- User: ${ctx.username || userData?.username || "User"} (${ctx.email || userData?.email || ""})\n- Plan: ${ctx.plan || userData?.plan || "free"}\n- Balance: $${ctx.balance || userData?.balance || "0"}\n- Active Campaigns: ${ctx.activeCampaigns || 0}\n- Projects: ${ctx.projectCount || 0}`;
-
-      const systemPrompt = `${KNOWLEDGE_BASE}\n\n${userContextBlock}\n\nCurrent topic: ${selectedTopic || "general"}`;
-
-      // Call AI (OpenRouter)
+      const systemPrompt = buildSystemPrompt(selectedTopic);
       const aiResponse = await callAI(systemPrompt, newMessages);
 
       if (!aiResponse) {
@@ -351,14 +365,18 @@ export default function ChatBot() {
     }
   };
 
-  // ---- Call AI provider ----
+  // ---- Call AI provider (dynamic history window) ----
   const callAI = async (systemPrompt: string, chatMessages: ChatMessage[]): Promise<string | null> => {
     try {
       const apiKey = typeof window !== "undefined" ? localStorage.getItem("openrouter_key") : null;
 
+      // Dynamic history: simple queries get fewer messages
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      const historyLimit = lastMsg && isComplexQuery(lastMsg.content) ? 10 : 3;
+
       const formattedMessages = [
         { role: "system", content: systemPrompt },
-        ...chatMessages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+        ...chatMessages.slice(-historyLimit).map((m) => ({ role: m.role, content: m.content })),
       ];
 
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -620,15 +638,25 @@ export default function ChatBot() {
                   {/* Telegram fallback */}
                   <div className="text-center pt-2 border-t dark:border-gray-700">
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Or reach us directly:</p>
-                    <a
-                      href={telegramLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                    >
-                      <FontAwesomeIcon icon={faTelegram} />
-                      Join Telegram Group
-                    </a>
+                    <div className="flex flex-col items-center gap-2">
+                      <a
+                        href={`https://t.me/${telegramUsername.replace("@", "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                      >
+                        <FontAwesomeIcon icon={faTelegram} />
+                        Contact {telegramUsername}
+                      </a>
+                      <a
+                        href={telegramLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
+                      >
+                        Join Group
+                      </a>
+                    </div>
                   </div>
                 </>
               )}
@@ -641,8 +669,13 @@ export default function ChatBot() {
               {!aiAvailable && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-2 text-xs text-yellow-800 dark:text-yellow-200 text-center">
                   AI unavailable — <button onClick={() => setChatState("ticket-form")} className="underline font-medium">raise a ticket</button> or{" "}
-                  <a href={telegramLink} target="_blank" rel="noopener noreferrer" className="underline font-medium">
-                    join Telegram
+                  <a
+                    href={`https://t.me/${telegramUsername.replace("@", "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    contact {telegramUsername}
                   </a>
                 </div>
               )}
