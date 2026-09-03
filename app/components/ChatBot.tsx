@@ -209,8 +209,8 @@ export default function ChatBot() {
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [aiAvailable, setAiAvailable] = useState(true);
-  const [telegramLink, setTelegramLink] = useState("https://t.me/your_telegram_group");
-  const [telegramUsername, setTelegramUsername] = useState("@ytsibmm");
+  const [telegramLink, setTelegramLink] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [ticketForm, setTicketForm] = useState<TicketFormData>({
     subject: "",
     description: "",
@@ -233,15 +233,38 @@ export default function ChatBot() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ---- Load chat context + support settings + user context ONCE on open ----
+  // ---- Load support settings INDEPENDENTLY (no userId needed) ----
+  useEffect(() => {
+    if (chatState === "closed") return;
+
+    const loadSettings = async () => {
+      try {
+        const settingsResult = await securedApi.callBackendFunction({ functionName: "getSupportSettings" });
+        console.log("[ChatBot] getSupportSettings response:", settingsResult);
+        if (settingsResult?.success) {
+          if ((settingsResult as any).telegramGroupLink) {
+            setTelegramLink((settingsResult as any).telegramGroupLink);
+          }
+          if ((settingsResult as any).telegramUsername) {
+            setTelegramUsername((settingsResult as any).telegramUsername);
+          }
+        }
+      } catch (e) {
+        console.error("[ChatBot] Failed to load settings:", e);
+      }
+    };
+
+    loadSettings();
+  }, [chatState]);
+
+  // ---- Load chat context + user context (needs userId) ----
   useEffect(() => {
     if (chatState === "closed" || !userId) return;
 
-    const loadData = async () => {
+    const loadUserData = async () => {
       try {
-        const [chatResult, settingsResult, ctxResult] = await Promise.all([
+        const [chatResult, ctxResult] = await Promise.all([
           securedApi.callBackendFunction({ functionName: "getChatContext", userId }),
-          securedApi.callBackendFunction({ functionName: "getSupportSettings" }),
           securedApi.callBackendFunction({ functionName: "getUserSupportContext", userId }),
         ]);
 
@@ -250,22 +273,15 @@ export default function ChatBot() {
           if ((chatResult as any).chat.lastTopic) setSelectedTopic((chatResult as any).chat.lastTopic as Topic);
         }
 
-        if (settingsResult?.success && (settingsResult as any)?.telegramGroupLink) {
-          setTelegramLink((settingsResult as any).telegramGroupLink);
-        }
-        if (settingsResult?.success && (settingsResult as any)?.telegramUsername) {
-          setTelegramUsername((settingsResult as any).telegramUsername);
-        }
-
         if (ctxResult?.success) {
           setUserContext(ctxResult as any);
         }
       } catch (e) {
-        console.error("[ChatBot] Failed to load context:", e);
+        console.error("[ChatBot] Failed to load user data:", e);
       }
     };
 
-    loadData();
+    loadUserData();
   }, [chatState, userId]);
 
   // ---- Save chat context ----
@@ -534,26 +550,32 @@ export default function ChatBot() {
               </div>
 
               {/* Telegram links */}
-              <div className="border-t dark:border-gray-700 pt-4 space-y-2">
-                <a
-                  href={`https://t.me/${telegramUsername.replace("@", "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 px-4 rounded-lg transition-colors"
-                >
-                  <FontAwesomeIcon icon={faTelegram} />
-                  Contact {telegramUsername}
-                </a>
-                <a
-                  href={telegramLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                >
-                  <FontAwesomeIcon icon={faTelegram} />
-                  Join Group
-                </a>
-              </div>
+              {(telegramUsername || telegramLink) && (
+                <div className="border-t dark:border-gray-700 pt-4 space-y-2">
+                  {telegramUsername && (
+                    <a
+                      href={`https://t.me/${telegramUsername.replace("@", "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 px-4 rounded-lg transition-colors"
+                    >
+                      <FontAwesomeIcon icon={faTelegram} />
+                      Contact {telegramUsername}
+                    </a>
+                  )}
+                  {telegramLink && (
+                    <a
+                      href={telegramLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                    >
+                      <FontAwesomeIcon icon={faTelegram} />
+                      Join Group
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -660,28 +682,34 @@ export default function ChatBot() {
                   </button>
 
                   {/* Telegram fallback */}
-                  <div className="text-center pt-2 border-t dark:border-gray-700">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Or reach us directly:</p>
-                    <div className="flex flex-col items-center gap-2">
-                      <a
-                        href={`https://t.me/${telegramUsername.replace("@", "")}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
-                      >
-                        <FontAwesomeIcon icon={faTelegram} />
-                        Contact {telegramUsername}
-                      </a>
-                      <a
-                        href={telegramLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
-                      >
-                        Join Group
-                      </a>
+                  {(telegramUsername || telegramLink) && (
+                    <div className="text-center pt-2 border-t dark:border-gray-700">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Or reach us directly:</p>
+                      <div className="flex flex-col items-center gap-2">
+                        {telegramUsername && (
+                          <a
+                            href={`https://t.me/${telegramUsername.replace("@", "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                          >
+                            <FontAwesomeIcon icon={faTelegram} />
+                            Contact {telegramUsername}
+                          </a>
+                        )}
+                        {telegramLink && (
+                          <a
+                            href={telegramLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
+                          >
+                            Join Group
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </div>
@@ -692,15 +720,19 @@ export default function ChatBot() {
             <div className="flex flex-col gap-3 p-4">
               {!aiAvailable && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-2 text-xs text-yellow-800 dark:text-yellow-200 text-center">
-                  AI unavailable — <button onClick={() => setChatState("ticket-form")} className="underline font-medium">raise a ticket</button> or{" "}
-                  <a
-                    href={`https://t.me/${telegramUsername.replace("@", "")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline font-medium"
-                  >
-                    contact {telegramUsername}
-                  </a>
+                  AI unavailable — <button onClick={() => setChatState("ticket-form")} className="underline font-medium">raise a ticket</button>
+                  {telegramUsername && (
+                    <> or{" "}
+                      <a
+                        href={`https://t.me/${telegramUsername.replace("@", "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline font-medium"
+                      >
+                        contact {telegramUsername}
+                      </a>
+                    </>
+                  )}
                 </div>
               )}
 
