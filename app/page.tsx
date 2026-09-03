@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -13,7 +13,7 @@ import {
   faMoon, // Import faMoon
   faSun // Import faSun
 } from '@fortawesome/free-solid-svg-icons';
-import { authApi } from "../utils/auth";
+import { authApi, securedApi } from "../utils/auth";
 import { useAppState } from "./context/AppContext";
 import type { LoginResponse } from "../utils/auth";
 import LoadingSpinner from './components/LoadingSpinner';
@@ -127,6 +127,33 @@ export default function Home() {
     getGeoInfo();
     getDeviceInfo();
   }, []);
+
+  // Fire a one-shot admin notification that this home/login page was visited. Gated to
+  // sessions that already have a token so the beacon never triggers the anonymous
+  // auth-redirect (securedApi logs out + bounces to "/" on token/auth errors). We also
+  // wait for ipData (fetched in the geo effect above) so the alert includes the visitor
+  // IP. The alert is non-fatal — failures are swallowed so the page always renders.
+  const visitBeaconSent = useRef(false);
+  useEffect(() => {
+    if (visitBeaconSent.current) return;
+    let token: string | null = null;
+    try { token = localStorage.getItem('authToken'); } catch { token = null; }
+    if (!token) return;   // no session yet — don't mark sent, wait for re-run
+    if (!ipData) return;  // IP not loaded yet — wait for re-run
+    visitBeaconSent.current = true;
+    (async () => {
+      try {
+        await securedApi.callBackendFunction({
+          functionName: 'notifySiteVisit',
+          ipAddress: ipData.ipAddress || '',
+          url: typeof window !== 'undefined' ? window.location.href : '',
+          referrer: typeof document !== 'undefined' ? document.referrer : '',
+        });
+      } catch (e) {
+        console.log('[VisitBeacon] skipped (non-fatal):', (e as Error)?.message);
+      }
+    })();
+  }, [ipData]);
 
   const handleRedirect = (user: LoginResponse['user']) => {
     if (user.role === "ADMIN") {
