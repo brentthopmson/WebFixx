@@ -71,7 +71,7 @@ export interface Campaign {
   personalizationStatus?: 'idle' | 'processing' | 'completed' | 'failed';
   executeStaged?: boolean; // Whether to include execute stage
   interactionStaged?: boolean; // Whether to include interaction stage
-  interactionStatus?: 'idle' | 'monitoring' | 'completed' | 'failed';
+  interactionStatus?: 'idle' | 'processing' | 'monitoring' | 'completed' | 'failed';
   interactionStartedAt?: string;
   interactionStoppedReason?: 'time_limit_reached' | 'reply_limit_reached' | 'admin_stopped';
 

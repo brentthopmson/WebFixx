@@ -193,7 +193,7 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId]);
 
-  // Poll campaign status every 60s
+  // Poll campaign status every 60s — updates all pipeline stage fields and auto-advances
   const pollCampaign = useCallback(async () => {
     try {
       const res = await securedApi.callBackendFunction({
@@ -201,14 +201,63 @@ export default function CampaignDetailPage() {
         campaignId
       });
       if (res.success && res.data) {
-        if (res.data.status && campaign?.status !== res.data.status) {
-          setCampaign(prev => prev ? { ...prev, status: res.data.status } : prev);
+        const d = res.data;
+        setCampaign(prev => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          // Update main status
+          if (d.status && prev.status !== d.status) updated.status = d.status;
+          // Update pipeline stage statuses
+          const stageFields = ['validationStatus', 'enrichmentStatus', 'personalizationStatus', 'interactionStatus'] as const;
+          for (const f of stageFields) {
+            if (d[f] && prev[f] !== d[f]) (updated as any)[f] = d[f];
+          }
+          return updated;
+        });
+
+        // Auto-trigger next pipeline stage when current stage completes
+        const stageOrder = ['validation', 'enrichment', 'personalization', 'execute', 'interact'] as const;
+        const statusMap: Record<string, string> = {
+          validation: d.validationStatus || 'idle',
+          enrichment: d.enrichmentStatus || 'idle',
+          personalization: d.personalizationStatus || 'idle',
+          execute: d.status || 'idle',
+          interact: d.interactionStatus || 'idle',
+        };
+        const stagedMap: Record<string, boolean> = {
+          validation: d.validationStaged || false,
+          enrichment: d.enrichmentStaged || false,
+          personalization: d.aiPersonalizationStaged || false,
+          execute: d.executeStaged ?? true,
+          interact: d.interactionStaged || false,
+        };
+
+        if (d.status === 'running') {
+          for (const stage of stageOrder) {
+            if (!stagedMap[stage]) continue;
+            if (statusMap[stage] === 'completed') {
+              // Find next staged stage that isn't completed yet
+              const idx = stageOrder.indexOf(stage);
+              for (let i = idx + 1; i < stageOrder.length; i++) {
+                const next = stageOrder[i];
+                if (stagedMap[next] && statusMap[next] !== 'completed' && statusMap[next] !== 'processing') {
+                  // Trigger next stage
+                  securedApi.callBackendFunction({
+                    functionName: 'runCampaignPipeline',
+                    campaignId
+                  });
+                  break;
+                }
+              }
+              break;
+            }
+          }
         }
       }
     } catch {
       // Poll failed — silent
     }
-  }, [campaignId, campaign?.status]);
+  }, [campaignId]);
 
   const handlePauseCampaign = async () => {
     try {
@@ -256,7 +305,15 @@ export default function CampaignDetailPage() {
       });
       if (data.success) {
         toast.success('Pipeline Started', { description: data.message || 'Campaign execution has begun.' });
-        setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
+        setCampaign(prev => prev ? {
+          ...prev,
+          status: 'running',
+          // Optimistically mark first staged stage as processing so spinner shows immediately
+          ...(prev.validationStaged ? { validationStatus: 'processing' } : {}),
+          ...(prev.enrichmentStaged ? { enrichmentStatus: 'processing' } : {}),
+          ...(prev.aiPersonalizationStaged ? { personalizationStatus: 'processing' } : {}),
+          ...(prev.interactionStaged ? { interactionStatus: 'processing' } : {}),
+        } : prev);
       } else {
         toast.error(data.message || data.error || 'Failed to start pipeline', {
           description: data.error || data.message
