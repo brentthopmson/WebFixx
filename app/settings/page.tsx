@@ -32,8 +32,6 @@ import { ApiKeyModalProps } from '../components/admin/settings/ApiKeyModal';
 import { DestroyAccountModalProps } from '../components/admin/settings/DestroyAccountModal';
 import UpgradePlanModal from '../components/admin/settings/UpgradePlanModal'; // Import the actual UpgradePlanModal
 import TwoFactorModal from '../components/admin/settings/TwoFactorModal'; // Import the actual TwoFactorModal
-import SupportHistory from '../components/admin/support/SupportHistory';
-
 
 export default function UserSettings() {
   const { appData, setAppData } = useAppState();
@@ -494,8 +492,6 @@ export default function UserSettings() {
           </button>
         </div>
 
-        {/* Support */}
-        <SupportHistory />
       </div>
 
       {/* Modals */}

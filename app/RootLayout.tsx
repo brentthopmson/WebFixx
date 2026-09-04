@@ -22,6 +22,7 @@ import {
   faSun,
   faComments,
   faTimes,
+  faHeadset,
 } from '@fortawesome/free-solid-svg-icons';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { useEffect, useState, useCallback } from 'react';
@@ -66,9 +67,11 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
     tools: false,
     wallet: false,
     settings: false,
+    support: false,
     rootDashboard: false,
     users: false,
     transactions: false,
+    rootSupport: false,
     rootSettings: false
   });
   const { isNavigating, setIsNavigating } = useLoading();
@@ -85,9 +88,11 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           tools: false,
           wallet: false,
           settings: false,
+          support: false,
           rootDashboard: true,
           users: true,
           transactions: true,
+          rootSupport: true,
           rootSettings: true
         });
       } else {
@@ -100,9 +105,11 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           tools: false,
           wallet: true,
           settings: true,
+          support: true,
           rootDashboard: false,
           users: false,
           transactions: false,
+          rootSupport: false,
           rootSettings: false
         });
       }
@@ -143,9 +150,11 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         tools: false,
         wallet: false,
         settings: false,
+        support: false,
         rootDashboard: false,
         users: false,
         transactions: false,
+        rootSupport: false,
         rootSettings: false
       });
       window.location.href = '/';
@@ -342,6 +351,12 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           <span className="ml-3">Transactions</span>
         </Link>
       )}
+      {visibleLinks.rootSupport && (
+        <Link href="/root/support" className="nav-link" onClick={handleNavClick}>
+          <FontAwesomeIcon icon={faHeadset} className="w-5 h-5" />
+          <span className="ml-3">Support</span>
+        </Link>
+      )}
       {visibleLinks.dashboard && (
         <Link href="/dashboard" className="nav-link" onClick={handleNavClick}>
           <FontAwesomeIcon icon={faDashboard} className="w-5 h-5" />
@@ -382,6 +397,12 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         <Link href="/wallet" className="nav-link" onClick={handleNavClick}>
           <FontAwesomeIcon icon={faWallet} className="w-5 h-5" />
           <span className="ml-3">Wallet</span>
+        </Link>
+      )}
+      {visibleLinks.support && (
+        <Link href="/support" className="nav-link" onClick={handleNavClick}>
+          <FontAwesomeIcon icon={faHeadset} className="w-5 h-5" />
+          <span className="ml-3">Support</span>
         </Link>
       )}
       {visibleLinks.settings && (
