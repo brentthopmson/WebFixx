@@ -267,6 +267,34 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
   const typeError = validateCampaignType(campaign.type || '');
   if (typeError) return typeError;
 
+  // ─── Interactions-only campaigns: no contact list, AI-driven ────
+  // Skips all file/subject/body/SMTP checks — requires keywords (or strategy
+  // prompt), at least one interaction account, and the interaction stage.
+  const isInteractionsOnly = campaign.campaignMode === 'interactions-only'
+    || (campaign.channel === 'email' && !campaign.fileUrl && campaign.interactionStaged === true);
+  if (isInteractionsOnly) {
+    if (!campaign.interactionStaged) {
+      return { field: 'pipeline', message: 'The interaction stage must be enabled for interactions-only campaigns' };
+    }
+    if (!campaign.interactionAccounts || campaign.interactionAccounts.length === 0) {
+      return { field: 'interactionAccounts', message: 'Select at least one interaction account (hub account with cookies) for an interactions-only campaign' };
+    }
+    if ((campaign.emailKeywords || []).length === 0 && !(campaign.emailStrategyPrompt || '').trim()) {
+      return { field: 'emailKeywords', message: 'Add at least one keyword or a strategy prompt so the AI knows what to look for' };
+    }
+    const tl = (campaign.targetLink || '').trim();
+    if (tl && !/^https?:\/\/.+/i.test(tl)) {
+      return { field: 'targetLink', message: 'Target link must be a valid URL starting with http:// or https://' };
+    }
+    if (!campaign.interactionStopAfterHours || campaign.interactionStopAfterHours <= 0) {
+      return { field: 'interactionStopAfterHours', message: 'Stop after hours is required when interaction stage is enabled' };
+    }
+    if (!campaign.interactionMaxReplies || campaign.interactionMaxReplies <= 0) {
+      return { field: 'interactionMaxReplies', message: 'Max replies is required when interaction stage is enabled' };
+    }
+    return null;
+  }
+
   // Project/link required for wire/mixed delivery
   if (campaign.deliveryMethod !== 'smtp') {
     if (!campaign.projectId || typeof campaign.projectId !== 'string' || campaign.projectId.trim().length === 0) {

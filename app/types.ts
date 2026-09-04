@@ -91,6 +91,12 @@ export interface Campaign {
   socialKeywords?: string[]; // Targeting search queries
   shouldSendMessage?: boolean; // Send DM to all social profiles in CSV
 
+  // Campaign mode + interactions-only (AI inbox watcher) support
+  campaignMode?: 'file' | 'interactions-only'; // 'file' = CSV-driven, 'interactions-only' = AI-driven, no contact list
+  targetLink?: string; // Destination URL the AI weaves into its messages
+  emailKeywords?: string[]; // Keywords the AI uses to find relevant emails in the inbox
+  emailStrategyPrompt?: string; // Strategy prompt for AI email replies
+
   created_at: string; // Added
   status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached'; // Made required
   analytics?: {

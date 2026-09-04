@@ -134,6 +134,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         socialInteractionTypes: campaignToEdit.socialInteractionTypes || [],
         socialStrategyPrompt: campaignToEdit.socialStrategyPrompt || '',
         socialKeywords: campaignToEdit.socialKeywords || [],
+        campaignMode: campaignToEdit.campaignMode || (campaignToEdit.fileUrl ? 'file' : 'interactions-only'),
+        targetLink: campaignToEdit.targetLink || '',
+        emailKeywords: campaignToEdit.emailKeywords || [],
+        emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || '',
         shouldSendMessage: campaignToEdit.shouldSendMessage || false
       };
     }
@@ -173,6 +177,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       socialInteractionTypes: [],
       socialStrategyPrompt: '',
       socialKeywords: [],
+      campaignMode: 'file',
+      targetLink: '',
+      emailKeywords: [],
+      emailStrategyPrompt: '',
       shouldSendMessage: false
     };
   };
@@ -259,6 +267,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [csvAnalytics, setCsvAnalytics] = useState<CSVAnalytics | null>(null);
   const [editingSMTP, setEditingSMTP] = useState<SMTPSetting | null>(null);
   const [socialKeywordInput, setSocialKeywordInput] = useState('');
+  const [emailKeywordInput, setEmailKeywordInput] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Collapsible sections state
@@ -388,6 +397,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         ...prev,
         id: draftId || prev.id,
         fileUrl,
+        campaignMode: 'file',
         name: prev.name || campaignName
       }));
       onClose();
@@ -434,6 +444,27 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     setFormData(prev => ({
       ...prev,
       socialKeywords: (prev.socialKeywords || []).filter(k => k !== keyword)
+    }));
+  };
+
+  const handleAddEmailKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && emailKeywordInput.trim()) {
+      e.preventDefault();
+      const newKeyword = emailKeywordInput.trim();
+      if (!(formData.emailKeywords || []).includes(newKeyword)) {
+        setFormData(prev => ({
+          ...prev,
+          emailKeywords: [...(prev.emailKeywords || []), newKeyword]
+        }));
+      }
+      setEmailKeywordInput('');
+    }
+  };
+
+  const handleRemoveEmailKeyword = (keyword: string) => {
+    setFormData(prev => ({
+      ...prev,
+      emailKeywords: (prev.emailKeywords || []).filter(k => k !== keyword)
     }));
   };
 
@@ -694,17 +725,19 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               </label>
             </div>
             
-            {formData.channel === 'social' && (
+            {(formData.channel === 'social' || formData.channel === 'email') && (
               <div className="flex justify-center pt-2">
                 <button
                   onClick={() => {
                     setCsvAnalytics(null);
-                    setFormData(prev => ({ ...prev, fileUrl: '' }));
+                    setFormData(prev => ({ ...prev, fileUrl: '', campaignMode: 'interactions-only' }));
                     setStep(2);
                   }}
                   className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 hover:dark:bg-gray-600 rounded-xl font-semibold transition-colors text-xs shadow-sm"
                 >
-                  Skip Upload & Setup Strategy
+                  {formData.channel === 'social'
+                    ? 'Skip Upload & Setup Strategy'
+                    : 'Skip Upload — Interactions Only (AI Inbox Watcher)'}
                 </button>
               </div>
             )}
@@ -953,6 +986,46 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               </button>
               {expandedSection === 'staging' && (
                 <div className="p-4 space-y-4">
+                  {/* Target link — AI weaves this destination into its messages (both channels) */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                      Target Link <span className="text-xxs font-normal lowercase text-gray-400">(AI will craft messages with this link in mind — optional)</span>
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://your-destination-link.com"
+                      className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
+                      value={formData.targetLink || ''}
+                      onChange={e => setFormData(prev => ({ ...prev, targetLink: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Email interactions-only: keywords + strategy for the AI inbox watcher */}
+                  {formData.channel === 'email' && formData.campaignMode === 'interactions-only' && (
+                    <div className="space-y-3 p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/50">
+                      <div>
+                        <label className="block text-xs font-bold text-purple-500 dark:text-purple-300 uppercase tracking-wider mb-1.5 flex justify-between">
+                          <span>Inbox Watch Keywords</span>
+                          <span className="text-xxs text-gray-400 font-normal lowercase">Press enter to register tag</span>
+                        </label>
+                        <input type="text" placeholder="e.g. partnership, pricing, demo request" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold mb-2" value={emailKeywordInput} onChange={e => setEmailKeywordInput(e.target.value)} onKeyDown={handleAddEmailKeyword} />
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                          {(formData.emailKeywords || []).map(keyword => (
+                            <span key={keyword} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900/50">
+                              {keyword}
+                              <button type="button" onClick={() => handleRemoveEmailKeyword(keyword)} className="text-purple-500 hover:text-purple-700 dark:hover:text-purple-200 font-bold ml-0.5 text-xxs w-3 h-3 flex items-center justify-center rounded-full hover:bg-purple-100 dark:hover:bg-purple-900">×</button>
+                            </span>
+                          ))}
+                          {(formData.emailKeywords || []).length === 0 && <span className="text-xs text-gray-400 italic">No inbox keywords yet. The AI will rely on the strategy prompt below.</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-purple-500 dark:text-purple-300 uppercase tracking-wider mb-1.5">AI Reply Strategy Prompt</label>
+                        <textarea placeholder="Describe how the AI should inspect the inbox and respond (e.g. Reply to anyone asking about pricing, be friendly, mention our target link naturally)" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none min-h-[80px]" value={formData.emailStrategyPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, emailStrategyPrompt: e.target.value }))} />
+                      </div>
+                    </div>
+                  )}
+
                   {formData.channel === 'social' ? (
                     <>
                       <div>
@@ -1320,7 +1393,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert('Please select a WebFixx Project to proceed.');
                       return;
                     }
-                    if (formData.channel === 'email' && !formData.subject) {
+                    if (formData.channel === 'email' && formData.campaignMode !== 'interactions-only' && !formData.subject) {
                       alert('Please input an email subject line to proceed.');
                       return;
                     }

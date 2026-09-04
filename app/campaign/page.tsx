@@ -303,6 +303,10 @@ export default function Campaign() {
     socialStrategyPrompt: campaign.socialStrategyPrompt || '',
     socialKeywords: campaign.socialKeywords || [],
     shouldSendMessage: campaign.shouldSendMessage || false,
+    campaignMode: campaign.campaignMode || (campaign.fileUrl ? 'file' : 'interactions-only'),
+    targetLink: campaign.targetLink || '',
+    emailKeywords: campaign.emailKeywords || [],
+    emailStrategyPrompt: campaign.emailStrategyPrompt || '',
     isSetupComplete: campaign.isSetupComplete || false
   });
 
