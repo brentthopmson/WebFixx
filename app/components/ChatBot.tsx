@@ -18,6 +18,7 @@ import {
 import { faTelegram } from "@fortawesome/free-brands-svg-icons";
 import { useAppState } from "../context/AppContext";
 import { securedApi } from "../../utils/auth";
+import { rowsToObjects } from "../utils/rows";
 
 // ---- Types ----
 type Topic = "campaigns" | "billing" | "projects" | "account" | "technical" | "general";
@@ -209,8 +210,6 @@ export default function ChatBot() {
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [aiAvailable, setAiAvailable] = useState(true);
-  const [telegramLink, setTelegramLink] = useState("");
-  const [telegramUsername, setTelegramUsername] = useState("");
   const [ticketForm, setTicketForm] = useState<TicketFormData>({
     subject: "",
     description: "",
@@ -233,29 +232,22 @@ export default function ChatBot() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ---- Load support settings INDEPENDENTLY (no userId needed) ----
-  useEffect(() => {
-    if (chatState === "closed") return;
+  // ---- Extract Telegram settings from appData (already loaded) ----
+  const settingsRows = useMemo(() => {
+    const s = (appData as any)?.appData?.data?.settings;
+    if (!s?.data || !Array.isArray(s.data)) return [];
+    return rowsToObjects(s.headers || [], s.data);
+  }, [appData]);
 
-    const loadSettings = async () => {
-      try {
-        const settingsResult = await securedApi.callBackendFunction({ functionName: "getSupportSettings" });
-        console.log("[ChatBot] getSupportSettings response:", settingsResult);
-        if (settingsResult?.success) {
-          if ((settingsResult as any).telegramGroupLink) {
-            setTelegramLink((settingsResult as any).telegramGroupLink);
-          }
-          if ((settingsResult as any).telegramUsername) {
-            setTelegramUsername((settingsResult as any).telegramUsername);
-          }
-        }
-      } catch (e) {
-        console.error("[ChatBot] Failed to load settings:", e);
-      }
-    };
+  const telegramLink = useMemo(() => {
+    const row = settingsRows.find((r: any) => r.settingsKey === "webFixxTelegramGroup");
+    return row?.settingsValue1 || "";
+  }, [settingsRows]);
 
-    loadSettings();
-  }, [chatState]);
+  const telegramUsername = useMemo(() => {
+    const row = settingsRows.find((r: any) => r.settingsKey === "webFixxTelegramUsername");
+    return row?.settingsValue1 || "";
+  }, [settingsRows]);
 
   // ---- Load chat context + user context (needs userId) ----
   useEffect(() => {
