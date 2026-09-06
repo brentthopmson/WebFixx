@@ -12,7 +12,7 @@ import {
   faTimesCircle,
   faUserShield,
 } from "@fortawesome/free-solid-svg-icons";
-import { securedApi } from "../../../../utils/auth";
+import { securedApi } from "../../../../../utils/auth";
 import { useAppState } from "../../../../context/AppContext";
 import { rowsToObjects } from "../../../../utils/rows";
 import {
