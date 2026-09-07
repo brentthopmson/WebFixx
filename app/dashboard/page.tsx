@@ -405,14 +405,15 @@ export default function Dashboard() {
               contactEmail: contact.email,
             });
 
-            if (composeResult && composeResult.success && composeResult.subject) {
+            const cr = composeResult as any;
+            if (cr && cr.success && cr.subject) {
               // Send this single contact
               const sendResult = await securedApi.callBackendFunction({
                 functionName: 'shootEmails',
                 browserId,
                 contacts: [contact],
-                subject: composeResult.subject,
-                body: composeResult.body || '',
+                subject: cr.subject,
+                body: cr.body || '',
                 method: 'ai',
                 mailMerge: false,
               });
