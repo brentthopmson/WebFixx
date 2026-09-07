@@ -380,13 +380,15 @@ export default function Dashboard() {
     }>;
     subject: string;
     body: string;
-    method: 'ai' | 'manual';
-    mailMerge: boolean;
+    method?: 'ai' | 'manual';
+    mailMerge?: boolean;
   }) => {
     setLoading(true);
     setActionError(null);
     try {
       const item = hubData.find((row: any) => row.id === shootData.id || row.browserId === shootData.id);
+      const sendMethod = shootData.method || 'manual';
+      const useMailMerge = shootData.mailMerge !== false;
       if (!item) {
         setActionError('Profile not found');
         return;
@@ -395,7 +397,7 @@ export default function Dashboard() {
       const browserId = item.browserId || item.submissionId || shootData.id;
 
       // AI method: compose messages one by one, then send
-      if (shootData.method === 'ai') {
+      if (sendMethod === 'ai') {
         for (const contact of shootData.selectedContacts) {
           if (!contact.email) continue;
           try {
@@ -436,7 +438,7 @@ export default function Dashboard() {
           subject: shootData.subject,
           body: shootData.body,
           method: 'manual',
-          mailMerge: shootData.mailMerge,
+          mailMerge: useMailMerge,
         });
 
         if (result && result.success === false) {
