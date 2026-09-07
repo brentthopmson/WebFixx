@@ -78,7 +78,7 @@ export default function AdminAIChat() {
   const userData = (appData as any)?.user || (appData as any)?.appData?.user;
 
   const settingsRows = useMemo(() => {
-    const s = (appData as any)?.appData?.data?.settings;
+    const s = (appData as any)?.data?.settings || (appData as any)?.appData?.data?.settings;
     if (!s?.data || !Array.isArray(s.data)) return [];
     return rowsToObjects(s.headers || [], s.data);
   }, [appData]);

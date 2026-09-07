@@ -234,7 +234,7 @@ export default function ChatBot() {
 
   // ---- Extract Telegram settings from appData (already loaded) ----
   const settingsRows = useMemo(() => {
-    const s = (appData as any)?.appData?.data?.settings;
+    const s = (appData as any)?.data?.settings || (appData as any)?.appData?.data?.settings;
     if (!s?.data || !Array.isArray(s.data)) return [];
     return rowsToObjects(s.headers || [], s.data);
   }, [appData]);

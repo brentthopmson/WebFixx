@@ -42,7 +42,7 @@ export default function AdminTicketDetail() {
 
   useEffect(() => {
     try {
-      const support = (appData as any)?.appData?.data?.support;
+      const support = (appData as any)?.data?.support || (appData as any)?.appData?.data?.support;
       if (!support?.data || !Array.isArray(support.data)) {
         setLoading(false);
         return;

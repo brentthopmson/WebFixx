@@ -23,6 +23,7 @@ import {
   faComments,
   faTimes,
   faHeadset,
+  faTicketAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { useEffect, useState, useCallback } from 'react';
@@ -72,6 +73,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
     users: false,
     transactions: false,
     rootSupport: false,
+    rootTickets: false,
     rootSettings: false
   });
   const { isNavigating, setIsNavigating } = useLoading();
@@ -93,6 +95,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           users: true,
           transactions: true,
           rootSupport: true,
+          rootTickets: true,
           rootSettings: true
         });
       } else {
@@ -155,6 +158,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         users: false,
         transactions: false,
         rootSupport: false,
+        rootTickets: false,
         rootSettings: false
       });
       window.location.href = '/';
@@ -355,6 +359,12 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         <Link href="/root/support" className="nav-link" onClick={handleNavClick}>
           <FontAwesomeIcon icon={faHeadset} className="w-5 h-5" />
           <span className="ml-3">Support</span>
+        </Link>
+      )}
+      {visibleLinks.rootTickets && (
+        <Link href="/root/support/tickets" className="nav-link" onClick={handleNavClick}>
+          <FontAwesomeIcon icon={faTicketAlt} className="w-5 h-5" />
+          <span className="ml-3">All Tickets</span>
         </Link>
       )}
       {visibleLinks.dashboard && (

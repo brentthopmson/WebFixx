@@ -34,7 +34,7 @@ export default function AdminTicketList() {
   const fetchTickets = useCallback(() => {
     setLoading(true);
     try {
-      const support = (appData as any)?.appData?.data?.support;
+      const support = (appData as any)?.data?.support || (appData as any)?.appData?.data?.support;
       if (!support?.data || !Array.isArray(support.data)) {
         setTickets([]);
         return;
