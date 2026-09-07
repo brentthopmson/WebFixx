@@ -37,12 +37,23 @@ interface WireTableProps {
     }>;
     subject: string;
     body: string;
+    method?: 'ai' | 'manual';
+    mailMerge?: boolean;
+    linkType?: 'project' | 'redirect' | 'none';
+    linkId?: string;
   }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading: boolean;
   disabledExtract?: boolean;
   disabledShoot?: boolean;
+  projectsList?: Array<{ projectId: string; title: string }>;
+  redirectsList?: Array<{ redirectId: string; title: string }>;
+  onComposeAI?: (contactEmail: string, linkType?: string, linkId?: string) => Promise<{
+    subject: string;
+    body: string;
+    context?: any;
+  } | null>;
 }
 
 export const WireTable: React.FC<WireTableProps> = ({
@@ -58,7 +69,10 @@ export const WireTable: React.FC<WireTableProps> = ({
   onMemoSave,
   loading,
   disabledExtract = false,
-  disabledShoot = false
+  disabledShoot = false,
+  projectsList = [],
+  redirectsList = [],
+  onComposeAI,
 }) => {
   const [selectedDomain, setSelectedDomain] = useState<any>(null);
   const { width } = useWindowSize();
@@ -207,6 +221,9 @@ export const WireTable: React.FC<WireTableProps> = ({
                           category="WIRE"
                           disabledExtract={disabledExtract}
                           disabledShoot={disabledShoot}
+                          projectsList={projectsList}
+                          redirectsList={redirectsList}
+                          onComposeAI={onComposeAI}
                         />
                       </div>
                     ) : column === 'domain' ? (

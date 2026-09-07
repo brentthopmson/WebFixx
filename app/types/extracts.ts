@@ -55,6 +55,15 @@ export interface WireExtract {
   extractedAt?: string;
 }
 
+// Drive Reference for large extract files stored in Google Drive
+export interface DriveReference {
+  fileId: string;
+  fileName: string;
+  size?: number;
+  mimeType?: string;
+  webViewLink?: string;
+}
+
 // Bank Extract Types
 export interface BankTransaction {
   date: string;

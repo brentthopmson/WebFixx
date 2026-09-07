@@ -31,6 +31,10 @@ interface TableActionsProps {
     }>;
     subject: string;
     body: string;
+    method?: 'ai' | 'manual';
+    mailMerge?: boolean;
+    linkType?: 'project' | 'redirect' | 'none';
+    linkId?: string;
   }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
@@ -38,6 +42,13 @@ interface TableActionsProps {
   category: 'WIRE' | 'BANK' | 'SOCIAL';
   disabledExtract?: boolean;
   disabledShoot?: boolean;
+  projectsList?: Array<{ projectId: string; title: string }>;
+  redirectsList?: Array<{ redirectId: string; title: string }>;
+  onComposeAI?: (contactEmail: string, linkType?: string, linkId?: string) => Promise<{
+    subject: string;
+    body: string;
+    context?: any;
+  } | null>;
 }
 
 export const TableActions = ({
@@ -51,7 +62,10 @@ export const TableActions = ({
   loading,
   category,
   disabledExtract = false,
-  disabledShoot = false
+  disabledShoot = false,
+  projectsList = [],
+  redirectsList = [],
+  onComposeAI,
 }: TableActionsProps) => {
   const [showMemoInput, setShowMemoInput] = useState(false);
   const [memoText, setMemoText] = useState(item.memo || '');
@@ -120,9 +134,12 @@ export const TableActions = ({
             }
             setShowShootContactsModal(false);
           }}
+          onComposeAI={onComposeAI}
           loading={loading}
           item={item}
           category={category}
+          projectsList={projectsList}
+          redirectsList={redirectsList}
         />
       )}
 

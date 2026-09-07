@@ -41,10 +41,21 @@ interface ItemDetailsModalProps {
     }>;
     subject: string;
     body: string;
+    method?: 'ai' | 'manual';
+    mailMerge?: boolean;
+    linkType?: 'project' | 'redirect' | 'none';
+    linkId?: string;
   }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading?: boolean;
+  projectsList?: Array<{ projectId: string; title: string }>;
+  redirectsList?: Array<{ redirectId: string; title: string }>;
+  onComposeAI?: (contactEmail: string, linkType?: string, linkId?: string) => Promise<{
+    subject: string;
+    body: string;
+    context?: any;
+  } | null>;
 }
 
 interface ExtractDataState {
@@ -95,7 +106,10 @@ export const ItemDetailsModal = ({
   onShootContacts,
   onOpenSession,
   onMemoSave,
-  loading
+  loading,
+  projectsList = [],
+  redirectsList = [],
+  onComposeAI,
 }: ItemDetailsModalProps) => {
   const [showMemoInput, setShowMemoInput] = useState(false);
   const [memoText, setMemoText] = useState('');
@@ -207,12 +221,68 @@ export const ItemDetailsModal = ({
     );
   };
 
+  const isDriveReference = (data: any): boolean => {
+    if (!data || typeof data !== 'string') return false;
+    try {
+      const parsed = JSON.parse(data);
+      return parsed && typeof parsed === 'object' && parsed.fileId && parsed.fileName;
+    } catch {
+      return false;
+    }
+  };
+
+  const getStorageInfo = (extractData: any) => {
+    if (!extractData) return null;
+    if (typeof extractData === 'string' && extractData.startsWith('http')) {
+      return { type: 'url', label: 'Stored externally', icon: '🔗' };
+    }
+    if (isDriveReference(extractData)) {
+      try {
+        const ref = JSON.parse(extractData);
+        const sizeKB = ref.size ? Math.round(ref.size / 1024) : null;
+        return {
+          type: 'drive',
+          label: 'Stored in Drive',
+          fileName: ref.fileName,
+          size: sizeKB ? `${sizeKB} KB` : null,
+          icon: '☁️',
+        };
+      } catch {
+        return { type: 'unknown', label: 'Unknown format', icon: '❓' };
+      }
+    }
+    // Inline data
+    const sizeKB = typeof extractData === 'string' ? Math.round(extractData.length / 1024) : null;
+    return {
+      type: 'sheet',
+      label: 'Stored in Sheet',
+      size: sizeKB ? `${sizeKB} KB` : null,
+      icon: '📊',
+    };
+  };
+
   const renderExtractSection = (extractData: any, title: string) => {
     if (!extractData) return null;
+    const storageInfo = getStorageInfo(extractData);
 
     return (
       <div className="mt-4">
-        <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</h4>
+          {storageInfo && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              storageInfo.type === 'drive'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                : storageInfo.type === 'sheet'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+            }`}>
+              {storageInfo.icon} {storageInfo.label}
+              {storageInfo.size && ` (${storageInfo.size})`}
+              {storageInfo.fileName && ` — ${storageInfo.fileName}`}
+            </span>
+          )}
+        </div>
         <div className="mt-1 bg-gray-50 dark:bg-gray-700 rounded-md border border-gray-200 dark:border-gray-600">
           {renderExtractContent(extractData)}
         </div>
@@ -456,9 +526,12 @@ export const ItemDetailsModal = ({
             }
             setShowShootContactsModal(false);
           }}
+          onComposeAI={onComposeAI}
           loading={loading}
           item={data}
           category={category === 'BANK' ? undefined : category}
+          projectsList={projectsList}
+          redirectsList={redirectsList}
         />
       )}
 

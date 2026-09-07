@@ -193,6 +193,49 @@ export default function Dashboard() {
     );
   }, [categorizedData]);
 
+  // Projects and redirects lists for shoot modal
+  const projectsList = useMemo(() => {
+    const rawProjects = appData?.data?.projects;
+    if (!rawProjects) return [];
+    const headers = rawProjects.headers || [];
+    const data = rawProjects.data || [];
+    const projectIdIndex = headers.indexOf('projectId');
+    const titleIndex = headers.indexOf('title') !== -1 ? headers.indexOf('title') : headers.indexOf('name');
+    const statusIndex = headers.indexOf('status');
+    if (projectIdIndex === -1) return [];
+    return data
+      .filter((row: any) => {
+        const status = statusIndex !== -1 ? (row[statusIndex] || '') : '';
+        return status === 'active';
+      })
+      .map((row: any) => ({
+        projectId: row[projectIdIndex] || '',
+        title: titleIndex !== -1 ? row[titleIndex] : (row[projectIdIndex] || ''),
+      }))
+      .filter((p: any) => p.projectId);
+  }, [appData?.data?.projects]);
+
+  const redirectsList = useMemo(() => {
+    const rawRedirects = appData?.data?.redirect;
+    if (!rawRedirects) return [];
+    const headers = rawRedirects.headers || [];
+    const data = rawRedirects.data || [];
+    const redirectIdIndex = headers.indexOf('redirectId');
+    const titleIndex = headers.indexOf('title') !== -1 ? headers.indexOf('title') : headers.indexOf('subdomain');
+    const statusIndex = headers.indexOf('status');
+    if (redirectIdIndex === -1) return [];
+    return data
+      .filter((row: any) => {
+        const status = statusIndex !== -1 ? (row[statusIndex] || '') : '';
+        return status === 'ACTIVE';
+      })
+      .map((row: any) => ({
+        redirectId: row[redirectIdIndex] || '',
+        title: titleIndex !== -1 ? row[titleIndex] : (row[redirectIdIndex] || ''),
+      }))
+      .filter((r: any) => r.redirectId);
+  }, [appData?.data?.redirect]);
+
   // Set initial active category if not set, or fall back if the persisted tab has no data
   useEffect(() => {
     if (availableCategories.length === 0) return;
@@ -351,16 +394,26 @@ export default function Dashboard() {
     }
   };
 
-  const handleComposeAI = async (contactEmail: string, browserId: string) => {
+  const handleComposeAI = async (contactEmail: string, linkType?: string, linkId?: string) => {
     try {
+      const item = hubData.find((row: any) => row.email === contactEmail || row.wireExtract?.includes(contactEmail));
+      const browserId = item?.browserId || item?.submissionId || '';
+      if (!browserId) return null;
+
       const result = await securedApi.callBackendFunction({
         functionName: 'composeAIMessage',
         browserId,
         contactEmail,
+        linkType: linkType || 'none',
+        linkId: linkId || '',
       });
       const r = result as any;
       if (r && r.success && r.subject) {
-        return { subject: r.subject, body: r.body || '' };
+        return {
+          subject: r.subject,
+          body: r.body || '',
+          context: r.context || undefined,
+        };
       }
     } catch (err: any) {
       console.error('AI compose failed:', err);
@@ -382,13 +435,13 @@ export default function Dashboard() {
     body: string;
     method?: 'ai' | 'manual';
     mailMerge?: boolean;
+    linkType?: 'project' | 'redirect' | 'none';
+    linkId?: string;
   }) => {
     setLoading(true);
     setActionError(null);
     try {
       const item = hubData.find((row: any) => row.id === shootData.id || row.browserId === shootData.id);
-      const sendMethod = shootData.method || 'manual';
-      const useMailMerge = shootData.mailMerge !== false;
       if (!item) {
         setActionError('Profile not found');
         return;
@@ -396,54 +449,20 @@ export default function Dashboard() {
 
       const browserId = item.browserId || item.submissionId || shootData.id;
 
-      // AI method: compose messages one by one, then send
-      if (sendMethod === 'ai') {
-        for (const contact of shootData.selectedContacts) {
-          if (!contact.email) continue;
-          try {
-            const composeResult = await securedApi.callBackendFunction({
-              functionName: 'composeAIMessage',
-              browserId,
-              contactEmail: contact.email,
-            });
+      const result = await securedApi.callBackendFunction({
+        functionName: 'shootEmails',
+        browserId,
+        contacts: shootData.selectedContacts,
+        subject: shootData.subject,
+        body: shootData.body,
+        method: shootData.method || 'manual',
+        mailMerge: shootData.mailMerge !== false,
+        linkType: shootData.linkType || 'none',
+        linkId: shootData.linkId || '',
+      });
 
-            const cr = composeResult as any;
-            if (cr && cr.success && cr.subject) {
-              // Send this single contact
-              const sendResult = await securedApi.callBackendFunction({
-                functionName: 'shootEmails',
-                browserId,
-                contacts: [contact],
-                subject: cr.subject,
-                body: cr.body || '',
-                method: 'ai',
-                mailMerge: false,
-              });
-
-              if (sendResult && sendResult.success === false) {
-                setActionError(sendResult.error || 'Failed to send to ' + contact.email);
-                break;
-              }
-            }
-          } catch (err: any) {
-            console.error(`AI compose failed for ${contact.email}:`, err);
-          }
-        }
-      } else {
-        // Manual method: send all at once
-        const result = await securedApi.callBackendFunction({
-          functionName: 'shootEmails',
-          browserId,
-          contacts: shootData.selectedContacts,
-          subject: shootData.subject,
-          body: shootData.body,
-          method: 'manual',
-          mailMerge: useMailMerge,
-        });
-
-        if (result && result.success === false) {
-          setActionError(result.error || 'Failed to shoot contacts');
-        }
+      if (result && result.success === false) {
+        setActionError(result.error || 'Failed to shoot contacts');
       }
     } catch (error: any) {
       setActionError(error?.message || 'Error shooting contacts.');
@@ -534,6 +553,9 @@ export default function Dashboard() {
             <WireTable 
               {...commonProps}
               onShootContacts={handleShootContacts}
+              projectsList={projectsList}
+              redirectsList={redirectsList}
+              onComposeAI={handleComposeAI}
             />
             {pagination}
           </>
@@ -551,6 +573,9 @@ export default function Dashboard() {
             <SocialTable 
               {...commonProps}
               onShootContacts={handleShootContacts}
+              projectsList={projectsList}
+              redirectsList={redirectsList}
+              onComposeAI={handleComposeAI}
             />
             {pagination}
           </>
@@ -663,6 +688,9 @@ export default function Dashboard() {
             onOpenSession={handleOpenSession}
             onMemoSave={handleMemoSave}
             loading={loading}
+            projectsList={projectsList}
+            redirectsList={redirectsList}
+            onComposeAI={handleComposeAI}
           />
         </div>
       )}

@@ -48,8 +48,8 @@ export const ColorLegend = () => {
             <li><span className="font-medium">Verify</span> — shown on red &amp; amber rows; re-runs account verification.</li>
             <li><span className="font-medium">Session</span> — opens the live browser session for the account.</li>
             <li><span className="font-medium">Cookie</span> — copies the captured cookies.</li>
-            <li><span className="font-medium">Extract</span> — extracts account data (requires full access).</li>
-            <li><span className="font-medium">Shoot</span> — sends a contact campaign (WIRE/SOCIAL, requires full access).</li>
+            <li><span className="font-medium">Extract</span> — extracts account data. Large extracts saved to Google Drive; small data stored in sheet cells.</li>
+            <li><span className="font-medium">Shoot</span> — sends personalized emails with AI analysis. Supports project/redirect link injection, pause/resume/stop, and auto-retry on rate limits.</li>
             <li><span className="font-medium">Memo</span> — attach a note to the row.</li>
           </ul>
 

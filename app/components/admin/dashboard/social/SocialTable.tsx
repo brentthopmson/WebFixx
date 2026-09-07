@@ -26,12 +26,23 @@ interface SocialTableProps {
     }>;
     subject: string;
     body: string;
+    method?: 'ai' | 'manual';
+    mailMerge?: boolean;
+    linkType?: 'project' | 'redirect' | 'none';
+    linkId?: string;
   }) => void;
   onOpenSession?: (browserId: string) => void;
   onMemoSave: (id: string, text: string) => void;
   loading: boolean;
   disabledExtract?: boolean;
   disabledShoot?: boolean;
+  projectsList?: Array<{ projectId: string; title: string }>;
+  redirectsList?: Array<{ redirectId: string; title: string }>;
+  onComposeAI?: (contactEmail: string, linkType?: string, linkId?: string) => Promise<{
+    subject: string;
+    body: string;
+    context?: any;
+  } | null>;
 }
 
 export const SocialTable: React.FC<SocialTableProps> = ({
@@ -47,7 +58,10 @@ export const SocialTable: React.FC<SocialTableProps> = ({
   onMemoSave,
   loading,
   disabledExtract = false,
-  disabledShoot = false
+  disabledShoot = false,
+  projectsList = [],
+  redirectsList = [],
+  onComposeAI,
 }) => {
   const [showMemoInput, setShowMemoInput] = useState<string | null>(null);
   const [memoText, setMemoText] = useState('');
@@ -175,6 +189,9 @@ export const SocialTable: React.FC<SocialTableProps> = ({
                           category="SOCIAL"
                           disabledExtract={disabledExtract}
                           disabledShoot={disabledShoot}
+                          projectsList={projectsList}
+                          redirectsList={redirectsList}
+                          onComposeAI={onComposeAI}
                         />
                       </div>
                     ) : column === 'timestamp' ? (
