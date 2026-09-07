@@ -14,7 +14,6 @@ import { SocialTable } from '../components/admin/dashboard/social/SocialTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { authApi, securedApi } from '../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
-import { buildCSVFromContacts } from '../utils/csvNormalizer';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSync, faChartLine, faDownload, faSearch } from '@fortawesome/free-solid-svg-icons';
@@ -352,6 +351,22 @@ export default function Dashboard() {
     }
   };
 
+  const handleComposeAI = async (contactEmail: string, browserId: string) => {
+    try {
+      const result = await securedApi.callBackendFunction({
+        functionName: 'composeAIMessage',
+        browserId,
+        contactEmail,
+      });
+      if (result && result.success && result.subject) {
+        return { subject: result.subject, body: result.body || '' };
+      }
+    } catch (err: any) {
+      console.error('AI compose failed:', err);
+    }
+    return null;
+  };
+
   const handleShootContacts = async (shootData: {
     id: string;
     selectedContacts: Array<{
@@ -364,54 +379,67 @@ export default function Dashboard() {
     }>;
     subject: string;
     body: string;
+    method: 'ai' | 'manual';
+    mailMerge: boolean;
   }) => {
     setLoading(true);
     setActionError(null);
     try {
       const item = hubData.find((row: any) => row.id === shootData.id || row.browserId === shootData.id);
-      const category = (item?.category || 'WIRE') as 'WIRE' | 'BANK' | 'SOCIAL';
-      const browserId = item?.browserId || item?.submissionId || shootData.id;
-      const accountEmail = item?.email || '';
+      if (!item) {
+        setActionError('Profile not found');
+        return;
+      }
 
-      const nameParts = accountEmail.split('@')[0]?.split('.') || [];
-      const sender = {
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        email: accountEmail,
-      };
+      const browserId = item.browserId || item.submissionId || shootData.id;
 
-      const csvText = buildCSVFromContacts(
-        shootData.selectedContacts,
-        category as 'WIRE' | 'SOCIAL',
-        sender,
-        shootData.subject,
-        shootData.body
-      );
+      // AI method: compose messages one by one, then send
+      if (shootData.method === 'ai') {
+        for (const contact of shootData.selectedContacts) {
+          if (!contact.email) continue;
+          try {
+            const composeResult = await securedApi.callBackendFunction({
+              functionName: 'composeAIMessage',
+              browserId,
+              contactEmail: contact.email,
+            });
 
-      const base64Content = btoa(unescape(encodeURIComponent(csvText)));
-      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const fileName = `shoot-${category.toLowerCase()}-${timestamp}.csv`;
+            if (composeResult && composeResult.success && composeResult.subject) {
+              // Send this single contact
+              const sendResult = await securedApi.callBackendFunction({
+                functionName: 'shootEmails',
+                browserId,
+                contacts: [contact],
+                subject: composeResult.subject,
+                body: composeResult.body || '',
+                method: 'ai',
+                mailMerge: false,
+              });
 
-      const result = await securedApi.callBackendFunction({
-        functionName: 'createNewCampaign',
-        projectId: '',
-        accountIds: [browserId],
-        status: 'draft',
-        strategyContext: JSON.stringify({
-          name: shootData.subject || `${category} Campaign ${timestamp}`,
-          channel: category === 'SOCIAL' ? 'social' : 'email',
-          type: 'general',
+              if (sendResult && sendResult.success === false) {
+                setActionError(sendResult.error || 'Failed to send to ' + contact.email);
+                break;
+              }
+            }
+          } catch (err: any) {
+            console.error(`AI compose failed for ${contact.email}:`, err);
+          }
+        }
+      } else {
+        // Manual method: send all at once
+        const result = await securedApi.callBackendFunction({
+          functionName: 'shootEmails',
+          browserId,
+          contacts: shootData.selectedContacts,
           subject: shootData.subject,
           body: shootData.body,
-          deliveryMethod: 'wire',
-        }),
-        fileName,
-        fileContent: base64Content,
-        fileSize: csvText.length,
-        fileMimeType: 'text/csv',
-      });
-      if (result && result.success === false) {
-        setActionError(result.error || featureDisabledMessage(category === 'SOCIAL' ? 'allowInteraction' : 'allowShooting'));
+          method: 'manual',
+          mailMerge: shootData.mailMerge,
+        });
+
+        if (result && result.success === false) {
+          setActionError(result.error || 'Failed to shoot contacts');
+        }
       }
     } catch (error: any) {
       setActionError(error?.message || 'Error shooting contacts.');

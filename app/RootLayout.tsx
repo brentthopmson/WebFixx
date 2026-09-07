@@ -113,6 +113,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           users: false,
           transactions: false,
           rootSupport: false,
+          rootTickets: false,
           rootSettings: false
         });
       }
