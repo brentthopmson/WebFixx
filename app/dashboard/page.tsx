@@ -358,8 +358,9 @@ export default function Dashboard() {
         browserId,
         contactEmail,
       });
-      if (result && result.success && result.subject) {
-        return { subject: result.subject, body: result.body || '' };
+      const r = result as any;
+      if (r && r.success && r.subject) {
+        return { subject: r.subject, body: r.body || '' };
       }
     } catch (err: any) {
       console.error('AI compose failed:', err);
