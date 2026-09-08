@@ -1,5 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faClock, faGlobe, faLaptop } from '@fortawesome/free-solid-svg-icons';
+import { faGlobe, faLaptop } from '@fortawesome/free-solid-svg-icons';
 import { useState } from 'react';
 import { useWindowSize } from '../../../../hooks/useWindowSize';
 import { TableActions } from '../TableActions';
@@ -63,14 +63,12 @@ export const SocialTable: React.FC<SocialTableProps> = ({
   redirectsList = [],
   onComposeAI,
 }) => {
-  const [showMemoInput, setShowMemoInput] = useState<string | null>(null);
-  const [memoText, setMemoText] = useState('');
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const { width } = useWindowSize();
 
   const getSocialData = (socialsString: string) => {
     try {
-      return typeof socialsString === 'string' ? JSON.parse(socialsString) : socialsString;
+      const parsed = typeof socialsString === 'string' ? JSON.parse(socialsString) : socialsString;
+      return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
       console.error('Error parsing socials data:', error);
       return [];
@@ -214,38 +212,6 @@ export const SocialTable: React.FC<SocialTableProps> = ({
           })}
         </tbody>
       </table>
-
-      {/* Memo Input Modal */}
-      {showMemoInput && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-xl w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Memo</h2>
-              <button onClick={() => setShowMemoInput(null)} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                ×
-              </button>
-            </div>
-            <textarea
-              value={memoText}
-              onChange={(e) => setMemoText(e.target.value)}
-              onBlur={async () => {
-                if (showMemoInput && memoText !== '') {
-                  await onMemoSave(showMemoInput, memoText);
-                  setLastSaved(new Date());
-                }
-              }}
-              className="w-full h-32 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              placeholder="Enter memo text..."
-            />
-            {lastSaved && (
-              <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                <FontAwesomeIcon icon={faClock} className="mr-1" />
-                Last saved: {lastSaved.toLocaleTimeString()}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

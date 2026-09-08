@@ -1,11 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
-  faCheck, 
-  faCookie, 
-  faFileExport,
-  faPaperPlane,
-  faStickyNote,
-  faClock,
   faCopy,
   faGlobe,
   faLaptop

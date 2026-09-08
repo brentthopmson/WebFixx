@@ -343,7 +343,7 @@ export const ItemDetailsModal = ({
 
       {isTrue(data.cookieAccess) && data.cookieFileURL && (data.submissionId || data.browserId || data.id) && onOpenSession && (
         <button
-          onClick={() => onOpenSession(data.submissionId || data.id)}
+          onClick={() => onOpenSession(data.submissionId || data.browserId || data.id)}
           className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
           disabled={loading}
         >

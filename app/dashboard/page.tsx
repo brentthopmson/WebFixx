@@ -170,8 +170,6 @@ export default function Dashboard() {
     });
   }, [appData?.data?.hub]);
 
-  console.log('Processed Hub Data:', hubData);
-
   const showNoDataMessage = useMemo(() => {
     return !appData?.data?.hub?.data || hubData.length === 0;
   }, [appData?.data?.hub?.data, hubData.length]);

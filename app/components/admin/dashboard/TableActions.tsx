@@ -87,7 +87,7 @@ export const TableActions = ({
       }, 1000);
     }
     return () => clearTimeout(saveTimeout);
-  }, [memoText, item.id, item.memo, showMemoInput]);
+  }, [memoText, item.id, item.memo, showMemoInput, onMemoSave]);
 
   // Determine if we should show the shoot contacts button
   const hasExtract = item[`${category.toLowerCase()}Extract`];
@@ -137,7 +137,7 @@ export const TableActions = ({
           onComposeAI={onComposeAI}
           loading={loading}
           item={item}
-          category={category}
+          category={category as 'WIRE' | 'SOCIAL'}
           projectsList={projectsList}
           redirectsList={redirectsList}
         />

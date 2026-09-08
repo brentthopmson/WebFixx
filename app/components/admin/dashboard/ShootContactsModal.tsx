@@ -34,7 +34,7 @@ interface DraftData {
 }
 
 interface SendResult {
-  status: 'pending' | 'sending' | 'sent' | 'failed' | 'rate_limited';
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'rate_limited' | 'skipped';
   sentAt?: string;
   error?: string;
   retryCount?: number;
@@ -136,7 +136,6 @@ export const ShootContactsModal = ({
   const [sendProgress, setSendProgress] = useState({ sent: 0, failed: 0, total: 0 });
 
   // Refs for cleanup
-  const abortRef = useRef(false);
   const pauseRef = useRef(false);
   const stopRef = useRef(false);
 
@@ -191,7 +190,6 @@ export const ShootContactsModal = ({
     setIsPaused(false);
     setIsStopped(false);
     setSendProgress({ sent: 0, failed: 0, total: 0 });
-    abortRef.current = false;
     pauseRef.current = false;
     stopRef.current = false;
   }, []);
@@ -264,32 +262,41 @@ export const ShootContactsModal = ({
   const startAnalysis = async () => {
     if (!onComposeAI) return;
     setAnalyzing(true);
-    const selected = Array.from(selectedIds).map(i => contacts[i]).filter(c => c?.email);
-    setAnalysisProgress({ current: 0, total: selected.length });
+    const selectedIndices = Array.from(selectedIds);
+    const contactsWithEmail = selectedIndices.filter(i => contacts[i]?.email);
+    setAnalysisProgress({ current: 0, total: contactsWithEmail.length });
 
     // Initialize all as pending
     const initialDrafts: Record<number, DraftData> = {};
-    Array.from(selectedIds).forEach(i => {
+    selectedIndices.forEach(i => {
       initialDrafts[i] = { subject: '', body: '', status: 'pending' };
     });
     setDrafts(initialDrafts);
 
-    for (let idx = 0; idx < selected.length; idx++) {
+    let analyzed = 0;
+    for (const originalIdx of selectedIndices) {
       if (stopRef.current) break;
       while (pauseRef.current && !stopRef.current) {
         await new Promise(r => setTimeout(r, 500));
       }
       if (stopRef.current) break;
 
-      const contact = selected[idx];
-      const originalIdx = Array.from(selectedIds)[idx];
+      const contact = contacts[originalIdx];
+      if (!contact?.email) {
+        setDrafts(prev => ({
+          ...prev,
+          [originalIdx]: { ...prev[originalIdx], status: 'failed', error: 'No email address' }
+        }));
+        continue;
+      }
 
       // Mark as composing
       setDrafts(prev => ({
         ...prev,
         [originalIdx]: { ...prev[originalIdx], status: 'composing' }
       }));
-      setAnalysisProgress({ current: idx + 1, total: selected.length });
+      analyzed++;
+      setAnalysisProgress({ current: analyzed, total: contactsWithEmail.length });
 
       try {
         const result = await onComposeAI(
@@ -387,9 +394,8 @@ export const ShootContactsModal = ({
         if (draft?.status === 'skipped') {
           setResults(prev => ({
             ...prev,
-            [originalIdx]: { status: 'sent', sentAt: new Date().toISOString() }
+            [originalIdx]: { status: 'skipped' as const }
           }));
-          sent++;
           setSendProgress({ sent, failed, total });
           continue;
         }
