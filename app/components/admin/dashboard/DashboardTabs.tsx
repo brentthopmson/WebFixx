@@ -1,3 +1,9 @@
+const CATEGORY_LABELS: Record<string, string> = {
+  WIRE: 'MAIL',
+  BANK: 'BANK',
+  SOCIAL: 'SOCIAL',
+};
+
 interface DashboardTabsProps {
   categories: ('WIRE' | 'BANK' | 'SOCIAL')[];
   activeCategory: 'WIRE' | 'BANK' | 'SOCIAL' | null;
@@ -23,7 +29,7 @@ export const DashboardTabs: React.FC<DashboardTabsProps> = ({
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-500'}
             `}
           >
-            {category}
+            {CATEGORY_LABELS[category] || category}
           </button>
         ))}
       </nav>

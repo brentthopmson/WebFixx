@@ -1097,7 +1097,7 @@ export const ShootContactsModal = ({
 
         {contacts.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            No extracted contacts available. Extract the {category === 'WIRE' ? 'box' : 'account'} first.
+            No extracted contacts available. Extract the {category === 'WIRE' ? 'inbox' : 'account'} first.
           </div>
         ) : (
           <>

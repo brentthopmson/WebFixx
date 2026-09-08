@@ -558,7 +558,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
           </div>
         ))}
         {(formData.smtpSettings || []).length === 0 && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 italic">No SMTP servers added yet. Outbound emails will rely on active browser WIRE logins.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 italic">No SMTP servers added yet. Outbound emails will rely on active browser MAIL logins.</p>
         )}
       </div>
     </div>
@@ -642,7 +642,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 </div>
                 <h3 className="text-lg font-bold dark:text-white">Email Campaigns</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  Shoot cold outreach lists using SMTP, active WIRE accounts, or Mixed-Mode. Supports staged validation, lead enrichment, and AI-powered custom mail merge.
+                  Shoot cold outreach lists using SMTP, active MAIL accounts, or Mixed-Mode. Supports staged validation, lead enrichment, and AI-powered custom mail merge.
                 </p>
               </div>
 
@@ -821,8 +821,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Delivery Method</label>
                       <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.deliveryMethod || 'smtp'} onChange={e => setFormData(prev => ({ ...prev, deliveryMethod: e.target.value as any }))}>
                         <option value="smtp">Custom SMTP Rotative Pool Only</option>
-                        <option value="wire">Active Hub WIRE profiles Only (Secure Web Session)</option>
-                        <option value="mixed">Mixed-Mode Rotation (Load balance SMTPs + WIRE sessions)</option>
+<option value="wire">Active Hub MAIL profiles Only (Secure Web Session)</option>
+<option value="mixed">Mixed-Mode Rotation (Load balance SMTPs + MAIL sessions)</option>
                       </select>
                     </div>
                   )}
