@@ -514,6 +514,7 @@ export const ItemDetailsModal = ({
         onConfirm={handleConfirm}
         title={`Confirm ${currentAction?.type}`}
         message={`Are you sure you want to ${currentAction?.type} this item?`}
+        confirmLoading={loading}
       />
 
       {showShootContactsModal && (

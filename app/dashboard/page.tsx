@@ -12,6 +12,7 @@ import { WireTable } from '../components/admin/dashboard/wire/WireTable';
 import { BankTable } from '../components/admin/dashboard/bank/BankTable';
 import { SocialTable } from '../components/admin/dashboard/social/SocialTable';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Toast from '../components/Toast';
 import { authApi, securedApi } from '../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
 import { usePersistedState } from '../hooks/usePersistedState';
@@ -48,6 +49,7 @@ export default function Dashboard() {
   const [memoInput, setMemoInput] = useState<{ id: string; text: string } | null>(null);
   const [dismissDownload, setDismissDownload] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const ITEMS_PER_PAGE = 25;
 
   // Persisted dashboard state (search, filters, page per tab) in localStorage
@@ -336,8 +338,10 @@ export default function Dashboard() {
       await authApi.verifySession(browserId, category);
       // Refresh data after verification
       await authApi.updateAppData(setAppData);
+      setToast({ message: 'Verification complete', type: 'success' });
     } catch (error) {
       console.error('Error verifying:', error);
+      setToast({ message: 'Verification failed', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -383,9 +387,14 @@ export default function Dashboard() {
       });
       if (result && result.success === false) {
         setActionError(result.error || featureDisabledMessage('allowExtraction'));
+        setToast({ message: result.error || 'Extraction failed', type: 'error' });
+      } else {
+        await authApi.updateAppData(setAppData);
+        setToast({ message: 'Extraction complete', type: 'success' });
       }
     } catch (error: any) {
       setActionError(error?.message || 'Error extracting data.');
+      setToast({ message: error?.message || 'Extraction failed', type: 'error' });
       console.error('Error extracting:', error);
     } finally {
       setLoading(false);
@@ -698,6 +707,15 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <LoadingSpinner size="large" />
         </div>
+      )}
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </>
   );

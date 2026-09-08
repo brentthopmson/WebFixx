@@ -1,4 +1,6 @@
 import React from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -9,6 +11,7 @@ interface ConfirmationModalProps {
   confirmText?: string;
   cancelText?: string;
   confirmDisabled?: boolean;
+  confirmLoading?: boolean;
   children?: React.ReactNode;
 }
 
@@ -21,7 +24,8 @@ export default function ConfirmationModal({
   children,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
-  confirmDisabled = false
+  confirmDisabled = false,
+  confirmLoading = false
 }: ConfirmationModalProps) {
   if (!isOpen) return null;
 
@@ -36,16 +40,18 @@ export default function ConfirmationModal({
         <div className="flex justify-end space-x-2">
           <button 
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded hover:bg-gray-300 hover:dark:bg-gray-600"
+            disabled={confirmLoading}
+            className={`px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded hover:bg-gray-300 hover:dark:bg-gray-600 ${confirmLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {cancelText}
           </button>
           <button 
             onClick={onConfirm}
-            disabled={confirmDisabled}
-            className={`px-4 py-2 bg-red-500 text-white rounded ${confirmDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-600 dark:hover:bg-red-700'}`}
+            disabled={confirmDisabled || confirmLoading}
+            className={`px-4 py-2 bg-red-500 text-white rounded flex items-center gap-2 ${confirmDisabled || confirmLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-600 dark:hover:bg-red-700'}`}
           >
-            {confirmText}
+            {confirmLoading && <FontAwesomeIcon icon={faSpinner} className="fa-spin" />}
+            {confirmLoading ? 'Processing...' : confirmText}
           </button>
         </div>
       </div>
