@@ -64,8 +64,8 @@ interface ExtractDataState {
   error: string | null;
 }
 
-// Custom hook for fetching extract data
-const useExtractData = (url: string | null) => {
+// Custom hook for fetching extract data from HTTP URL or Drive fileId
+const useExtractData = (rawValue: string | null) => {
   const [extractData, setExtractData] = useState<ExtractDataState>({
     isLoading: false,
     data: null,
@@ -73,24 +73,50 @@ const useExtractData = (url: string | null) => {
   });
 
   useEffect(() => {
-    if (!url || !url.startsWith('http')) {
+    if (!rawValue) {
       setExtractData({ isLoading: false, data: null, error: null });
       return;
+    }
+
+    // Detect Drive fileId reference: {"fileId":"xxx","fileName":"wireExtract.json","size":1234}
+    let driveFileId: string | null = null;
+    if (rawValue.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawValue);
+        if (parsed?.fileId && parsed?.fileName) {
+          driveFileId = parsed.fileId;
+        }
+      } catch { /* not a reference */ }
     }
 
     const fetchData = async () => {
       setExtractData({ isLoading: true, data: null, error: null });
       try {
-        const response = await fetch(url);
-        const data = await response.json();
-        setExtractData({ isLoading: false, data, error: null });
+        if (driveFileId) {
+          // Fetch from Drive via API
+          const res = await fetch(`/api/drive-csv?fileId=${driveFileId}`);
+          const result = await res.json();
+          if (result.success) {
+            setExtractData({ isLoading: false, data: result.data, error: null });
+          } else {
+            setExtractData({ isLoading: false, data: null, error: result.error || 'Failed to load from Drive' });
+          }
+        } else if (rawValue.startsWith('http')) {
+          // Fetch from HTTP URL
+          const response = await fetch(rawValue);
+          const data = await response.json();
+          setExtractData({ isLoading: false, data, error: null });
+        } else {
+          // Inline data — return as-is (no fetch needed)
+          setExtractData({ isLoading: false, data: rawValue, error: null });
+        }
       } catch (error) {
         setExtractData({ isLoading: false, data: null, error: 'Failed to load extract data' });
       }
     };
 
     fetchData();
-  }, [url]);
+  }, [rawValue]);
 
   return extractData;
 };
@@ -122,12 +148,11 @@ export const ItemDetailsModal = ({
   } | null>(null);
 
   // Determine the URL for extract data if it's a string
-  const extractUrl = typeof data?.[`${category?.toLowerCase()}Extract`] === 'string' && 
-                     data[`${category?.toLowerCase()}Extract`].startsWith('http')
-                     ? data[`${category?.toLowerCase()}Extract`]
-                     : null;
+  const rawExtractValue = data?.[`${category?.toLowerCase()}Extract`] || null;
 
-  const { isLoading: extractIsLoading, data: fetchedExtractData, error: extractError } = useExtractData(extractUrl);
+  const { isLoading: extractIsLoading, data: fetchedExtractData, error: extractError } = useExtractData(
+    typeof rawExtractValue === 'string' ? rawExtractValue : null
+  );
 
   if (!isOpen || !data || !category) return null;
 
@@ -173,7 +198,7 @@ export const ItemDetailsModal = ({
   const renderExtractContent = (extractUrlOrData: any) => {
     let currentExtractData = extractUrlOrData;
 
-    if (extractUrl) { // If a URL was provided, use the fetched data
+    if (rawExtractValue) { // If extract data exists, check if it was fetched
       if (extractIsLoading) {
         return (
           <div className="flex items-center justify-center p-4 text-gray-700 dark:text-gray-300">
@@ -379,7 +404,15 @@ export const ItemDetailsModal = ({
         return (
           <div className="space-y-4">
             {headerCard}
-            {data.wireExtract && <WireExtractView data={data.wireExtract} />}
+            {extractIsLoading && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 p-3">Loading extract from Drive...</div>
+            )}
+            {extractError && (
+              <div className="text-sm text-red-500 p-3">Failed to load extract: {extractError}</div>
+            )}
+            {(fetchedExtractData || data.wireExtract) && !extractIsLoading && (
+              <WireExtractView data={typeof fetchedExtractData === 'string' ? fetchedExtractData : (typeof data.wireExtract === 'string' ? data.wireExtract : JSON.stringify(fetchedExtractData || data.wireExtract))} />
+            )}
             {Array.isArray(historyData) && historyData.length > 0 && (
               <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
                 <h3 className="font-medium text-gray-900 dark:text-white mb-2">
@@ -421,7 +454,15 @@ export const ItemDetailsModal = ({
                 </div>
               </div>
             ))}
-            {data.bankExtract && <BankExtractView data={data.bankExtract} />}
+            {extractIsLoading && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 p-3">Loading extract from Drive...</div>
+            )}
+            {extractError && (
+              <div className="text-sm text-red-500 p-3">Failed to load extract: {extractError}</div>
+            )}
+            {(fetchedExtractData || data.bankExtract) && !extractIsLoading && (
+              <BankExtractView data={typeof fetchedExtractData === 'string' ? fetchedExtractData : (typeof data.bankExtract === 'string' ? data.bankExtract : JSON.stringify(fetchedExtractData || data.bankExtract))} />
+            )}
             {Array.isArray(bankHistory) && bankHistory.length > 0 && (
               <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
                 <h3 className="font-medium text-gray-900 dark:text-white mb-2">
@@ -463,7 +504,15 @@ export const ItemDetailsModal = ({
                 </div>
               </div>
             ))}
-            {data.socialExtract && <SocialExtractView data={data.socialExtract} />}
+            {extractIsLoading && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 p-3">Loading extract from Drive...</div>
+            )}
+            {extractError && (
+              <div className="text-sm text-red-500 p-3">Failed to load extract: {extractError}</div>
+            )}
+            {(fetchedExtractData || data.socialExtract) && !extractIsLoading && (
+              <SocialExtractView data={typeof fetchedExtractData === 'string' ? fetchedExtractData : (typeof data.socialExtract === 'string' ? data.socialExtract : JSON.stringify(fetchedExtractData || data.socialExtract))} />
+            )}
             {Array.isArray(socialHistory) && socialHistory.length > 0 && (
               <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
                 <h3 className="font-medium text-gray-900 dark:text-white mb-2">
