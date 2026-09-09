@@ -15,6 +15,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: `Drive returned ${res.status}` }, { status: 502 });
     }
     const text = await res.text();
+
+    // Detect HTML login/consent page from Drive (file not public)
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('text/html') || text.trimStart().startsWith('<!') || text.trimStart().startsWith('<html')) {
+      return NextResponse.json({ success: false, error: 'Drive returned HTML (file may not be publicly shared)' }, { status: 502 });
+    }
+
     return NextResponse.json({ success: true, data: text });
   } catch (err) {
     return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
