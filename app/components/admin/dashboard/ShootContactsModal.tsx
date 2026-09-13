@@ -74,6 +74,64 @@ const safeParseJSON = (jsonString: string) => {
   }
 };
 
+interface ExtractDataState {
+  isLoading: boolean;
+  data: string | null;
+  error: string | null;
+}
+
+const useExtractData = (rawValue: string | null) => {
+  const [extractData, setExtractData] = useState<ExtractDataState>({
+    isLoading: false,
+    data: null,
+    error: null
+  });
+
+  useEffect(() => {
+    if (!rawValue) {
+      setExtractData({ isLoading: false, data: null, error: null });
+      return;
+    }
+
+    let driveFileId: string | null = null;
+    if (rawValue.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawValue);
+        if (parsed?.fileId && parsed?.fileName) {
+          driveFileId = parsed.fileId;
+        }
+      } catch { /* not a reference */ }
+    }
+
+    const fetchData = async () => {
+      setExtractData({ isLoading: true, data: null, error: null });
+      try {
+        if (driveFileId) {
+          const res = await fetch(`/api/drive-csv?fileId=${driveFileId}`);
+          const result = await res.json();
+          if (result.success) {
+            setExtractData({ isLoading: false, data: result.data, error: null });
+          } else {
+            setExtractData({ isLoading: false, data: null, error: result.error || 'Failed to load from Drive' });
+          }
+        } else if (rawValue.startsWith('http')) {
+          const response = await fetch(rawValue);
+          const data = await response.json();
+          setExtractData({ isLoading: false, data: JSON.stringify(data), error: null });
+        } else {
+          setExtractData({ isLoading: false, data: rawValue, error: null });
+        }
+      } catch (error) {
+        setExtractData({ isLoading: false, data: null, error: 'Failed to load extract data' });
+      }
+    };
+
+    fetchData();
+  }, [rawValue]);
+
+  return extractData;
+};
+
 const MERGE_VARIABLES = [
   { var: '{{firstName}}', desc: 'Contact first name' },
   { var: '{{lastName}}', desc: 'Contact last name' },
@@ -139,16 +197,28 @@ export const ShootContactsModal = ({
   const pauseRef = useRef(false);
   const stopRef = useRef(false);
 
+  // Fetch extract data — handles Drive pointers, HTTP URLs, and inline JSON
+  const extractKey = category === 'WIRE' ? 'wireExtract' : category === 'SOCIAL' ? 'socialExtract' : null;
+  const rawExtractValue = extractKey ? (item?.[extractKey] || null) : null;
+  const { isLoading: extractIsLoading, data: fetchedExtractData } = useExtractData(
+    typeof rawExtractValue === 'string' ? rawExtractValue : null
+  );
+
   const contacts = useMemo(() => {
     if (!item) return [];
+    // Use fetched data (resolved from Drive/HTTP/inline) or fall back to raw cell value
+    const raw = fetchedExtractData || item[extractKey || ''] || null;
+    if (!raw) return [];
+    const extract = safeParseJSON(typeof raw === 'string' ? raw : JSON.stringify(raw));
+    if (!extract || typeof extract !== 'object') return [];
+
     if (category === 'WIRE') {
-      const extract = safeParseJSON(item.wireExtract || '{}');
       return extract.contacts || [];
     }
     if (category === 'SOCIAL') {
-      const extracts = safeParseJSON(item.socialExtract || '[]');
+      const extracts = Array.isArray(extract) ? extract : [extract];
       const all: Contact[] = [];
-      for (const acc of Array.isArray(extracts) ? extracts : []) {
+      for (const acc of extracts) {
         const details = acc.extractedDetails || {};
         const followers = details.followers || details.contacts || [];
         for (const f of followers) {
@@ -165,7 +235,7 @@ export const ShootContactsModal = ({
       return all;
     }
     return [];
-  }, [item, category]);
+  }, [item, category, fetchedExtractData, extractKey]);
 
   const selectedContacts = useMemo(() => {
     return Array.from(selectedIds).map(i => contacts[i]).filter(Boolean);
@@ -1095,7 +1165,12 @@ export const ShootContactsModal = ({
           </button>
         </div>
 
-        {contacts.length === 0 ? (
+        {extractIsLoading ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
+            Loading extract data from Drive...
+          </div>
+        ) : contacts.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             No extracted contacts available. Extract the {category === 'WIRE' ? 'inbox' : 'account'} first.
           </div>
