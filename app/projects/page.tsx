@@ -208,7 +208,7 @@ export default function ProjectLinks() {
               flaggedVisits: project[columnIndices.flaggedVisits] || 0,
               expiryDate: project[columnIndices.expiryDate] || '',
               response: filePointer ? (typeof rawResponse === 'string' ? rawResponse : JSON.stringify(filePointer)) : (rawResponse || '[]'),
-              responseCount: filePointer ? (filePointer.count || 0) : parsedResponses.length,
+              responseCount: filePointer ? (filePointer.count || filePointer.totalResponses || 0) : parsedResponses.length,
               responses: filePointer ? [] : parsedResponses.map(response => 
                 typeof response === 'string' ? response : JSON.stringify(response)
               ),

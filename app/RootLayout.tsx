@@ -323,7 +323,6 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
                            pathname !== '/' && 
                            pathname !== '/account' && 
                            pathname !== '/invalid' && 
-                           pathname !== '/root' && 
                            pathname !== '/reset-password' && 
                            pathname !== '/verify' && 
                            pathname !== '/admin';
