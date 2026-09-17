@@ -201,32 +201,51 @@ function generateTraceId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// Shared in-flight memo for getAppDataLite. Session restore (RootLayout), the
-// AppContext mount, and the dashboard "Get Update" all fetch the same heavy
-// bundle; coalescing means only ONE backend request fires at a time.
+// Shared in-flight memo and TTL cache for getAppDataLite.
 let _inflightAppDataLite: Promise<SecuredApiResponse> | null = null;
+let _lastAppDataCache: { data: SecuredApiResponse; timestamp: number } | null = null;
+const APPDATA_CACHE_TTL = 30000; // 30 seconds cache TTL to prevent 429 rate limits
 
 async function _fetchAppDataLite(token: string, forceRefresh: boolean): Promise<SecuredApiResponse> {
+  const now = Date.now();
+  if (!forceRefresh && _lastAppDataCache && (now - _lastAppDataCache.timestamp < APPDATA_CACHE_TTL)) {
+    return _lastAppDataCache.data;
+  }
+
   if (!_inflightAppDataLite) {
     _inflightAppDataLite = (async () => {
-      const response = await fetch(`${API_BASE_URL}/backend-function`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-        },
-        body: objectToFormData({
-          token,
-          traceId: generateTraceId(),
-          functionName: 'getAppDataLite',
-          forceRefresh: forceRefresh ? 'true' : 'false',
-        }),
-      });
+      let retries = 2;
+      let delay = 2000;
+      let response: Response | null = null;
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
+      while (retries >= 0) {
+        response = await fetch(`${API_BASE_URL}/backend-function`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
+          body: objectToFormData({
+            token,
+            traceId: generateTraceId(),
+            functionName: 'getAppDataLite',
+            forceRefresh: forceRefresh ? 'true' : 'false',
+          }),
+        });
+
+        if (response.status === 429 && retries > 0) {
+          retries--;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
+        }
+        break;
+      }
+
+      if (!response || !response.ok) {
+        const errorData = await response?.json().catch(() => null);
         throw new BackendError(
-          (errorData && errorData.error) || `HTTP error! status: ${response.status}`,
+          (errorData && errorData.error) || `HTTP error! status: ${response?.status}`,
           errorData && errorData.details
         );
       }
@@ -235,7 +254,9 @@ async function _fetchAppDataLite(token: string, forceRefresh: boolean): Promise<
       if (!text) {
         throw new Error('Empty response from server');
       }
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      _lastAppDataCache = { data: parsed, timestamp: Date.now() };
+      return parsed;
     })().finally(() => {
       _inflightAppDataLite = null;
     });
