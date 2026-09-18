@@ -42,14 +42,12 @@ export default function AdminSettingsPanel() {
     const next = isOnFlag(row.settingsValue1) ? 'FALSE' : 'TRUE';
     setSavingKey(row.settingsKey);
     setError(null);
-    console.log('[SettingsSave] toggling flag', { key: row.settingsKey, current: row.settingsValue1, next });
     try {
       const result = await securedApi.callBackendFunction({
         functionName: 'updateSetting',
         settingsKey: row.settingsKey,
         value1: next
       });
-      console.log('[SettingsSave] flag result', { key: row.settingsKey, next, result: result?.success, error: result?.error });
     } catch (e: any) {
       console.error('[SettingsSave] flag error', { key: row.settingsKey, error: e?.message });
       setError(e?.message || 'Failed to update setting');
@@ -63,7 +61,6 @@ export default function AdminSettingsPanel() {
     const edit = edits[row.settingsKey] || { v1: String(row.settingsValue1 ?? ''), v2: String(row.settingsValue2 ?? '') };
     setSavingKey(row.settingsKey);
     setError(null);
-    console.log('[SettingsSave] saving setting', { key: row.settingsKey, value1: edit.v1, value2: edit.v2 });
     try {
       const result = await securedApi.callBackendFunction({
         functionName: 'updateSetting',
@@ -71,7 +68,6 @@ export default function AdminSettingsPanel() {
         value1: edit.v1,
         value2: edit.v2
       });
-      console.log('[SettingsSave] setting result', { key: row.settingsKey, result: result?.success, error: result?.error });
     } catch (e: any) {
       console.error('[SettingsSave] setting error', { key: row.settingsKey, error: e?.message });
       setError(e?.message || 'Failed to update setting');

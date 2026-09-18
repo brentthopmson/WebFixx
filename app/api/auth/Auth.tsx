@@ -64,7 +64,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           } catch (error) {
               attempt++;
               if (attempt < retries) {
-                  console.log(`Retrying... attempt ${attempt}`);
                   await new Promise(resolve => setTimeout(resolve, 60000)); // 60,000 milliseconds = 1 minute
               } else {
                   console.error("Failed to fetch after multiple attempts:", error);

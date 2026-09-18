@@ -68,7 +68,6 @@ export const BankTable: React.FC<BankTableProps> = ({
 
   const handleCopy = (text: string, type: string) => {
     onCopy(text);
-    console.log(`${type} copied to clipboard`);
   };
 
   const columns = getColumns();

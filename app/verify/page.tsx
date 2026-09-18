@@ -57,35 +57,23 @@ export default function VerifyPage() {
   }, [appData?.user?.darkMode, appData?.isAuthenticated]);
 
   const handleResendEmail = async () => {
-    console.log('Starting resend email process...');
     setSendingEmail(true);
     setError("");
 
     try {
       const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
-      console.log('Resend token:', token ? 'Found' : 'Not found');
-      console.log('Resend user email:', appData?.user?.email);
 
       if (!token || !appData?.user?.email) {
-        console.log('Missing token or email for resend, redirecting');
         router.replace("/");
         return;
       }
-
-      console.log('Sending resend request with:', {
-        functionName: 'sendVerificationEmail',
-        userEmail: appData.user.email
-      });
 
       const response = await securedApi.callBackendFunction({
         functionName: 'sendVerificationEmail',
         userEmail: appData.user.email
       });
 
-      console.log('Resend email response:', response);
-
       if (response.success) {
-        console.log('Resend successful');
         setEmailSent(true);
         setCanResend(false);
         const newTimestamp = Date.now() + 300000;
@@ -176,8 +164,6 @@ export default function VerifyPage() {
       token: document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop(),
       userEmail: appData?.user?.email
     };
-
-    console.log('Verification payload:', payload);
 
     if (!appData?.user?.email) {
       setError("User information not found");

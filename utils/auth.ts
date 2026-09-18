@@ -577,12 +577,12 @@ export const authApi = {
           }
         }
         
-        console.info(`[req] functionName=updateAppData traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} size=${text.length}`);
+        // silent
         return result;
       } catch (e) {
       }
     } catch (error) {
-      console.info(`[req] functionName=updateAppData traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} error=${(error as Error).message}`);
+      // silent
       // console.error('Failed to update app data:', error); // Removed console.error
       throw error;
     }
@@ -683,10 +683,10 @@ export const securedApi = {
         }
       }
 
-      console.info(`[req] functionName=${fnName} traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} size=${JSON.stringify(result).length}`);
+      // silent
       return result;
     } catch (error) {
-      console.info(`[req] functionName=${fnName} traceId=${traceId} dur_ms=${(performance.now() - t0).toFixed(0)} error=${(error as Error).message}`);
+      // silent
       // Check for auth errors → trigger immediate logout
       if (error instanceof BackendError && 
           (error.message.includes('token') || error.message.includes('auth') || 

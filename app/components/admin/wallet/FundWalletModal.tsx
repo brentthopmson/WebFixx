@@ -74,7 +74,6 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
       const result = await authApi.updateAppData(setAppData);
       
       if (!result?.data?.transactions) {
-        console.log('No transactions array in response');
         return;
       }
 
@@ -246,7 +245,6 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
     const user = appData?.user;
     if (!user) return;
   
-    console.log("Handling proceed with current step: ", currentStep);
     setIsLoading(true);
     
     if (currentStep === 'amount' && amount && agreed) {
@@ -255,10 +253,7 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
           functionName: 'getCurrentValue',
           amount,
         };
-        console.log('Data sent to API (getCurrentValue):', requestData);
-  
         const apiResponse = await securedApi.callBackendFunction(requestData);
-        console.log('API Response:', apiResponse);
   
         if (!apiResponse || !apiResponse.data) {
           console.error('API response does not contain the expected data:', apiResponse);
@@ -267,7 +262,6 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
         }
   
         const response = convertToPaymentResponse(apiResponse);
-        console.log("Converted payment response:", response);
   
         if (response.success && response.data) {
           const paymentData: PaymentDetails = {
@@ -320,10 +314,7 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
           currency: selectedMethod,
           orderId: paymentDetails.orderId,
         };
-        console.log('Data sent to API (initializePayment):', requestData);
-  
         const apiResponse = await securedApi.callBackendFunction(requestData);
-        console.log('Payment Initialization Response:', apiResponse);
   
         if (!apiResponse || !apiResponse.data) {
           console.error('API response does not contain the expected data:', apiResponse);
@@ -332,7 +323,6 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
         }
   
         const response = convertToPaymentResponse(apiResponse);
-        console.log("Converted payment initialization response:", response);
   
         if (response.success && response.data) {
           const userAddress = selectedMethod === 'BTC' 

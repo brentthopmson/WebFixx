@@ -231,10 +231,7 @@ export default function Campaign() {
         const rawData = appData?.data?.campaigns?.data || [];
         const rawHeaders = appData?.data?.campaigns?.headers || [];
         // [DIAG] campaign list debugging
-        console.log('[Campaigns][DIAG] appData present:', !!appData, '| appData.data keys:', appData?.data ? Object.keys(appData.data) : 'NO appData.data');
-        console.log('[Campaigns][DIAG] raw campaigns field:', appData?.data?.campaigns);
-        console.log('[Campaigns][DIAG] rawData.length =', rawData.length, '| rawHeaders =', rawHeaders);
-        console.log('[Campaigns][DIAG] refreshAttemptedRef =', refreshAttemptedRef.current);
+        // silent
         if (rawData.length === 0 && appData?.data && !refreshAttemptedRef.current) {
           refreshAttemptedRef.current = true;
           try {
@@ -248,7 +245,7 @@ export default function Campaign() {
           refreshAttemptedRef.current = false;
         }
         const transformed = transformCampaignData(rawData, rawHeaders);
-        console.log('[Campaigns][DIAG] transformed count =', transformed.length, transformed.slice(0, 2));
+        // silent
         setCampaigns(transformed);
       } catch (error) {
         console.error('[Campaigns][DIAG] Error transforming campaign data:', error);
@@ -344,10 +341,7 @@ export default function Campaign() {
 
       const isUpdateExisting = campaignId.length > 0;
       const strategyContext = buildStrategyContext(newCampaign);
-      console.log(`[Campaign] Sending to backend — ${isUpdateExisting ? 'UPDATE' : 'CREATE'}`, {
-        campaignId: campaignId || '(new)',
-        strategyContextLength: strategyContext.length
-      });
+      // silent
 
       if (isUpdate) {
         response = await securedApi.callBackendFunction({
@@ -367,7 +361,7 @@ export default function Campaign() {
         });
       }
 
-      console.log('[Campaign] Backend response:', response);
+      // silent
 
       if (response.success) {
         toast.success(isUpdate ? 'Campaign Updated' : 'Campaign Created', {

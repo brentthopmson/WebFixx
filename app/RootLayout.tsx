@@ -202,8 +202,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
             // pointers (heavy responses loaded lazily on demand).
             const userData = response.user;
             const data = response.appData || {};
-            console.log('[RestoreSession] response keys:', Object.keys(response), 'has campaigns:', !!data.campaigns);
-            console.log('[RestoreSession] campaigns data:', data.campaigns);
+            // silent
             // Only update if we have valid user data
             setAppData({
               user: userData,

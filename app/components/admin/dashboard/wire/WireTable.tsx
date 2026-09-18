@@ -101,8 +101,6 @@ export const WireTable: React.FC<WireTableProps> = ({
 
   const handleCopy = (text: string, type: string) => {
     onCopy(text);
-    // You could add a toast notification here
-    console.log(`${type} copied to clipboard`);
   };
 
   const handleDomainClick = (e: React.MouseEvent, domain: string, mxRecord: any) => {

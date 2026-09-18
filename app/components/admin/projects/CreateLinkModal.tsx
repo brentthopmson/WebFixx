@@ -335,7 +335,6 @@ export default function CreateLinkModal({ onClose, onSave, addresses }: CreateLi
       console.error("Telegram verification unexpected error:", error); // Debug log
       setTelegramVerificationError('An unexpected error occurred during verification');
     } finally {
-      console.log("handleTelegramVerification finally block executed. Setting isProcessing to false."); // Debug log
       setIsProcessing(false);
     }
   };

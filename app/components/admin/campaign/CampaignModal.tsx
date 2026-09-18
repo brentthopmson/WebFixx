@@ -355,7 +355,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         draftContext.smtpSettings = [];
         draftContext.deliveryMethod = 'smtp';
       }
-      console.log(`[CampaignModal] Creating draft campaign with normalized CSV — channel=${channel} name=${campaignName}`);
       const response = await securedApi.callBackendFunction({
         functionName: 'createNewCampaign',
         projectId: '',
@@ -370,7 +369,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         userId: appData?.user?.userId || ''
       });
 
-      console.log('[CampaignModal] Draft creation response:', response);
       if (!response.success) {
         setUploadError(response.error || 'Failed to create draft campaign.');
         setLoading(false);
@@ -380,7 +378,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       const draftId = (response as any)?.campaignId || (response as any)?.id || '';
       const fileUrl = (response as any)?.fileUrl || '';
       if (draftId) {
-        console.log(`[CampaignModal] Draft campaign created — ID: ${draftId} fileUrl: ${fileUrl}`);
+        // silent
       } else {
         console.error('[CampaignModal] Draft creation returned no campaignId:', response);
       }

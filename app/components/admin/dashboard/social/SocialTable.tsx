@@ -98,7 +98,6 @@ export const SocialTable: React.FC<SocialTableProps> = ({
 
   const handleCopy = (text: string, type: string) => {
     onCopy(text);
-    console.log(`${type} copied to clipboard`);
   };
 
   const columns = getColumns();

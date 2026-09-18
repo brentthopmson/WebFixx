@@ -150,7 +150,7 @@ export default function Home() {
           referrer: typeof document !== 'undefined' ? document.referrer : '',
         });
       } catch (e) {
-        console.log('[VisitBeacon] skipped (non-fatal):', (e as Error)?.message);
+        // non-fatal
       }
     })();
   }, [ipData]);

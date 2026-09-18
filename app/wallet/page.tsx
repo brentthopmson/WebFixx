@@ -190,8 +190,6 @@ export default function Wallet() {
         amount: drinkAmount,
       });
 
-      console.log('buyUsAdrink API response:', response); // Add this line for debugging
-
       if (response.success) {
         setDrinkAmount('5'); // Reset to minimum
         
