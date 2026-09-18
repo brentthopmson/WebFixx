@@ -201,6 +201,18 @@ function generateTraceId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+async function safeJsonParse(response: Response): Promise<any> {
+  const text = await response.text();
+  if (!text || !text.trim()) {
+    throw new Error('Server returned an empty response. Please try again.');
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Server returned an invalid response. Please try again.');
+  }
+}
+
 // Shared in-flight memo and TTL cache for getAppDataLite.
 let _inflightAppDataLite: Promise<SecuredApiResponse> | null = null;
 let _lastAppDataCache: { data: SecuredApiResponse; timestamp: number } | null = null;
@@ -292,7 +304,7 @@ export const authApi = {
       }),
     });
 
-    const responseData = await response.json();
+    const responseData = await safeJsonParse(response);
 
     if (!response.ok || responseData.error) {
       throw new Error(responseData.error || 'Registration failed');
@@ -342,7 +354,7 @@ export const authApi = {
       }),
     });
 
-    const responseData = await response.json();
+    const responseData = await safeJsonParse(response);
 
     if (!response.ok || responseData.error) {
       throw new Error(responseData.error || 'Login failed');
@@ -406,11 +418,11 @@ export const authApi = {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await safeJsonParse(response);
       throw new Error(errorData.error || 'Password reset failed');
     }
 
-    return response.json();
+    return safeJsonParse(response);
   },
 
   verifyResetCode: async (data: VerifyResetCodeData) => {
@@ -426,11 +438,11 @@ export const authApi = {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await safeJsonParse(response);
       throw new Error(errorData.error || 'Code verification failed');
     }
 
-    return response.json();
+    return safeJsonParse(response);
   },
 
   updatePassword: async (data: UpdatePasswordData) => {
@@ -446,11 +458,11 @@ export const authApi = {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await safeJsonParse(response);
       throw new Error(errorData.error || 'Password update failed');
     }
 
-    return response.json();
+    return safeJsonParse(response);
   },
 
   updateUserPreferences: async (darkMode: boolean) => {
@@ -646,12 +658,12 @@ export const securedApi = {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await safeJsonParse(response);
           // Throw a custom error with details
           throw new BackendError(errorData.error || 'API request failed', errorData.details);
         }
 
-        result = await response.json();
+        result = await safeJsonParse(response);
       }
 
       // If the backend call was successful, trigger a full app data refresh

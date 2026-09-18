@@ -444,6 +444,8 @@ export default function Dashboard() {
     mailMerge?: boolean;
     linkType?: 'project' | 'redirect' | 'none';
     linkId?: string;
+    sendMode?: 'now' | 'schedule';
+    scheduleStartTime?: string;
   }) => {
     setLoading(true);
     setActionError(null);
@@ -466,6 +468,8 @@ export default function Dashboard() {
         mailMerge: shootData.mailMerge !== false,
         linkType: shootData.linkType || 'none',
         linkId: shootData.linkId || '',
+        sendMode: shootData.sendMode || 'now',
+        scheduleStartTime: shootData.scheduleStartTime || null,
       });
 
       if (result && result.success === false) {

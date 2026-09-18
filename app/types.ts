@@ -97,6 +97,10 @@ export interface Campaign {
   emailKeywords?: string[]; // Keywords the AI uses to find relevant emails in the inbox
   emailStrategyPrompt?: string; // Strategy prompt for AI email replies
 
+  // Schedule mode
+  sendMode?: 'now' | 'schedule'; // 'now' = immediate, 'schedule' = native Schedule Send
+  scheduleStartTime?: string; // ISO datetime for when to start scheduled sends
+
   created_at: string; // Added
   status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached'; // Made required
   analytics?: {

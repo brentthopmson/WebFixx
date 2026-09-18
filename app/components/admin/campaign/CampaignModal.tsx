@@ -18,7 +18,8 @@ import {
   faChevronRight,
   faCog,
   faFileAlt,
-  faCheckSquare
+  faCheckSquare,
+  faClock
 } from '@fortawesome/free-solid-svg-icons';
 import type { Campaign, SMTPSetting, CSVAnalytics } from '../../../types';
 import { securedApi } from '../../../../utils/auth';
@@ -138,7 +139,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         targetLink: campaignToEdit.targetLink || '',
         emailKeywords: campaignToEdit.emailKeywords || [],
         emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || '',
-        shouldSendMessage: campaignToEdit.shouldSendMessage || false
+        shouldSendMessage: campaignToEdit.shouldSendMessage || false,
+        sendMode: campaignToEdit.sendMode || 'now',
+        scheduleStartTime: campaignToEdit.scheduleStartTime || '',
       };
     }
     return {
@@ -181,7 +184,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       targetLink: '',
       emailKeywords: [],
       emailStrategyPrompt: '',
-      shouldSendMessage: false
+      shouldSendMessage: false,
+      sendMode: 'now',
+      scheduleStartTime: '',
     };
   };
 
@@ -1247,6 +1252,56 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   </p>
                 </div>
 
+                {/* Send Mode Toggle */}
+                {formData.channel === 'email' && (formData.executeStaged ?? true) && (
+                  <div className="col-span-1 sm:col-span-2 border-t dark:border-gray-600 pt-4 mt-2">
+                    <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-2">Delivery Mode</label>
+                    <div className="flex space-x-3 mb-2">
+                      <button
+                        onClick={() => setFormData(prev => ({ ...prev, sendMode: 'now' }))}
+                        className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
+                          (formData.sendMode || 'now') === 'now'
+                            ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:border-blue-400 dark:text-blue-300'
+                            : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <FontAwesomeIcon icon={faEnvelope} className="mr-2" />
+                        Send Now
+                      </button>
+                      <button
+                        onClick={() => setFormData(prev => ({ ...prev, sendMode: 'schedule' }))}
+                        className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
+                          formData.sendMode === 'schedule'
+                            ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:border-purple-400 dark:text-purple-300'
+                            : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <FontAwesomeIcon icon={faClock} className="mr-2" />
+                        Schedule
+                      </button>
+                    </div>
+                    {(formData.sendMode || 'now') === 'now' ? (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Sends emails immediately via SMTP/Browser rotation.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Sending At</label>
+                          <input
+                            type="datetime-local"
+                            value={formData.scheduleStartTime || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, scheduleStartTime: e.target.value }))}
+                            className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                          />
+                        </div>
+                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded p-3 text-xs text-purple-700 dark:text-purple-300">
+                          <FontAwesomeIcon icon={faClock} className="mr-1" />
+                          Emails will be scheduled using native "Schedule Send" in each mailbox. Times auto-populated per row using platform limits.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {formData.interactionStaged && (
                   <div className="col-span-1 sm:col-span-2">
                     <p className="text-gray-400 font-medium">Selected Interaction Accounts</p>
@@ -1443,7 +1498,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     Execute Pipeline
                   </button>
                 )}
-                <ConfirmationModal
+                  <ConfirmationModal
                   isOpen={showExecuteConfirm}
                   onClose={() => setShowExecuteConfirm(false)}
                   onConfirm={async () => {
@@ -1451,7 +1506,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     try {
                       const data: any = await securedApi.callBackendFunction({
                         functionName: 'runCampaignPipeline',
-                        campaignId: campaignToEdit?.id
+                        campaignId: campaignToEdit?.id,
+                        sendMode: formData.sendMode || 'now',
+                        scheduleStartTime: formData.scheduleStartTime || null,
                       });
                       if (data.success) {
                         onSave({ ...formData, status: 'running', isSetupComplete: true });

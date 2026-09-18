@@ -34,8 +34,9 @@ interface DraftData {
 }
 
 interface SendResult {
-  status: 'pending' | 'sending' | 'sent' | 'failed' | 'rate_limited' | 'skipped';
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'rate_limited' | 'skipped' | 'scheduled';
   sentAt?: string;
+  scheduledFor?: string;
   error?: string;
   retryCount?: number;
 }
@@ -52,6 +53,8 @@ interface ShootContactsModalProps {
     mailMerge: boolean;
     linkType?: 'project' | 'redirect' | 'none';
     linkId?: string;
+    sendMode?: 'now' | 'schedule';
+    scheduleStartTime?: string;
   }) => Promise<void>;
   onComposeAI?: (contactEmail: string, linkType?: string, linkId?: string) => Promise<{
     subject: string;
@@ -193,6 +196,10 @@ export const ShootContactsModal = ({
   const [isStopped, setIsStopped] = useState(false);
   const [sendProgress, setSendProgress] = useState({ sent: 0, failed: 0, total: 0 });
 
+  // Schedule state
+  const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now');
+  const [scheduleStartTime, setScheduleStartTime] = useState('');
+
   // Refs for cleanup
   const pauseRef = useRef(false);
   const stopRef = useRef(false);
@@ -260,6 +267,8 @@ export const ShootContactsModal = ({
     setIsPaused(false);
     setIsStopped(false);
     setSendProgress({ sent: 0, failed: 0, total: 0 });
+    setSendMode('now');
+    setScheduleStartTime('');
     pauseRef.current = false;
     stopRef.current = false;
   }, []);
@@ -483,6 +492,8 @@ export const ShootContactsModal = ({
           mailMerge,
           linkType: linkType !== 'none' ? linkType : undefined,
           linkId: linkId || undefined,
+          sendMode,
+          scheduleStartTime: sendMode === 'schedule' ? scheduleStartTime : undefined,
         });
 
         setResults(prev => ({
@@ -518,6 +529,8 @@ export const ShootContactsModal = ({
               mailMerge,
               linkType: linkType !== 'none' ? linkType : undefined,
               linkId: linkId || undefined,
+              sendMode,
+              scheduleStartTime: sendMode === 'schedule' ? scheduleStartTime : undefined,
             });
             setResults(prev => ({
               ...prev,
@@ -1041,17 +1054,83 @@ export const ShootContactsModal = ({
   const renderStepSend = () => {
     const totalResults = Object.keys(results).length;
     const sentCount = Object.values(results).filter(r => r.status === 'sent').length;
+    const scheduledCount = Object.values(results).filter(r => r.status === 'scheduled').length;
     const failedCount = Object.values(results).filter(r => r.status === 'failed').length;
     const rateLimitedCount = Object.values(results).filter(r => r.status === 'rate_limited').length;
     const pendingCount = Object.values(results).filter(r => r.status === 'pending' || r.status === 'sending').length;
 
+    // Schedule preview: estimate spread based on Gmail-like limits (20/hr, 500/day)
+    const contactCount = selectedContacts.length;
+    const estimatedHourly = 20;
+    const estimatedHours = Math.ceil(contactCount / estimatedHourly);
+
     return (
       <div className="space-y-4">
+        {/* Send Mode Toggle */}
+        {!sending && sendProgress.total === 0 && (
+          <div className="border rounded-lg p-4 dark:border-gray-600">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Delivery Mode</label>
+            <div className="flex space-x-3 mb-3">
+              <button
+                onClick={() => setSendMode('now')}
+                className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
+                  sendMode === 'now'
+                    ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:border-blue-400 dark:text-blue-300'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                <FontAwesomeIcon icon={faPaperPlane} className="mr-2" />
+                Send Now
+              </button>
+              <button
+                onClick={() => setSendMode('schedule')}
+                className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
+                  sendMode === 'schedule'
+                    ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:border-purple-400 dark:text-purple-300'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                <FontAwesomeIcon icon={faClock} className="mr-2" />
+                Schedule
+              </button>
+            </div>
+
+            {sendMode === 'now' ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Sends immediately with 30-60s delay between each email.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Sending At</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduleStartTime}
+                    onChange={(e) => setScheduleStartTime(e.target.value)}
+                    className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                  />
+                </div>
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded p-3 text-xs text-purple-700 dark:text-purple-300">
+                  <FontAwesomeIcon icon={faClock} className="mr-1" />
+                  <strong>{contactCount} contacts</strong> will be scheduled using native "Schedule Send" in the mailbox.
+                  {contactCount > estimatedHourly && (
+                    <span className="block mt-1">
+                      Estimated spread: ~{estimatedHours} hours (based on platform limits of {estimatedHourly}/hr).
+                    </span>
+                  )}
+                  <span className="block mt-1">
+                    Each email is scheduled once — no need to come back and send again.
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {sending && (
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600 dark:text-gray-300">
               <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
-              Sending: {sentCount} sent, {failedCount} failed, {rateLimitedCount} rate-limited, {pendingCount} remaining
+              {sendMode === 'schedule' ? 'Scheduling' : 'Sending'}: {sentCount} sent, {scheduledCount} scheduled, {failedCount} failed, {rateLimitedCount} rate-limited, {pendingCount} remaining
             </div>
             <div className="flex space-x-2">
               {!isPaused && !isStopped && (
@@ -1095,16 +1174,19 @@ export const ShootContactsModal = ({
               <div key={i} className={`border rounded-lg p-3 flex items-center justify-between ${
                 result?.status === 'sent'
                   ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10'
-                  : result?.status === 'failed'
-                    ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
-                    : result?.status === 'rate_limited'
-                      ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10'
-                      : result?.status === 'sending'
-                        ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10'
-                        : 'border-gray-200 dark:border-gray-700'
+                  : result?.status === 'scheduled'
+                    ? 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/10'
+                    : result?.status === 'failed'
+                      ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
+                      : result?.status === 'rate_limited'
+                        ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10'
+                        : result?.status === 'sending'
+                          ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10'
+                          : 'border-gray-200 dark:border-gray-700'
               }`}>
                 <div className="flex items-center gap-2">
                   {result?.status === 'sent' && <FontAwesomeIcon icon={faCheckCircle} className="text-green-500" />}
+                  {result?.status === 'scheduled' && <FontAwesomeIcon icon={faClock} className="text-purple-500" />}
                   {result?.status === 'failed' && <FontAwesomeIcon icon={faTimesCircle} className="text-red-500" />}
                   {result?.status === 'rate_limited' && <FontAwesomeIcon icon={faExclamationTriangle} className="text-amber-500" />}
                   {result?.status === 'sending' && <FontAwesomeIcon icon={faSpinner} spin className="text-blue-500" />}
@@ -1116,6 +1198,9 @@ export const ShootContactsModal = ({
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {result?.status === 'sent' && `Sent at ${new Date(result.sentAt!).toLocaleTimeString()}`}
+                  {result?.status === 'scheduled' && (
+                    <span className="text-purple-600 dark:text-purple-400">Scheduled for {new Date(result.scheduledFor!).toLocaleString()}</span>
+                  )}
                   {result?.status === 'failed' && result.error}
                   {result?.status === 'rate_limited' && (
                     <span className="text-amber-600 dark:text-amber-400">{result.error}</span>
@@ -1209,12 +1294,12 @@ export const ShootContactsModal = ({
                     {step === 'select' && method === 'manual' ? (
                       <>
                         <FontAwesomeIcon icon={faPaperPlane} className="mr-2" />
-                        Send
+                        {sendMode === 'schedule' ? 'Schedule' : 'Send'}
                       </>
                     ) : step === 'review' ? (
                       <>
                         <FontAwesomeIcon icon={faPaperPlane} className="mr-2" />
-                        Send ({selectedContacts.length})
+                        {sendMode === 'schedule' ? `Schedule (${selectedContacts.length})` : `Send (${selectedContacts.length})`}
                       </>
                     ) : (
                       <>
@@ -1235,10 +1320,10 @@ export const ShootContactsModal = ({
                   <button
                     onClick={handleSend}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center disabled:opacity-50"
-                    disabled={selectedContacts.length === 0}
+                    disabled={selectedContacts.length === 0 || (sendMode === 'schedule' && !scheduleStartTime)}
                   >
-                    <FontAwesomeIcon icon={faPaperPlane} className="mr-2" />
-                    Send ({selectedContacts.length})
+                    <FontAwesomeIcon icon={sendMode === 'schedule' ? faClock : faPaperPlane} className="mr-2" />
+                    {sendMode === 'schedule' ? `Schedule (${selectedContacts.length})` : `Send (${selectedContacts.length})`}
                   </button>
                 ) : null}
               </div>
