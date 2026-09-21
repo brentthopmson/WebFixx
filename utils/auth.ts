@@ -667,7 +667,10 @@ export const securedApi = {
       }
 
       // If the backend call was successful, trigger a full app data refresh
-      if (result && result.success) {
+      // Skip for getAppDataLite — the caller (restoreSession) already calls
+      // setAppData explicitly, so this avoids a double state update that causes
+      // cascading re-renders.
+      if (result && result.success && fnName !== 'getAppDataLite') {
         const appState = getAppState();
         if (appState && appState.setAppData) {
           const updatedAppState = {

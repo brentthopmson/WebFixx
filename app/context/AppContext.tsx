@@ -2,7 +2,7 @@
 
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'; // Added useCallback
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'; // Added useCallback
 import type { AppState, GlobalAppStateContext } from '../../utils/authTypes'; // Updated import
 import { authApi } from '../../utils/auth'; // Import authApi
 import { WalletTransaction } from '../types/wallet'; // Import WalletTransaction
@@ -29,15 +29,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isOffline, setIsOffline] = useState(false); // New offline state
   const [isReconnecting, setIsReconnecting] = useState(false); // New reconnecting state
 
-  // Update localStorage when state changes
+  // Debounced localStorage write — prevents synchronous multi-MB serialization
+  // on every state change from blocking the main thread.
+  const writeTimerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     if (appData) {
-      try {
-        localStorage.setItem('appState', JSON.stringify(appData));
-      } catch {
-        // Storage quota exceeded or corrupt — silently ignore
-      }
+      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+      writeTimerRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem('appState', JSON.stringify(appData));
+        } catch {
+          // Storage quota exceeded or corrupt — silently ignore
+        }
+      }, 500);
     }
+    return () => {
+      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+    };
   }, [appData]);
 
   // Function to handle setting app data, ensuring isOffline is managed
@@ -98,14 +106,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [appData?.data?.transactions, appData?.user, isOffline, handleSetAppData]); // Re-run if transactions, user, or offline status changes
 
-  const clearAppData = () => {
+  const clearAppData = useCallback(() => {
     setAppData(null);
     setIsOffline(false); // Also reset offline status on logout
     localStorage.removeItem('appState');
     // Clear auth cookies
     document.cookie = 'loggedInAdmin=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     document.cookie = 'verifyStatus=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  };
+  }, []);
 
   return (
     <AppContext.Provider value={{ 

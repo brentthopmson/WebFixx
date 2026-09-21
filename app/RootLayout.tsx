@@ -26,7 +26,7 @@ import {
   faTicketAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { library } from '@fortawesome/fontawesome-svg-core';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppState } from './context/AppContext';
 import { securedApi, authApi, setAppState as setAuthAppState } from '../utils/auth';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -166,6 +166,11 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
     }
   }, [clearAppData]);
 
+  // Keep a ref to the latest handleLogout so the restoreSession effect
+  // doesn't re-run when handleLogout's reference changes.
+  const handleLogoutRef = useRef(handleLogout);
+  handleLogoutRef.current = handleLogout;
+
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
@@ -229,7 +234,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           } else {
             // Only logout if the token is actually invalid
             if (response.error === 'Token expired' || response.error === 'Invalid token') {
-              handleLogout();
+              handleLogoutRef.current();
             }
           }
         }
@@ -238,7 +243,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         // Only logout on specific errors
         if (error instanceof Error && 
             (error.message.includes('token') || error.message.includes('auth'))) {
-          handleLogout();
+          handleLogoutRef.current();
         }
       } finally {
         restoreInFlight = false;
@@ -260,7 +265,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         clearInterval(intervalId);
       }
     };
-  }, [handleLogout]);
+  }, []); // Only run on mount — use handleLogoutRef for latest reference
 
   // Keep hasToken in sync with the auth cookie whenever app state changes
   useEffect(() => {
