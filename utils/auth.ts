@@ -557,8 +557,9 @@ export const authApi = {
           
           // Update the app state using the provided function
           setAppDataFunc(updatedAppState);
-        } else if (result && result.success) {
+        } else if (result && result.success && !setAppDataFunc) {
           // Try to use the global app state if available
+          // Skip if setAppDataFunc was provided — caller already handled the update
           const appState = getAppState();
           if (appState && appState.setAppData) {
             // Create the updated app state object

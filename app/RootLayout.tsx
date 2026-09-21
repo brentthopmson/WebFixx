@@ -47,8 +47,18 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
   const router = useRouter();
   const { appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting } = useAppState(); // Updated destructuring
 
+  // Guard: only sync to auth module when values actually change (prevents
+  // redundant setAuthAppState calls that can trigger cascading re-renders).
+  const prevAuthStateRef = useRef({ appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting });
   useEffect(() => {
-    setAuthAppState({ appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting }); // Updated setAuthAppState call
+    const prev = prevAuthStateRef.current;
+    if (appData !== prev.appData || setAppData !== prev.setAppData ||
+        clearAppData !== prev.clearAppData || isOffline !== prev.isOffline ||
+        setIsOffline !== prev.setIsOffline || attemptReconnect !== prev.attemptReconnect ||
+        isReconnecting !== prev.isReconnecting) {
+      setAuthAppState({ appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting });
+      prevAuthStateRef.current = { appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting };
+    }
   }, [appData, setAppData, clearAppData, isOffline, setIsOffline, attemptReconnect, isReconnecting]);
   // Start not-loading if a cached authenticated session is already available so
   // a hard refresh renders instantly; validateUserToken refreshes in the background.
