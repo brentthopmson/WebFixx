@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faArrowLeft, 
@@ -16,6 +16,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { securedApi } from "../../../../utils/auth";
 import { useAppState, } from "../../../../app/context/AppContext";
 import { convertToPaymentResponse } from '../../../types/wallet';
+import { isFeatureEnabled } from '../../../../utils/featureFlags';
+import { rowsToObjects } from '../../../utils/rows';
 import LoadingSpinner from '../../LoadingSpinner';
 import type { 
   PaymentMethod, 
@@ -51,6 +53,17 @@ type PaymentStatus = 'pending' | 'completed' | 'expired';
 
 export default function FundWalletModal({ onClose, addresses }: FundWalletModalProps) {
   const { appData, setAppData } = useAppState();
+
+  const autoWalletEnabled = isFeatureEnabled(appData, 'autoWallet');
+
+  const telegramUsername = useMemo(() => {
+    const s = (appData as any)?.data?.settings;
+    if (!s?.data || !Array.isArray(s.data)) return '';
+    const rows = rowsToObjects(s.headers || [], s.data);
+    const row = rows.find((r: any) => r.settingsKey === 'webFixxTelegramUsername');
+    return row?.settingsValue1 || '';
+  }, [appData]);
+
   const [currentStep, setCurrentStep] = useState<Step>('amount');
   const [amount, setAmount] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -697,6 +710,16 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
             />
           </div>
         </div>
+
+        {!autoWalletEnabled && (
+          <div className="bg-red-50 border border-red-200 p-4 rounded-lg dark:bg-red-900/30 dark:border-red-700">
+            <p className="text-sm text-red-700 dark:text-red-300">
+              <strong>Do NOT send funds directly to this address.</strong> This wallet is temporary.
+              Message <strong>@{telegramUsername || 'WebFixxTelegram'}</strong> on Telegram to receive the correct payment address.
+              Sending funds directly may result in permanent loss.
+            </p>
+          </div>
+        )}
 
         <div className="bg-gray-50 p-4 rounded-lg dark:bg-gray-700">
           <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
