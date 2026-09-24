@@ -16,7 +16,6 @@ import { QRCodeSVG } from 'qrcode.react';
 import { securedApi } from "../../../../utils/auth";
 import { useAppState, } from "../../../../app/context/AppContext";
 import { convertToPaymentResponse } from '../../../types/wallet';
-import { isFeatureEnabled } from '../../../../utils/featureFlags';
 import { rowsToObjects } from '../../../utils/rows';
 import LoadingSpinner from '../../LoadingSpinner';
 import type { 
@@ -54,7 +53,16 @@ type PaymentStatus = 'pending' | 'completed' | 'expired';
 export default function FundWalletModal({ onClose, addresses }: FundWalletModalProps) {
   const { appData, setAppData } = useAppState();
 
-  const autoWalletEnabled = isFeatureEnabled(appData, 'autoWallet');
+  const autoWalletEnabled = useMemo(() => {
+    const s = (appData as any)?.data?.settings;
+    if (!s?.data || !Array.isArray(s.data)) return true;
+    const rows = rowsToObjects(s.headers || [], s.data);
+    const row = rows.find((r: any) => r.settingsKey === 'autoWallet');
+    if (!row) return true;
+    const value = row.settingsValue1;
+    if (value === undefined || value === null || String(value).trim() === '') return true;
+    return !['0', 'false', 'no', 'off', 'disabled'].includes(String(value).trim().toLowerCase());
+  }, [appData]);
 
   const telegramUsername = useMemo(() => {
     const s = (appData as any)?.data?.settings;
@@ -700,47 +708,51 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
   <p>{getPaymentWarning(selectedMethod!)}</p>
 </div>
 
-        <div className="flex justify-center py-2">
-          <div className="p-4 bg-white rounded-lg shadow-sm dark:bg-gray-700 dark:shadow-none">
-            <QRCodeSVG
-              value={paymentDetails?.address || ''}
-              size={180}
-              level="H"
-              includeMargin={true}
-            />
-          </div>
-        </div>
+        {autoWalletEnabled ? (
+          <>
+            <div className="flex justify-center py-2">
+              <div className="p-4 bg-white rounded-lg shadow-sm dark:bg-gray-700 dark:shadow-none">
+                <QRCodeSVG
+                  value={paymentDetails?.address || ''}
+                  size={180}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+            </div>
 
-        {!autoWalletEnabled && (
-          <div className="bg-red-50 border border-red-200 p-4 rounded-lg dark:bg-red-900/30 dark:border-red-700">
+            <div className="bg-gray-50 p-4 rounded-lg dark:bg-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
+                To this {selectedMethod} address
+              </label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={paymentDetails?.address}
+                  className="flex-1 bg-transparent border-none focus:ring-0 text-sm font-mono dark:text-white"
+                />
+                <button
+                  onClick={() => copyToClipboard(paymentDetails?.address || '')}
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors dark:hover:bg-gray-600 dark:text-gray-300"
+                  title={copied ? "Copied!" : "Copy to clipboard"}
+                >
+                  {renderIcon('copy')}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="bg-red-50 border border-red-200 p-5 rounded-lg text-center dark:bg-red-900/30 dark:border-red-700">
             <p className="text-sm text-red-700 dark:text-red-300">
-              <strong>Do NOT send funds directly to this address.</strong> This wallet is temporary.
+              <strong>Do NOT send funds directly to any wallet address.</strong>
+            </p>
+            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
               Message <strong>@{telegramUsername || 'WebFixxTelegram'}</strong> on Telegram to receive the correct payment address.
               Sending funds directly may result in permanent loss.
             </p>
           </div>
         )}
-
-        <div className="bg-gray-50 p-4 rounded-lg dark:bg-gray-700">
-          <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
-            To this {selectedMethod} address
-          </label>
-          <div className="flex items-center space-x-2">
-            <input
-              type="text"
-              readOnly
-              value={paymentDetails?.address}
-              className="flex-1 bg-transparent border-none focus:ring-0 text-sm font-mono dark:text-white"
-            />
-            <button
-              onClick={() => copyToClipboard(paymentDetails?.address || '')}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors dark:hover:bg-gray-600 dark:text-gray-300"
-              title={copied ? "Copied!" : "Copy to clipboard"}
-            >
-              {renderIcon('copy')}
-            </button>
-          </div>
-        </div>
 
         <div className="flex flex-col space-y-3">
           <button
