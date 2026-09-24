@@ -55,13 +55,36 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
 
   const autoWalletEnabled = useMemo(() => {
     const s = (appData as any)?.data?.settings;
-    if (!s?.data || !Array.isArray(s.data)) return true;
+    console.log('[autoWallet] settings raw:', s);
+    console.log('[autoWallet] settings type:', typeof s, 'isArray:', Array.isArray(s), 'hasData:', !!s?.data, 'hasHeaders:', !!s?.headers);
+
+    if (!s?.data || !Array.isArray(s.data)) {
+      console.log('[autoWallet] no settings data found, defaulting to enabled');
+      return true;
+    }
+
     const rows = rowsToObjects(s.headers || [], s.data);
+    console.log('[autoWallet] parsed rows:', rows.length, rows.slice(0, 5));
+
     const row = rows.find((r: any) => r.settingsKey === 'autoWallet');
-    if (!row) return true;
+    console.log('[autoWallet] found row:', row);
+
+    if (!row) {
+      console.log('[autoWallet] autoWallet key not found, defaulting to enabled');
+      return true;
+    }
+
     const value = row.settingsValue1;
-    if (value === undefined || value === null || String(value).trim() === '') return true;
-    return !['0', 'false', 'no', 'off', 'disabled'].includes(String(value).trim().toLowerCase());
+    console.log('[autoWallet] settingsValue1:', value);
+
+    if (value === undefined || value === null || String(value).trim() === '') {
+      console.log('[autoWallet] value empty, defaulting to enabled');
+      return true;
+    }
+
+    const result = !['0', 'false', 'no', 'off', 'disabled'].includes(String(value).trim().toLowerCase());
+    console.log('[autoWallet] final result:', result, '(value:', String(value).trim().toLowerCase(), ')');
+    return result;
   }, [appData]);
 
   const telegramUsername = useMemo(() => {
