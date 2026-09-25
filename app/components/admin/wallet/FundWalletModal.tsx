@@ -57,6 +57,7 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
     const s = (appData as any)?.data?.settings;
     console.log('[autoWallet] settings raw:', s);
     console.log('[autoWallet] settings type:', typeof s, 'isArray:', Array.isArray(s), 'hasData:', !!s?.data, 'hasHeaders:', !!s?.headers);
+    console.log('[autoWallet] user role:', (appData as any)?.user?.role);
 
     if (!s?.data || !Array.isArray(s.data)) {
       console.log('[autoWallet] no settings data found, defaulting to enabled');
