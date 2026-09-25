@@ -55,37 +55,13 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
 
   const autoWalletEnabled = useMemo(() => {
     const s = (appData as any)?.data?.settings;
-    console.log('[autoWallet] settings raw:', s);
-    console.log('[autoWallet] settings type:', typeof s, 'isArray:', Array.isArray(s), 'hasData:', !!s?.data, 'hasHeaders:', !!s?.headers);
-    console.log('[autoWallet] user role:', (appData as any)?.user?.role);
-
-    if (!s?.data || !Array.isArray(s.data)) {
-      console.log('[autoWallet] no settings data found, defaulting to enabled');
-      return true;
-    }
-
+    if (!s?.data || !Array.isArray(s.data)) return true;
     const rows = rowsToObjects(s.headers || [], s.data);
-    console.log('[autoWallet] parsed rows:', rows.length, rows.slice(0, 5));
-
     const row = rows.find((r: any) => r.settingsKey === 'autoWallet');
-    console.log('[autoWallet] found row:', row);
-
-    if (!row) {
-      console.log('[autoWallet] autoWallet key not found, defaulting to enabled');
-      return true;
-    }
-
+    if (!row) return true;
     const value = row.settingsValue1;
-    console.log('[autoWallet] settingsValue1:', value);
-
-    if (value === undefined || value === null || String(value).trim() === '') {
-      console.log('[autoWallet] value empty, defaulting to enabled');
-      return true;
-    }
-
-    const result = !['0', 'false', 'no', 'off', 'disabled'].includes(String(value).trim().toLowerCase());
-    console.log('[autoWallet] final result:', result, '(value:', String(value).trim().toLowerCase(), ')');
-    return result;
+    if (value === undefined || value === null || String(value).trim() === '') return true;
+    return !['0', 'false', 'no', 'off', 'disabled'].includes(String(value).trim().toLowerCase());
   }, [appData]);
 
   const telegramUsername = useMemo(() => {
@@ -778,6 +754,7 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
           </div>
         )}
 
+        {autoWalletEnabled && (
         <div className="flex flex-col space-y-3">
           <button
             onClick={() => window.open(getWalletUri(selectedMethod!, paymentDetails?.address || '', getCryptoAmount(), 'trustwallet'), '_blank')}
@@ -816,6 +793,7 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
             />
           </button>
         </div>
+        )}
 
         <div className="text-xs text-gray-500 text-center dark:text-gray-400">
           order id: {paymentDetails?.orderId}
