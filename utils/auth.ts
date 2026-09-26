@@ -78,6 +78,7 @@ export interface UserData {
   darkMode?: boolean;
   twoFactorAuth?: boolean; // Added twoFactorAuth property
   autoVerifySessions?: string; // Auto-verify sessions setting ("TRUE"/"FALSE")
+  searchParams?: string; // Comma-separated mailbox extraction search terms
   verificationIntervalHours?: number; // Hours between auto-verifications (admin)
 }
 

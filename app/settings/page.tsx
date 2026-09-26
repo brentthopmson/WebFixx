@@ -13,7 +13,8 @@ import {
   faSync,
   faSpinner,
   faCheckCircle,
-  faHeadset
+  faHeadset,
+  faSearch
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import type { AppState } from '../../utils/authTypes'; // Import AppState from authTypes
@@ -37,6 +38,8 @@ export default function UserSettings() {
   const { appData, setAppData } = useAppState();
   const userLimits = getUserLimits(appData);
   const [autoVerifyStatus, setAutoVerifyStatus] = useState<string | undefined>(undefined);
+  const [searchParamsInput, setSearchParamsInput] = useState('');
+  const [isSavingSearchParams, setIsSavingSearchParams] = useState(false);
   
   // Sync local state from appData when it changes
   useEffect(() => {
@@ -44,6 +47,10 @@ export default function UserSettings() {
       setAutoVerifyStatus(appData.user.autoVerifySessions);
     }
   }, [appData?.user?.autoVerifySessions]);
+
+  useEffect(() => {
+    setSearchParamsInput(appData?.user?.searchParams || '');
+  }, [appData?.user?.searchParams]);
   
   // Modal states
   const [showUpgradePlanModal, setShowUpgradePlanModal] = useState(false);
@@ -342,6 +349,44 @@ export default function UserSettings() {
     }
   };
 
+  const handleSaveSearchParams = async () => {
+    setIsSavingSearchParams(true);
+    try {
+      const response = await securedApi.callBackendFunction({
+        functionName: 'saveSearchParams',
+        searchParams: searchParamsInput,
+      });
+
+      if (response.success) {
+        const csv = response.data?.searchParams ?? searchParamsInput;
+        setSearchParamsInput(csv);
+        setResultModalProps({
+          type: 'success',
+          title: 'Search Params Saved',
+          message: 'Your mailbox extraction search terms have been saved and will be used on the next extraction.',
+          details: response.data || {}
+        });
+      } else {
+        setResultModalProps({
+          type: 'error',
+          title: 'Save Failed',
+          message: response.error || 'Failed to save search params.',
+          details: response.details || {}
+        });
+      }
+    } catch (error: any) {
+      setResultModalProps({
+        type: 'error',
+        title: 'Unexpected Error',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+        details: {}
+      });
+    } finally {
+      setIsSavingSearchParams(false);
+      setShowResultModal(true);
+    }
+  };
+
   // Format the creation date
   const formatDate = (dateString: string) => {
     if (!dateString) return 'a year ago';
@@ -427,6 +472,32 @@ export default function UserSettings() {
           >
             {isAutoVerifyProcessing ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faCheckCircle} className="w-4 h-4 mr-2" />}
             {autoVerifyStatus === 'TRUE' ? 'Disable Auto-Verify' : 'Enable Auto-Verify'}
+          </button>
+        </div>
+
+        {/* Extraction Search Params */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none p-6 w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Extraction Search Params</h2>
+            <FontAwesomeIcon icon={faSearch} className="w-6 h-6 text-indigo-500" />
+          </div>
+          <div className="mb-4">
+            <p className="text-gray-700 dark:text-gray-200">Comma-separated keywords used to search your mailbox during wire extraction (financial summaries, activities, contacts). Leave empty to use the default set: invoice, payment, receipt, bank, transfer, paypal, zelle, venmo, transaction.</p>
+          </div>
+          <input
+            type="text"
+            value={searchParamsInput}
+            onChange={(e) => setSearchParamsInput(e.target.value)}
+            placeholder="invoice, payment, receipt, bank, transfer, paypal, zelle, venmo, transaction"
+            className="w-full mb-3 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <button
+            onClick={handleSaveSearchParams}
+            className="bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            disabled={isSavingSearchParams}
+          >
+            {isSavingSearchParams ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faSearch} className="w-4 h-4 mr-2" />}
+            Save Search Params
           </button>
         </div>
 
