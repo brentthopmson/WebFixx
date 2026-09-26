@@ -59,11 +59,19 @@ export const WireExtractView = ({ data }: WireExtractViewProps) => {
               <div className="grid grid-cols-2 gap-4">
                 <p><span className="text-gray-500 dark:text-gray-400">Payment Methods:</span> {parsedData.boxFinancialSummary.identifiedPaymentMethods?.join(', ') || 'None'}</p>
                 <p><span className="text-gray-500 dark:text-gray-400">Potential Invoices:</span> {parsedData.boxFinancialSummary.potentialInvoiceCount || 0}</p>
+                <p><span className="text-gray-500 dark:text-gray-400">Highest Transaction:</span> ${(parsedData?.highestTransactionAmount ?? parsedData?.averageTransactionAmount ?? 0).toFixed(2)}</p>
                 <p><span className="text-gray-500 dark:text-gray-400">Avg Transaction:</span> ${parsedData?.averageTransactionAmount?.toFixed(2) || '0.00'}</p>
                 <p><span className="text-gray-500 dark:text-gray-400">Pending Transactions:</span> {parsedData?.pendingTransactionsCount || 0}</p>
                 <p><span className="text-gray-500 dark:text-gray-400">Last Transaction:</span> {parsedData?.lastTransactionDate ? new Date(parsedData.lastTransactionDate).toLocaleDateString() : 'N/A'}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {parsedData?.mailboxProfile && (
+          <div className="p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
+            <h4 className="font-medium text-gray-700 dark:text-white">Mailbox Profile</h4>
+            <p className="mt-2 text-gray-600 dark:text-gray-200">{parsedData.mailboxProfile}</p>
           </div>
         )}
 

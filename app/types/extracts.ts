@@ -46,6 +46,8 @@ export interface WireExtract {
     potentialInvoiceCount: number;
   };
   averageTransactionAmount: number;
+  highestTransactionAmount?: number;
+  mailboxProfile?: string;
   lastTransactionDate: string;
   pendingTransactionsCount: number;
   transactionBox: boolean;
