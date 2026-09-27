@@ -68,10 +68,16 @@ export const WireExtractView = ({ data }: WireExtractViewProps) => {
           </div>
         )}
 
-        {parsedData?.mailboxProfile && (
+        {(parsedData?.mailboxProfile || parsedData?.boxFinancialSummary) && (
           <div className="p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
             <h4 className="font-medium text-gray-700 dark:text-white">Mailbox Profile</h4>
-            <p className="mt-2 text-gray-600 dark:text-gray-200">{parsedData.mailboxProfile}</p>
+            {parsedData?.mailboxProfile ? (
+              <p className="mt-2 text-gray-600 dark:text-gray-200">{parsedData.mailboxProfile}</p>
+            ) : (
+              <p className="mt-2 text-sm italic text-gray-500 dark:text-gray-400">
+                AI analysis didn&rsquo;t complete for this extraction &mdash; re-run the extraction to generate it.
+              </p>
+            )}
           </div>
         )}
 
