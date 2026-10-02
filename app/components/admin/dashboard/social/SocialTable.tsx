@@ -117,8 +117,14 @@ export const SocialTable: React.FC<SocialTableProps> = ({
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {data.map((item) => {
             const socials = getSocialData(item.socials);
+            // QR/challenge flows can complete with an empty socials[] array —
+            // fall back to the row's own platform/username so the record still
+            // renders one row instead of disappearing (index/count mismatch).
+            const entries = socials.length > 0
+              ? socials
+              : [{ platform: item.platform || 'unknown', username: item.username || '', website: item.website }];
             // If there are multiple social accounts, create a row for each
-            return socials.map((social: any, socialIndex: number) => (
+            return entries.map((social: any, socialIndex: number) => (
               <tr 
                 key={`${item.key ?? item.id}-${socialIndex}`}
                 onClick={() => onRowClick(item.id)}
