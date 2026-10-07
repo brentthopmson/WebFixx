@@ -268,7 +268,16 @@ async function _fetchAppDataLite(token: string, forceRefresh: boolean): Promise<
       if (!text) {
         throw new Error('Empty response from server');
       }
-      const parsed = JSON.parse(text);
+      let parsed: SecuredApiResponse;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e: any) {
+        // Surface byte length + tail so transport truncation is diagnosable.
+        const tail = text.length > 120 ? `…${text.slice(-120)}` : text;
+        throw new Error(
+          `Invalid response from server (${text.length} bytes): ${e?.message || e} | tail: ${JSON.stringify(tail)}`
+        );
+      }
       _lastAppDataCache = { data: parsed, timestamp: Date.now() };
       return parsed;
     })().finally(() => {

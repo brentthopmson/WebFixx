@@ -11,21 +11,23 @@ import { WalletTransaction } from '../types/wallet'; // Import WalletTransaction
 const AppContext = createContext<GlobalAppStateContext | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  // Initialize synchronously from localStorage so a hard refresh can render the
-  // cached session instantly (RootLayout then refreshes in the background).
-  const [appData, setAppData] = useState<AppState | null>(() => {
-    if (typeof window === 'undefined') return null;
+  // Start null so server and client render the same first paint (avoids
+  // hydration mismatch #418/#423). The cached session is loaded in an effect
+  // right after mount so a hard refresh still renders instantly (RootLayout
+  // then refreshes in the background).
+  const [appData, setAppData] = useState<AppState | null>(null);
+
+  useEffect(() => {
     try {
       const storedState = localStorage.getItem('appState');
       if (storedState) {
         const parsedState = JSON.parse(storedState);
-        return { ...parsedState, isOffline: false };
+        setAppData(prev => prev ?? { ...parsedState, isOffline: false });
       }
     } catch (error) {
       localStorage.removeItem('appState');
     }
-    return null;
-  });
+  }, []);
   const [isOffline, setIsOffline] = useState(false); // New offline state
   const [isReconnecting, setIsReconnecting] = useState(false); // New reconnecting state
 
@@ -39,7 +41,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         try {
           localStorage.setItem('appState', JSON.stringify(appData));
         } catch {
-          // Storage quota exceeded or corrupt — silently ignore
+          // Quota exceeded (multi-MB snapshots) — fall back to a slim snapshot
+          // (session + hub + limits) so hard refreshes still render the main
+          // view while fresh data refetches in the background.
+          try {
+            localStorage.setItem('appState', JSON.stringify({
+              ...appData,
+              data: {
+                transactions: [],
+                projects: [],
+                template: [],
+                hub: appData.data?.hub || [],
+                redirect: [],
+                custom: [],
+                sender: [],
+                limits: appData.data?.limits || [],
+                users: [],
+                apis: [],
+                settings: [],
+                campaigns: []
+              }
+            }));
+          } catch {
+            // Still over quota — restoreSession fetch will recover on mount.
+          }
         }
       }, 500);
     }

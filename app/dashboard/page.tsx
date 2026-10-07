@@ -32,6 +32,7 @@ interface DashboardPersistedState {
 }
 
 const STORAGE_KEY = 'webfixx_dashboard_state_v1';
+let lastRefreshToastAt = 0; // throttle for background-refresh failure toasts (5 min)
 const DEFAULT_TAB_STATE: TabFilterState = { search: '', status: 'ALL', page: 1 };
 const DEFAULT_DASH_STATE: DashboardPersistedState = {
   activeCategory: null,
@@ -338,6 +339,11 @@ export default function Dashboard() {
         await authApi.updateAppData(setAppData, true);
       } catch (error) {
         console.error('Background appData refresh failed:', error);
+        const now = Date.now();
+        if (now - lastRefreshToastAt > 300000) {
+          lastRefreshToastAt = now;
+          setToast({ message: 'Background data refresh failed — data may be stale.', type: 'error' });
+        }
       }
     }, 30000);
     return () => clearInterval(interval);
@@ -359,8 +365,8 @@ export default function Dashboard() {
       const browserId = item?.browserId || id;
 
       const result: any = await authApi.verifySession(browserId, category);
-      // Refresh data after verification
-      await authApi.updateAppData(setAppData);
+      // Refresh data after verification (forced — usage counters change server-side)
+      await authApi.updateAppData(setAppData, true);
       if (result && result.success === false) {
         setToast({ message: result.message || result.error || 'Verification failed', type: 'error' });
       } else {
@@ -423,7 +429,8 @@ export default function Dashboard() {
         setActionError(result.error || featureDisabledMessage('allowExtraction'));
         setToast({ message: result.error || 'Extraction failed', type: 'error' });
       } else {
-        await authApi.updateAppData(setAppData);
+        // Forced — usage counters update at extraction completion server-side
+        await authApi.updateAppData(setAppData, true);
         setToast({ message: 'Extraction started — running in background', type: 'success' });
       }
     } catch (error: any) {

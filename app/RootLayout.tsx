@@ -69,6 +69,16 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
   const [hasToken, setHasToken] = useState(
     () => typeof document !== 'undefined' && !!document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')
   );
+
+  // The cached session is loaded from localStorage one tick after mount
+  // (AppContext) so both server and client start with appData=null — stop
+  // showing the full-screen loader as soon as that cached session lands.
+  useEffect(() => {
+    if (appData?.isAuthenticated && appData?.user) {
+      setIsLoading(false);
+    }
+  }, [appData]);
+
   const [visibleLinks, setVisibleLinks] = useState({
     dashboard: false,
     campaign: false,
@@ -249,7 +259,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           }
         }
       } catch (error) {
-        // console.error('Session validation error:', error); // Removed console.error
+        console.error('Session validation error:', error);
         // Only logout on specific errors
         if (error instanceof Error && 
             (error.message.includes('token') || error.message.includes('auth'))) {
