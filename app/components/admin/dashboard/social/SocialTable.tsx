@@ -3,6 +3,7 @@ import { faGlobe, faLaptop } from '@fortawesome/free-solid-svg-icons';
 import { useState } from 'react';
 import { useWindowSize } from '../../../../hooks/useWindowSize';
 import { TableActions } from '../TableActions';
+import { RunningChips } from '../RunningChips';
 import { getLogoUrl } from '../../../../utils/logoUtils';
 import { isTrue } from '../../../../../utils/parseResponseField';
 
@@ -202,7 +203,10 @@ export const SocialTable: React.FC<SocialTableProps> = ({
                     ) : column === 'email' ? (
                       item.email
                     ) : column === 'platform' ? (
-                      social.platform
+                      <>
+                        {social.platform}
+                        <RunningChips item={item} />
+                      </>
                     ) : column === 'username' ? (
                       social.username
                     ) : column === 'status' ? (

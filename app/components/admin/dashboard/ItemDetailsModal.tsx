@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { safeParseJSON } from '../../../../utils/helpers';
+import { safeParseJSON, getQuotaInfo } from '../../../../utils/helpers';
 import { isTrue } from '../../../../utils/parseResponseField';
+import { useAppState } from '../../../context/AppContext';
+import { QuotaInfoBadge } from '../../QuotaInfo';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faCheck, 
@@ -26,6 +28,7 @@ interface ItemDetailsModalProps {
   onClose: () => void;
   data: any;
   category: 'WIRE' | 'BANK' | 'SOCIAL' | null;
+  limits?: any;
   onVerify: (id: string) => void;
   onGetCookie: (id: string) => void;
   onExtract: (id: string) => void;
@@ -126,6 +129,7 @@ export const ItemDetailsModal = ({
   onClose,
   data,
   category,
+  limits = null,
   onVerify,
   onGetCookie,
   onExtract,
@@ -137,6 +141,7 @@ export const ItemDetailsModal = ({
   redirectsList = [],
   onComposeAI,
 }: ItemDetailsModalProps) => {
+  const { appData } = useAppState();
   const [showMemoInput, setShowMemoInput] = useState(false);
   const [memoText, setMemoText] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -161,8 +166,21 @@ export const ItemDetailsModal = ({
     setShowConfirmModal(true);
   };
 
+  // Monthly quota for the pending action (frontend validation — skip backend when exhausted)
+  const actionQuotaKey = currentAction?.type === 'verify' ? 'verifyLoginUsage'
+    : currentAction?.type === 'extract' ? 'extractionUsage'
+    : null;
+  const quotaExhausted = !!actionQuotaKey && !!getQuotaInfo(appData, actionQuotaKey)?.exhausted;
+
   const handleConfirm = async () => {
     if (!currentAction) return;
+
+    // Frontend quota validation — don't waste a backend round-trip the engine will 429
+    if (quotaExhausted) {
+      setShowConfirmModal(false);
+      setCurrentAction(null);
+      return;
+    }
 
     switch (currentAction.type) {
       case 'verify':
@@ -387,6 +405,147 @@ export const ItemDetailsModal = ({
     </div>
   );
 
+  // Background extraction/verify progress from hub status keys. Extraction:
+  // engine smartExtract writes extractStatus (started/extracting N/M/saving/
+  // completed/completed-no-data/failed). Verify: GAS writes verifyStatus
+  // (RUNNING/COMPLETED/FAILED/LIMIT_REACHED).
+  const renderStatusBanner = () => {
+    const es = String(data.extractStatus || '');
+    const vs = String(data.verifyStatus || '');
+    const at = (value: any) => (value ? new Date(value).toLocaleTimeString() : '');
+    const isExtractRunning = es === 'started' || es === 'saving' || es.startsWith('extracting');
+    const rows: any[] = [];
+
+    if (isExtractRunning) {
+      rows.push(
+        <div key="extract-run" className="flex items-center text-sm text-amber-700 dark:text-amber-400">
+          <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
+          {es.startsWith('extracting') ? `Extracting ${es.replace('extracting ', '')}…` : 'Extracting…'}
+          {data.extractStatusAt && <span className="ml-2 text-xs opacity-70">updated {at(data.extractStatusAt)}</span>}
+        </div>
+      );
+    } else if (es === 'completed' || es === 'completed-no-data') {
+      rows.push(
+        <div key="extract-done" className="text-sm text-green-700 dark:text-green-400">
+          Extraction completed{data.extractStatusAt ? ` — ${at(data.extractStatusAt)}` : ''}
+        </div>
+      );
+    } else if (es === 'failed') {
+      rows.push(
+        <div key="extract-failed" className="text-sm text-red-500 dark:text-red-400">
+          Extraction failed{data.extractStatusAt ? ` — ${at(data.extractStatusAt)}` : ''}
+        </div>
+      );
+    }
+
+    if (vs === 'RUNNING') {
+      rows.push(
+        <div key="verify-run" className="flex items-center text-sm text-amber-700 dark:text-amber-400">
+          <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
+          Verifying session…
+          {data.verifyStatusAt && <span className="ml-2 text-xs opacity-70">started {at(data.verifyStatusAt)}</span>}
+        </div>
+      );
+    } else if (vs === 'LIMIT_REACHED') {
+      rows.push(
+        <div key="verify-limit" className="text-sm text-amber-700 dark:text-amber-400">
+          Monthly verification limit reached — verify again next cycle
+          {data.verifyStatusAt ? ` (${at(data.verifyStatusAt)})` : ''}
+        </div>
+      );
+    }
+
+    if (rows.length === 0) return null;
+    return <div className="space-y-1 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">{rows}</div>;
+  };
+
+  // Account usage vs Limits-sheet platform policy. A per-account `_limits`
+  // override inside interactionUsage REPLACES the platform policy (engine
+  // checkActionAllowed semantics). Renders only when the platform has policy
+  // cells or the account has recorded usage.
+  const renderUsageCard = () => {
+    const platform = String(data.platform || '').toUpperCase().trim();
+    if (!platform || !limits?.headers || !limits?.data || !Array.isArray(limits.data)) return null;
+    const pIdx = limits.headers.indexOf('platform');
+    if (pIdx === -1) return null;
+    const platformRow = limits.data.find((r: any[]) => String(r[pIdx] || '').toUpperCase().trim() === platform);
+    if (!platformRow) return null;
+
+    let usage: any = null;
+    try {
+      usage = typeof data.interactionUsage === 'string' ? JSON.parse(data.interactionUsage) : data.interactionUsage;
+    } catch { usage = null; }
+    const override = usage && typeof usage._limits === 'object' && usage._limits ? usage._limits : null;
+
+    const ACTION_TYPES = [
+      'likeOnStory', 'likesOnPost', 'likesOnComment',
+      'commentOnComment', 'commentOnStory', 'commentOnPost',
+      'follow', 'unfollow', 'coldMessage', 'extract',
+    ];
+    const num = (value: any): number => {
+      const n = parseInt(value, 10);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const cellPolicy = (action: string): any => {
+      const i = limits.headers.indexOf(action);
+      if (i === -1 || !platformRow[i]) return null;
+      try { return JSON.parse(platformRow[i]); } catch { return null; }
+    };
+
+    const rows = ACTION_TYPES.map((action) => {
+      const policy: any = override || cellPolicy(action);
+      const counters = usage && typeof usage[action] === 'object' ? usage[action] : {};
+      const used = { h: num(counters.hourly), d: num(counters.daily), m: num(counters.monthly) };
+      const hasUsage = used.h > 0 || used.d > 0 || used.m > 0;
+      if (!policy && !hasUsage) return null;
+      const fmt = (u: number, lim: any) => {
+        const n = num(lim);
+        return n > 0 ? `${u}/${n}` : `${u}/∞`;
+      };
+      return {
+        action,
+        hourly: fmt(used.h, policy?.hourly),
+        daily: fmt(used.d, policy?.daily),
+        monthly: fmt(used.m, policy?.monthly),
+      };
+    }).filter(Boolean) as Array<{ action: string; hourly: string; daily: string; monthly: string }>;
+
+    if (rows.length === 0) return null;
+
+    return (
+      <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded border border-gray-200 dark:border-gray-600">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Usage vs platform limits — {platform}</h4>
+          {override && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+              per-account override
+            </span>
+          )}
+        </div>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-gray-500 dark:text-gray-400">
+              <th className="py-1 pr-2 font-medium">Action</th>
+              <th className="py-1 pr-2 font-medium text-right">Hourly</th>
+              <th className="py-1 pr-2 font-medium text-right">Daily</th>
+              <th className="py-1 font-medium text-right">Monthly</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+            {rows.map((row) => (
+              <tr key={row.action}>
+                <td className="py-1 pr-2 text-gray-700 dark:text-gray-200">{row.action}</td>
+                <td className="py-1 pr-2 text-right text-gray-600 dark:text-gray-300">{row.hourly}</td>
+                <td className="py-1 pr-2 text-right text-gray-600 dark:text-gray-300">{row.daily}</td>
+                <td className="py-1 text-right text-gray-600 dark:text-gray-300">{row.monthly}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   const renderDetails = () => {
     const headerCard = (
       <AccountHeaderCard
@@ -397,6 +556,8 @@ export const ItemDetailsModal = ({
         cookieJSON={data.cookieJSON}
       />
     );
+    const statusBanner = renderStatusBanner();
+    const usageCard = renderUsageCard();
 
     switch (category) {
       case 'WIRE':
@@ -404,6 +565,8 @@ export const ItemDetailsModal = ({
         return (
           <div className="space-y-4">
             {headerCard}
+            {statusBanner}
+            {usageCard}
             {extractIsLoading && (
               <div className="text-sm text-gray-500 dark:text-gray-400 p-3">Loading extract from Drive...</div>
             )}
@@ -439,6 +602,8 @@ export const ItemDetailsModal = ({
         return (
           <div className="space-y-4">
             {headerCard}
+            {statusBanner}
+            {usageCard}
             {Array.isArray(bankData) && bankData.map((bank: any, index: number) => (
               <div key={index} className="border-b pb-4 last:border-0 dark:border-gray-700">
                 <h3 className="font-medium text-gray-900 dark:text-white">{bank.bankName}</h3>
@@ -489,6 +654,8 @@ export const ItemDetailsModal = ({
         return (
           <div className="space-y-4">
             {headerCard}
+            {statusBanner}
+            {usageCard}
             {Array.isArray(socialData) && socialData.map((social: any, index: number) => (
               <div key={index} className="border-b pb-4 last:border-0 dark:border-gray-700">
                 <h3 className="font-medium text-gray-900 dark:text-white">{social.platform}</h3>
@@ -562,9 +729,23 @@ export const ItemDetailsModal = ({
         onClose={() => setShowConfirmModal(false)}
         onConfirm={handleConfirm}
         title={`Confirm ${currentAction?.type}`}
-        message={`Are you sure you want to ${currentAction?.type} this item?`}
+        message={
+          currentAction?.type === 'verify'
+            ? 'Launch a headless browser to revalidate this stored login session (cookie + storage). Successful rows are marked verified and the session status is updated. Costs 1 login verification from your monthly quota.'
+            : currentAction?.type === 'extract'
+              ? 'Run a full extraction on this account: box summary, financial analysis (AI), personal info, contacts and activities. Runs in the background — refresh to see results. Costs 1 extraction from your monthly quota.'
+              : `Are you sure you want to ${currentAction?.type} this item?`
+        }
+        confirmText={currentAction?.type === 'verify' ? 'Verify' : currentAction?.type === 'extract' ? 'Extract' : 'Confirm'}
+        confirmDisabled={quotaExhausted}
         confirmLoading={loading}
-      />
+      >
+        {actionQuotaKey && (
+          <div className="mb-4">
+            <QuotaInfoBadge appData={appData} usageKey={actionQuotaKey} />
+          </div>
+        )}
+      </ConfirmationModal>
 
       {showShootContactsModal && (
         <ShootContactsModal

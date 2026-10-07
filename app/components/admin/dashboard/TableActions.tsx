@@ -13,6 +13,9 @@ import {
 import ConfirmationModal from '../../ConfirmationModal';
 import { ShootContactsModal } from './ShootContactsModal';
 import { isTrue } from '../../../../utils/parseResponseField';
+import { useAppState } from '../../../context/AppContext';
+import { QuotaInfoBadge } from '../../QuotaInfo';
+import { getQuotaInfo } from '../../../../utils/helpers';
 
 interface TableActionsProps {
   item: any;
@@ -67,6 +70,7 @@ export const TableActions = ({
   redirectsList = [],
   onComposeAI,
 }: TableActionsProps) => {
+  const { appData } = useAppState();
   const [showMemoInput, setShowMemoInput] = useState(false);
   const [memoText, setMemoText] = useState(item.memo || '');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -104,8 +108,22 @@ export const TableActions = ({
     setShowConfirmModal(true);
   };
 
+  // Monthly quota for the pending action (frontend validation — skip backend when exhausted)
+  const quotaKeyForAction = (type?: string) =>
+    type === 'verify' ? 'verifyLoginUsage' : type === 'extract' ? 'extractionUsage' : null;
+  const actionQuotaKey = quotaKeyForAction(currentAction?.type);
+  const actionQuota = actionQuotaKey ? getQuotaInfo(appData, actionQuotaKey) : null;
+  const quotaExhausted = !!actionQuota?.exhausted;
+
   const handleConfirm = async () => {
     if (!currentAction) return;
+
+    // Frontend quota validation — don't waste a backend round-trip the engine will 429
+    if (quotaExhausted && actionQuota) {
+      setShowConfirmModal(false);
+      setCurrentAction(null);
+      return;
+    }
 
     switch (currentAction.type) {
       case 'verify':
@@ -120,6 +138,16 @@ export const TableActions = ({
     }
     setShowConfirmModal(false);
     setCurrentAction(null);
+  };
+
+  const confirmMessageFor = (type?: string) => {
+    if (type === 'verify') {
+      return 'Launch a headless browser to revalidate this stored login session (cookie + storage). Successful rows are marked verified and the session status is updated. Costs 1 login verification from your monthly quota.';
+    }
+    if (type === 'extract') {
+      return 'Run a full extraction on this account: box summary, financial analysis (AI), personal info, contacts and activities. Runs in the background — refresh to see results. Costs 1 extraction from your monthly quota.';
+    }
+    return `Are you sure you want to ${type} this item?`;
   };
 
   const modalPortal = typeof document !== 'undefined' && createPortal(
@@ -148,9 +176,17 @@ export const TableActions = ({
         onClose={() => setShowConfirmModal(false)}
         onConfirm={handleConfirm}
         title={`Confirm ${currentAction?.type}`}
-        message={`Are you sure you want to ${currentAction?.type} this item?`}
+        message={confirmMessageFor(currentAction?.type)}
+        confirmText={currentAction?.type === 'verify' ? 'Verify' : currentAction?.type === 'extract' ? 'Extract' : 'Confirm'}
+        confirmDisabled={quotaExhausted}
         confirmLoading={loading}
-      />
+      >
+        {actionQuotaKey && actionQuota && (
+          <div className="mb-4">
+            <QuotaInfoBadge appData={appData} usageKey={actionQuotaKey} />
+          </div>
+        )}
+      </ConfirmationModal>
 
       {showMemoInput && (
         <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-75 flex items-center justify-center z-50" onClick={(e) => e.stopPropagation()}>

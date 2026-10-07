@@ -27,6 +27,8 @@ import {
 import { useAppState } from '../../context/AppContext';
 import { securedApi } from '../../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage } from '../../../utils/featureFlags';
+import { getQuotaInfo } from '../../../utils/helpers';
+import { QuotaInfoBadge } from '../../components/QuotaInfo';
 import { toast } from 'sonner';
 import type { Campaign } from '../../types';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -293,9 +295,28 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // ==================== Staged-aware monthly quota ====================
+  const stagedQuotaKeys: string[] = [];
+  if (campaign?.validationStaged) stagedQuotaKeys.push('validateUsage');
+  if (campaign?.enrichmentStaged) stagedQuotaKeys.push('enrichUsage');
+  if (campaign?.aiPersonalizationStaged) stagedQuotaKeys.push('personalizeUsage');
+  if (campaign?.executeStaged ?? true) stagedQuotaKeys.push('shootCampaignUsage');
+  if (campaign?.interactionStaged) stagedQuotaKeys.push('interactionUsage');
+  const exhaustedStagedQuotas = stagedQuotaKeys
+    .map(k => getQuotaInfo(appData, k))
+    .filter((q): q is NonNullable<typeof q> => !!q && q.exhausted);
+  const exhaustedQuotaMessage = exhaustedStagedQuotas.length
+    ? `Monthly limit reached for: ${exhaustedStagedQuotas.map(q => q.label).join(', ')}. Upgrade your plan to continue.`
+    : '';
+
   const handleExecutePipeline = async () => {
     if (!isFeatureEnabled(appData, 'allowShooting')) {
       alert(featureDisabledMessage('allowShooting', 'campaign execution'));
+      return;
+    }
+    // Block if ANY staged step's monthly quota is exhausted (skip backend)
+    if (exhaustedQuotaMessage) {
+      toast.error('Monthly quota reached', { description: exhaustedQuotaMessage });
       return;
     }
     try {
@@ -428,7 +449,9 @@ export default function CampaignDetailPage() {
           {campaign.status === 'draft' && campaign.isSetupComplete && (
             <button
               onClick={() => setShowExecuteConfirm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={exhaustedStagedQuotas.length > 0}
+              title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
             >
               <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
               Execute Pipeline
@@ -456,6 +479,12 @@ export default function CampaignDetailPage() {
           )}
           <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColor(campaign.status)}`}>
             {campaign.status}
+          </span>
+          {/* Monthly quota for the stages this campaign will run */}
+          <span className="hidden md:flex items-center gap-1.5">
+            {stagedQuotaKeys.map(k => (
+              <QuotaInfoBadge key={k} appData={appData} usageKey={k} compact />
+            ))}
           </span>
           <button
             onClick={() => { if (campaign.fileUrl) fetchCSV(campaign.fileUrl, true, getRefreshInterval(campaign.status)); }}
@@ -532,6 +561,14 @@ export default function CampaignDetailPage() {
         {campaign.interactionStaged && (
           <div className="mt-3 text-xxs text-purple-500 dark:text-purple-400">
             Interaction limits: {campaign.interactionStopAfterHours || 72}h / {campaign.interactionMaxReplies || 100} replies
+            {' · '}
+            <span className="font-semibold">
+              Monthly quota: {(() => {
+                const q = getQuotaInfo(appData, 'interactionUsage');
+                if (!q) return '—';
+                return q.unlimited ? 'unlimited' : `${q.used}/${q.limit} used`;
+              })()}
+            </span>
           </div>
         )}
       </div>
@@ -641,7 +678,18 @@ export default function CampaignDetailPage() {
         message="This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?"
         confirmText="Start Pipeline"
         cancelText="Cancel"
-      />
+        confirmDisabled={exhaustedStagedQuotas.length > 0}
+      >
+        <div className="mb-5 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-lg border dark:border-gray-700 space-y-2">
+          <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monthly quota this run will spend</p>
+          {stagedQuotaKeys.map(k => (
+            <QuotaInfoBadge key={k} appData={appData} usageKey={k} />
+          ))}
+          {exhaustedQuotaMessage && (
+            <p className="text-xs font-semibold text-red-600 dark:text-red-400">{exhaustedQuotaMessage}</p>
+          )}
+        </div>
+      </ConfirmationModal>
     </div>
   );
 }

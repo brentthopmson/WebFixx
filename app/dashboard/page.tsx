@@ -15,6 +15,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 import { authApi, securedApi } from '../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
+import { getQuotaInfo } from '../../utils/helpers';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSync, faChartLine, faDownload, faSearch } from '@fortawesome/free-solid-svg-icons';
@@ -326,19 +327,45 @@ export default function Dashboard() {
     }
   };
 
+  // Background status poll: extraction runs fire-and-forget in the engine and
+  // auto-verify runs on a GAS timer, so re-fetch appData while the tab is
+  // visible to surface extractStatus/verifyStatus transitions. forceRefresh
+  // busts the 120s Flask cache; skipped while the tab is hidden.
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        await authApi.updateAppData(setAppData, true);
+      } catch (error) {
+        console.error('Background appData refresh failed:', error);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [setAppData]);
+
   // Common handlers
   const handleVerify = async (id: string) => {
+    // Frontend quota validation — skip the backend round-trip the engine will 429
+    const verifyQuota = getQuotaInfo(appData, 'verifyLoginUsage');
+    if (verifyQuota?.exhausted) {
+      setToast({ message: `Login verifications monthly limit reached (${verifyQuota.used}/${verifyQuota.limit}) — upgrade to continue.`, type: 'error' });
+      return;
+    }
     setLoading(true);
     try {
       // Find the item to get its category and browserId
       const item = hubData.find((row: any) => row.id === id || row.browserId === id);
       const category = item?.category || 'WIRE';
       const browserId = item?.browserId || id;
-      
-      await authApi.verifySession(browserId, category);
+
+      const result: any = await authApi.verifySession(browserId, category);
       // Refresh data after verification
       await authApi.updateAppData(setAppData);
-      setToast({ message: 'Verification complete', type: 'success' });
+      if (result && result.success === false) {
+        setToast({ message: result.message || result.error || 'Verification failed', type: 'error' });
+      } else {
+        setToast({ message: 'Verification complete', type: 'success' });
+      }
     } catch (error) {
       console.error('Error verifying:', error);
       setToast({ message: 'Verification failed', type: 'error' });
@@ -373,6 +400,13 @@ export default function Dashboard() {
   };
 
   const handleExtract = async (id: string) => {
+    // Frontend quota validation — skip the backend round-trip the engine will reject
+    const extractQuota = getQuotaInfo(appData, 'extractionUsage');
+    if (extractQuota?.exhausted) {
+      setActionError(`Extraction monthly limit reached (${extractQuota.used}/${extractQuota.limit}) — upgrade to continue.`);
+      setToast({ message: `Extraction monthly limit reached (${extractQuota.used}/${extractQuota.limit}) — upgrade to continue.`, type: 'error' });
+      return;
+    }
     setLoading(true);
     setActionError(null);
     try {
@@ -390,7 +424,7 @@ export default function Dashboard() {
         setToast({ message: result.error || 'Extraction failed', type: 'error' });
       } else {
         await authApi.updateAppData(setAppData);
-        setToast({ message: 'Extraction complete', type: 'success' });
+        setToast({ message: 'Extraction started — running in background', type: 'success' });
       }
     } catch (error: any) {
       setActionError(error?.message || 'Error extracting data.');
@@ -694,6 +728,7 @@ export default function Dashboard() {
             onClose={() => setSelectedItem(null)}
             data={hubData.find(item => item.id === selectedItem)}
             category={activeCategory}
+            limits={appData?.data?.limits}
             onVerify={handleVerify}
             onGetCookie={handleGetCookie}
             onExtract={handleExtract}

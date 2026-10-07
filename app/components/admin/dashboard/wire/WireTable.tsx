@@ -6,6 +6,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useState } from 'react';
 import { TableActions } from '../TableActions';
+import { RunningChips } from '../RunningChips';
 import { DomainModal } from './DomainModal';
 import { useWindowSize } from '../../../../hooks/useWindowSize';
 import { getLogoUrl } from '../../../../utils/logoUtils';
@@ -226,6 +227,11 @@ export const WireTable: React.FC<WireTableProps> = ({
                       >
                         {item[column]}
                       </a>
+                    ) : column === 'email' ? (
+                      <>
+                        {item[column]}
+                        <RunningChips item={item} />
+                      </>
                     ) : column === 'timestamp' ? (
                       (() => {
                         const t = new Date(item[column]);

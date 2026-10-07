@@ -8,6 +8,9 @@ import {
   faTimesCircle, faClock, faPause, faPlay, faStop,
   faExclamationTriangle, faEnvelope, faLink, faBrain, faEye
 } from '@fortawesome/free-solid-svg-icons';
+import { useAppState } from '../../../context/AppContext';
+import { QuotaInfoBadge } from '../../QuotaInfo';
+import { getQuotaInfo } from '../../../../utils/helpers';
 
 interface Contact {
   name?: string;
@@ -172,6 +175,9 @@ export const ShootContactsModal = ({
   projectsList = [],
   redirectsList = [],
 }: ShootContactsModalProps) => {
+  const { appData } = useAppState();
+  const shootQuota = getQuotaInfo(appData, 'shootContactsUsage');
+  const shootQuotaExhausted = !!shootQuota?.exhausted;
   const [step, setStep] = useState<StepKey>('select');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -425,6 +431,8 @@ export const ShootContactsModal = ({
   // ==================== Send Logic ====================
 
   const handleSend = async () => {
+    // Frontend quota validation — skip backend entirely when monthly budget is spent
+    if (shootQuotaExhausted) return;
     setSending(true);
     setIsPaused(false);
     setIsStopped(false);
@@ -1084,6 +1092,8 @@ export const ShootContactsModal = ({
 
     return (
       <div className="space-y-4">
+        {/* Monthly shoot quota — frontend validation before any backend call */}
+        <QuotaInfoBadge appData={appData} usageKey="shootContactsUsage" />
         {/* Send Mode Toggle */}
         {!sending && sendProgress.total === 0 && (
           <div className="border rounded-lg p-4 dark:border-gray-600">
@@ -1338,7 +1348,7 @@ export const ShootContactsModal = ({
                   <button
                     onClick={handleSend}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center disabled:opacity-50"
-                    disabled={selectedContacts.length === 0 || (sendMode === 'schedule' && !scheduleStartTime)}
+                    disabled={selectedContacts.length === 0 || shootQuotaExhausted || (sendMode === 'schedule' && !scheduleStartTime)}
                   >
                     <FontAwesomeIcon icon={sendMode === 'schedule' ? faClock : faPaperPlane} className="mr-2" />
                     {sendMode === 'schedule' ? `Schedule (${selectedContacts.length})` : `Send (${selectedContacts.length})`}

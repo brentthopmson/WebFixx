@@ -26,7 +26,8 @@ import { securedApi } from '../../../../utils/auth';
 import { checkFileBeforeUpload, FILE_CONSTRAINTS } from '../../../utils/fileValidators';
 import { validateCampaignCreation, getValidationErrorMessage } from '../../../utils/campaignValidators';
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
-import { getUserLimits } from '../../../../utils/helpers';
+import { getUserLimits, getQuotaInfo } from '../../../../utils/helpers';
+import { QuotaInfoBadge } from '../../../components/QuotaInfo';
 import { isFeatureEnabled, featureDisabledMessage } from '../../../../utils/featureFlags';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 
@@ -563,11 +564,26 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
           </div>
         ))}
         {(formData.smtpSettings || []).length === 0 && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 italic">No SMTP servers added yet. Outbound emails will rely on active browser MAIL logins.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">No SMTP servers added yet. Outbound emails will rely on active browser MAIL logins.</p>
         )}
       </div>
     </div>
   );
+
+  // ==================== Staged-aware monthly quota ====================
+  // Which quota keys this campaign's staged steps will spend at create/execute time.
+  const stagedQuotaKeys: string[] = [];
+  if (formData.validationStaged) stagedQuotaKeys.push('validateUsage');
+  if (formData.enrichmentStaged) stagedQuotaKeys.push('enrichUsage');
+  if (formData.aiPersonalizationStaged) stagedQuotaKeys.push('personalizeUsage');
+  if (formData.executeStaged ?? true) stagedQuotaKeys.push('shootCampaignUsage');
+  if (formData.interactionStaged) stagedQuotaKeys.push('interactionUsage');
+  const exhaustedStagedQuotas = stagedQuotaKeys
+    .map(k => getQuotaInfo(appData, k))
+    .filter((q): q is NonNullable<typeof q> => !!q && q.exhausted);
+  const exhaustedQuotaMessage = exhaustedStagedQuotas.length
+    ? `Monthly limit reached for: ${exhaustedStagedQuotas.map(q => q.label).join(', ')}. Upgrade your plan to continue.`
+    : '';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 dark:bg-opacity-80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -906,6 +922,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               </button>
               {expandedSection === 'template' && (
                 <div className="p-4 space-y-4">
+                  {/* Campaign-send quota for this template's channel */}
+                  <QuotaInfoBadge appData={appData} usageKey="shootCampaignUsage" />
                   {formData.channel === 'social' ? (
                     <>
                       <div>
@@ -1100,6 +1118,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       </div>
                       {formData.interactionStaged && (
                         <div className="animate-fadeIn space-y-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
+                          <QuotaInfoBadge appData={appData} usageKey="interactionUsage" />
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
@@ -1330,6 +1349,21 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   </div>
                 )}
               </div>
+
+              {/* Plan usage — the monthly quotas this campaign's staged steps will spend */}
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700 space-y-2">
+                <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Plan usage (monthly quota)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {formData.validationStaged && <QuotaInfoBadge appData={appData} usageKey="validateUsage" />}
+                  {formData.enrichmentStaged && <QuotaInfoBadge appData={appData} usageKey="enrichUsage" />}
+                  {formData.aiPersonalizationStaged && <QuotaInfoBadge appData={appData} usageKey="personalizeUsage" />}
+                  {(formData.executeStaged ?? true) && <QuotaInfoBadge appData={appData} usageKey="shootCampaignUsage" />}
+                  {formData.interactionStaged && <QuotaInfoBadge appData={appData} usageKey="interactionUsage" />}
+                </div>
+                {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">No stages selected — no quota will be spent.</p>
+                )}
+              </div>
             </div>
 
             {/* CSV Data Preview */}
@@ -1479,6 +1513,11 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert(errorMessage);
                       return;
                     }
+                    // Staged-aware quota validation — block before any backend call
+                    if (exhaustedQuotaMessage) {
+                      alert(exhaustedQuotaMessage);
+                      return;
+                    }
                     if (!isEditing && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
                       alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
                       return;
@@ -1486,7 +1525,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     onSave({ ...formData, status: 'draft', isSetupComplete: true });
                   }}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                  disabled={loading}
+                  disabled={loading || exhaustedStagedQuotas.length > 0}
+                  title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
                 >
                   {isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'}
                 </button>
@@ -1500,7 +1540,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       setShowExecuteConfirm(true);
                     }}
                     className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                    disabled={loading}
+                    disabled={loading || exhaustedStagedQuotas.length > 0}
+                    title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
                   >
                     Execute Pipeline
                   </button>
@@ -1509,6 +1550,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   isOpen={showExecuteConfirm}
                   onClose={() => setShowExecuteConfirm(false)}
                   onConfirm={async () => {
+                    if (exhaustedStagedQuotas.length) return;
                     setShowExecuteConfirm(false);
                     try {
                       const data: any = await securedApi.callBackendFunction({
@@ -1530,7 +1572,18 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   message="This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?"
                   confirmText={loading ? 'Starting...' : 'Start Pipeline'}
                   cancelText="Cancel"
-                />
+                  confirmDisabled={exhaustedStagedQuotas.length > 0}
+                >
+                  <div className="mb-5 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-lg border dark:border-gray-700 space-y-2">
+                    <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monthly quota this run will spend</p>
+                    {stagedQuotaKeys.map(k => (
+                      <QuotaInfoBadge key={k} appData={appData} usageKey={k} />
+                    ))}
+                    {exhaustedQuotaMessage && (
+                      <p className="text-xs font-semibold text-red-600 dark:text-red-400">{exhaustedQuotaMessage}</p>
+                    )}
+                  </div>
+                </ConfirmationModal>
               </div>
             )}
           </div>

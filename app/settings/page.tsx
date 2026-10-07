@@ -14,7 +14,8 @@ import {
   faSpinner,
   faCheckCircle,
   faHeadset,
-  faSearch
+  faSearch,
+  faChartSimple
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import type { AppState } from '../../utils/authTypes'; // Import AppState from authTypes
@@ -23,7 +24,7 @@ import { securedApi, authApi } from '../../utils/auth';
 import TransactionResultModal from '../components/TransactionResultModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import FundAccountModal from '../components/admin/wallet/FundAccountModal';
-import { getUserLimits } from '../../utils/helpers';
+import { getUserLimits, QUOTA_LABELS, getQuotaInfo } from '../../utils/helpers';
 import ChangePasswordModal from '../components/admin/settings/ChangePasswordModal'; // Import the actual ChangePasswordModal
 import ApiKeyModal from '../components/admin/settings/ApiKeyModal'; // Import the actual ApiKeyModal
 import DestroyAccountModal from '../components/admin/settings/DestroyAccountModal'; // Import the actual DestroyAccountModal
@@ -400,6 +401,17 @@ export default function UserSettings() {
 
   const isTwoFactorEnabled = !!appData?.user?.twoFactorAuth;
 
+  // Monthly usage vs the plan's Limits-sheet row. Keys mirror the engine's
+  // USER_LIMIT_COLUMNS (*Limit → *Usage); 0/missing limit = unlimited.
+  const usageRows = (() => {
+    const limits = (appData as any)?.data?.limits;
+    if (!limits?.headers || !Array.isArray(limits.data) || !userLimits) return [];
+    return Object.keys(QUOTA_LABELS).map((key) => {
+      const q = getQuotaInfo(appData, key);
+      return q ? { key: q.key, label: q.label, limit: q.limit, used: q.used, unlimited: q.unlimited, pct: q.pct } : null;
+    }).filter(Boolean) as Array<{ key: string; label: string; limit: number; used: number; unlimited: boolean; pct: number }>;
+  })();
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* Upgrade Plan Card */}
@@ -428,6 +440,39 @@ export default function UserSettings() {
           </button>
         </div>
       </div>
+
+      {/* My Usage vs Plan */}
+      {usageRows.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none p-6 h-full mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">My Usage</h2>
+            <FontAwesomeIcon icon={faChartSimple} className="w-6 h-6 text-blue-500" />
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Monthly usage for the <span className="font-semibold capitalize">{appData?.user?.plan || 'Free'}</span> plan — counters reset each month, ∞ = unlimited.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {usageRows.map((row) => (
+              <div key={row.key}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-700 dark:text-gray-200">{row.label}</span>
+                  <span className={row.unlimited ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300 font-medium'}>
+                    {row.unlimited ? `${row.used} / ∞` : `${row.used} / ${row.limit}`}
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  {!row.unlimited && (
+                    <div
+                      className={`h-full rounded-full ${row.pct >= 100 ? 'bg-red-500' : row.pct >= 80 ? 'bg-amber-500' : 'bg-blue-500'}`}
+                      style={{ width: `${row.pct}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Security Sections */}
       <div className="space-y-6">

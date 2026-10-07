@@ -28,6 +28,7 @@ import { CampaignModal } from '../components/admin/campaign/CampaignModal';
 import type { Campaign } from '../types';
 import { securedApi, authApi } from '../../utils/auth';
 import { getUserLimits } from '../../utils/helpers';
+import { QuotaInfoBadge } from '../components/QuotaInfo';
 import { validateCampaignCreation, getValidationErrorMessage } from '../utils/campaignValidators';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TransactionResultModal from '../components/TransactionResultModal';
@@ -562,6 +563,14 @@ export default function Campaign() {
           <FontAwesomeIcon icon={faPlus} className="w-4 h-4 sm:mr-2" />
           <span className="hidden sm:inline">New Campaign</span>
         </button>
+      </div>
+
+      {/* Monthly quota strip — the 5 keys Execute Pipeline / create can spend */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 mr-1">Monthly usage:</span>
+        {(['shootCampaignUsage', 'validateUsage', 'enrichUsage', 'personalizeUsage', 'interactionUsage'] as const).map((k) => (
+          <QuotaInfoBadge key={k} appData={appData} usageKey={k} compact />
+        ))}
       </div>
 
       {/* [DIAG] Debug panel — visible only with ?debug=1 */}

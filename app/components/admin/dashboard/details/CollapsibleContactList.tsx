@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronDown, faChevronUp, faPhone, faBuilding, faNoteSticky } from '@fortawesome/free-solid-svg-icons';
+import { sanitizeContacts, sanitizeContactName, findEmailInText } from '../../../../../utils/helpers';
 
 export interface CollapsibleContactItem {
   name: string;
@@ -24,6 +25,10 @@ interface CollapsibleContactProps {
 
 export const CollapsibleContact = ({ contact, defaultExpanded = false }: CollapsibleContactProps) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  // Render-time cleanup for records persisted before the engine sanitize fix:
+  // pull emails out of junk names + strip Google UI phrases.
+  const { name: cleanName, email: cleanEmail } = sanitizeContactName(contact.name || '', contact.email || '');
+  const email = cleanEmail || findEmailInText(contact.name);
   const otherData = contact.otherData;
   const hasDetails = !!contact.relationshipSummary || !!otherData?.phoneNumbers?.length || !!otherData?.company || !!otherData?.notes;
 
@@ -34,9 +39,9 @@ export const CollapsibleContact = ({ contact, defaultExpanded = false }: Collaps
         className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
       >
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 dark:text-white truncate">{contact.name || 'Unknown'}</p>
-          {contact.email && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{contact.email}</p>
+          <p className="font-medium text-gray-900 dark:text-white truncate">{cleanName || email || 'Unknown'}</p>
+          {email && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{email}</p>
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0 ml-2">
@@ -90,12 +95,15 @@ interface CollapsibleContactListProps {
 
 export const CollapsibleContactList = ({ contacts, title = 'Contacts', maxHeight }: CollapsibleContactListProps) => {
   const [allExpanded, setAllExpanded] = useState(false);
-  if (!contacts?.length) return null;
+  // Sanitize + dedupe at render so rows persisted dirty (pre-engine-fix)
+  // still collapse duplicates and show clean names.
+  const cleanContacts = sanitizeContacts(contacts);
+  if (!cleanContacts.length) return null;
 
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-2">
-        <h4 className="font-medium text-gray-700 dark:text-white">{title} ({contacts.length})</h4>
+        <h4 className="font-medium text-gray-700 dark:text-white">{title} ({cleanContacts.length})</h4>
         <button
           onClick={() => setAllExpanded(v => !v)}
           className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
@@ -104,7 +112,7 @@ export const CollapsibleContactList = ({ contacts, title = 'Contacts', maxHeight
         </button>
       </div>
       <div className={`space-y-2 ${maxHeight ? `overflow-y-auto ${maxHeight}` : ''}`}>
-        {contacts.map((contact, index) => (
+        {cleanContacts.map((contact, index) => (
           <CollapsibleContact key={index} contact={contact} defaultExpanded={allExpanded} />
         ))}
       </div>

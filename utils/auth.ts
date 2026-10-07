@@ -80,6 +80,7 @@ export interface UserData {
   autoVerifySessions?: string; // Auto-verify sessions setting ("TRUE"/"FALSE")
   searchParams?: string; // Comma-separated mailbox extraction search terms
   verificationIntervalHours?: number; // Hours between auto-verifications (admin)
+  usage?: string; // Monthly per-key usage blob ({<key>Usage: {hourly,daily,monthly,total}})
 }
 
 export interface AppData {

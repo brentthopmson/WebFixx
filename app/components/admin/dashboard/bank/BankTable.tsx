@@ -1,5 +1,6 @@
 import { useWindowSize } from '../../../../hooks/useWindowSize';
 import { TableActions } from '../TableActions';
+import { RunningChips } from '../RunningChips';
 import { getLogoUrl } from '../../../../utils/logoUtils';
 import { isTrue } from '../../../../../utils/parseResponseField';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -161,7 +162,10 @@ export const BankTable: React.FC<BankTableProps> = ({
                     ) : column === 'email' ? (
                       item.email
                     ) : column === 'bankName' ? (
-                      bank.bankName
+                      <>
+                        {bank.bankName}
+                        <RunningChips item={item} />
+                      </>
                     ) : column === 'username' ? (
                       bank.username
                     ) : (
