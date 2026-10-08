@@ -136,6 +136,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         socialInteractionTypes: campaignToEdit.socialInteractionTypes || [],
         socialStrategyPrompt: campaignToEdit.socialStrategyPrompt || '',
         socialKeywords: campaignToEdit.socialKeywords || [],
+        platform: campaignToEdit.platform || '',
         campaignMode: campaignToEdit.campaignMode || (campaignToEdit.fileUrl ? 'file' : 'interactions-only'),
         targetLink: campaignToEdit.targetLink || '',
         emailKeywords: campaignToEdit.emailKeywords || [],
@@ -182,6 +183,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       socialInteractionTypes: [],
       socialStrategyPrompt: '',
       socialKeywords: [],
+      platform: '',
       campaignMode: 'file',
       targetLink: '',
       emailKeywords: [],
@@ -229,7 +231,22 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     }));
   };
 
-  const accountsList = getHubAccountsForChannel(formData.channel || 'email');
+  const accountsList = getHubAccountsForChannel(formData.channel || 'email') as { accountId: string; type: string }[];
+
+  // Social campaigns: derive the target platform from the selected accounts'
+  // hub `type` when not already set (legacy campaigns predate platform support).
+  const KNOWN_SOCIAL_PLATFORMS = ['tiktok', 'twitter', 'instagram', 'facebook', 'whatsapp', 'discord'];
+  const withDerivedPlatform = (data: Partial<Campaign>): Partial<Campaign> => {
+    if (data.channel !== 'social') return data;
+    if (data.platform) return data;
+    const selected = accountsList.filter(a => (data.accounts || []).includes(a.accountId));
+    for (const acc of selected) {
+      const t = (acc.type || '').toLowerCase();
+      const hit = KNOWN_SOCIAL_PLATFORMS.find(p => t.includes(p)) || (t === 'x' ? 'twitter' : '');
+      if (hit) return { ...data, platform: hit };
+    }
+    return data;
+  };
 
   // Get COMPLETED hub accounts for interaction selection
   const getCompletedAccountsForInteraction = (channelType: 'email' | 'social') => {
@@ -1522,7 +1539,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
                       return;
                     }
-                    onSave({ ...formData, status: 'draft', isSetupComplete: true });
+                    onSave({ ...withDerivedPlatform(formData), status: 'draft', isSetupComplete: true });
                   }}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
                   disabled={loading || exhaustedStagedQuotas.length > 0}
@@ -1560,7 +1577,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         scheduleStartTime: formData.scheduleStartTime || null,
                       });
                       if (data.success) {
-                        onSave({ ...formData, status: 'running', isSetupComplete: true });
+                        onSave({ ...withDerivedPlatform(formData), status: 'running', isSetupComplete: true });
                       } else {
                         alert(data.message || data.error || 'Failed to start pipeline');
                       }

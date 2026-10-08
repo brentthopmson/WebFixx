@@ -220,9 +220,9 @@ let _inflightAppDataLite: Promise<SecuredApiResponse> | null = null;
 let _lastAppDataCache: { data: SecuredApiResponse; timestamp: number } | null = null;
 const APPDATA_CACHE_TTL = 30000; // 30 seconds cache TTL to prevent 429 rate limits
 
-async function _fetchAppDataLite(token: string, forceRefresh: boolean): Promise<SecuredApiResponse> {
+async function _fetchAppDataLite(token: string, forceRefresh: boolean, skipClientCache: boolean = false): Promise<SecuredApiResponse> {
   const now = Date.now();
-  if (!forceRefresh && _lastAppDataCache && (now - _lastAppDataCache.timestamp < APPDATA_CACHE_TTL)) {
+  if (!skipClientCache && !forceRefresh && _lastAppDataCache && (now - _lastAppDataCache.timestamp < APPDATA_CACHE_TTL)) {
     return _lastAppDataCache.data;
   }
 
@@ -489,12 +489,14 @@ export const authApi = {
     }
   },
 
-  verifySession: async (browserId: string, category: string) => {
+  verifySession: async (browserId: string, category: string, userId: string = '', platform: string = '') => {
     try {
       const response = await securedApi.callBackendFunction({
         functionName: 'verifySession',
         browserId,
-        category
+        category,
+        userId,
+        platform
       });
       return response;
     } catch (error) {
@@ -522,7 +524,10 @@ export const authApi = {
       const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
       if (!token) throw new Error('No auth token found');
 
-      const bundle = await _fetchAppDataLite(token, forceRefresh);
+      // Explicit refresh: bypass the 30s client cache so post-mutation reads
+      // are never served a pre-mutation bundle (the Flask cache was already
+      // recached/invalidated by the mutation itself, so this stays fast).
+      const bundle = await _fetchAppDataLite(token, forceRefresh, true);
       const text = JSON.stringify(bundle);
 
       if (!bundle) {

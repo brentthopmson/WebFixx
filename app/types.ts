@@ -91,6 +91,8 @@ export interface Campaign {
   socialStrategyPrompt?: string; // Outreach prompt for AI replies/posts
   socialKeywords?: string[]; // Targeting search queries
   shouldSendMessage?: boolean; // Send DM to all social profiles in CSV
+  platform?: string; // Social target platform (tiktok/twitter/instagram/…)
+  engagementMode?: boolean; // true = perform write actions (like/comment/follow), false = read/scrape only
 
   // Campaign mode + interactions-only (AI inbox watcher) support
   campaignMode?: 'file' | 'interactions-only'; // 'file' = CSV-driven, 'interactions-only' = AI-driven, no contact list

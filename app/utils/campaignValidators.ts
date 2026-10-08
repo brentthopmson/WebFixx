@@ -339,6 +339,10 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
     if (!campaign.socialStrategyPrompt || campaign.socialStrategyPrompt.trim().length === 0) {
       return { field: 'socialStrategyPrompt', message: 'Social strategy prompt is required for social campaigns' };
     }
+    // Engine hard-fails execution on empty keywords unless a CSV provides them
+    if ((campaign.socialKeywords || []).length === 0 && !campaign.fileUrl) {
+      return { field: 'socialKeywords', message: 'Add at least one social keyword (or upload a contact CSV) so the campaign knows what to search for' };
+    }
   }
 
   // Interaction stage requires limits

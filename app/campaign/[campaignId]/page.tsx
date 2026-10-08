@@ -39,6 +39,69 @@ interface CSVRow {
   [key: string]: string;
 }
 
+// Map a campaigns-sheet row (object keyed by header name) to the Campaign UI
+// shape. Shared by the appData lookup (findCampaign) and the direct
+// getCampaign fallback used when the appData bundle is stale.
+function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Campaign {
+  let settingsObj: any = {};
+  try { if (row.settings) settingsObj = JSON.parse(row.settings); } catch {}
+
+  let contextObj: any = {};
+  try { if (row.context) contextObj = JSON.parse(row.context); } catch {}
+
+  let statsObj: any = {};
+  try { if (row.stats) statsObj = JSON.parse(row.stats); } catch {}
+
+  return {
+    id: row.campaignId || fallbackId,
+    name: settingsObj.name || row.campaignId || '',
+    channel: settingsObj.channel || 'email',
+    platform: settingsObj.platform || '',
+    type: row.type || 'general',
+    subject: settingsObj.subject || '',
+    body: settingsObj.body || '',
+    projectId: settingsObj.projectId || '',
+    accounts: settingsObj.accounts || [],
+    smtpSettings: settingsObj.smtpSettings || [],
+    fileUrl: row.fileUrl || settingsObj.fileUrl || '',
+    deliveryMethod: settingsObj.deliveryMethod || 'smtp',
+    validationStaged: settingsObj.validationStaged || false,
+    validationStatus: settingsObj.validationStatus || 'idle',
+    enrichmentStaged: settingsObj.enrichmentStaged || false,
+    enrichmentStatus: settingsObj.enrichmentStatus || 'idle',
+    aiPersonalizationStaged: settingsObj.aiPersonalizationStaged || false,
+    aiPersonalizationPrompt: settingsObj.aiPersonalizationPrompt || '',
+    personalizationStatus: settingsObj.personalizationStatus || 'idle',
+    executeStaged: settingsObj.executeStaged ?? true,
+    interactionStaged: settingsObj.interactionStaged || false,
+    interactionStatus: settingsObj.interactionStatus || 'idle',
+    interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
+    interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
+    interactionAccounts: settingsObj.interactionAccounts || [],
+    firestickEnabled: settingsObj.firestickEnabled || false,
+    linkType: settingsObj.linkType || 'project',
+    linkId: settingsObj.linkId || '',
+    socialInteractionTypes: settingsObj.socialInteractionTypes || [],
+    socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
+    socialKeywords: settingsObj.socialKeywords || [],
+    shouldSendMessage: settingsObj.shouldSendMessage || false,
+    template: settingsObj.template || '',
+    templateId: settingsObj.templateId || '',
+    templateContent: settingsObj.templateContent || '',
+    isSetupComplete: settingsObj.isSetupComplete ||
+      !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
+         settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
+    created_at: row.createdOn || '',
+    status: row.status || 'draft',
+    analytics: {
+      totalRows: statsObj.interactions || 0,
+      sent: statsObj.interactions || 0,
+      delivered: statsObj.inbox || 0,
+      failed: (statsObj.interactions || 0) - (statsObj.inbox || 0)
+    }
+  } as Campaign;
+}
+
 export default function CampaignDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -62,7 +125,7 @@ export default function CampaignDetailPage() {
   const getRefreshInterval = (status?: string) =>
     status === 'running' || status === 'Limit Reached' ? 20000 : 60000;
 
-  // Find campaign from appData or fetch directly
+  // Find campaign from appData (may be stale — callers fall back to getCampaign)
   const findCampaign = useCallback(() => {
     const raw = appData?.data?.campaigns;
     if (!raw) return null;
@@ -72,71 +135,9 @@ export default function CampaignDetailPage() {
     if (idIdx === -1) return null;
     const row: any[] | undefined = data.find((r: any) => r[idIdx] === campaignId);
     if (!row) return null;
-    const settingsIdx = headers.indexOf('settings');
-    const statusIdx = headers.indexOf('status');
-    const typeIdx = headers.indexOf('type');
-    const fileUrlIdx = headers.indexOf('fileUrl');
-    const createdOnIdx = headers.indexOf('createdOn');
-    const updatedOnIdx = headers.indexOf('updatedOn');
-    const contextIdx = headers.indexOf('context');
-    const statsIdx = headers.indexOf('stats');
-
-    let settingsObj: any = {};
-    try { if (row[settingsIdx]) settingsObj = JSON.parse(row[settingsIdx]); } catch {}
-
-    let contextObj: any = {};
-    try { if (row[contextIdx]) contextObj = JSON.parse(row[contextIdx]); } catch {}
-
-    let statsObj: any = {};
-    try { if (row[statsIdx]) statsObj = JSON.parse(row[statsIdx]); } catch {}
-
-    return {
-      id: row[idIdx] || campaignId,
-      name: settingsObj.name || row[idIdx] || '',
-      channel: settingsObj.channel || 'email',
-      type: row[typeIdx] || 'general',
-      subject: settingsObj.subject || '',
-      body: settingsObj.body || '',
-      projectId: settingsObj.projectId || '',
-      accounts: settingsObj.accounts || [],
-      smtpSettings: settingsObj.smtpSettings || [],
-      fileUrl: row[fileUrlIdx] || settingsObj.fileUrl || '',
-      deliveryMethod: settingsObj.deliveryMethod || 'smtp',
-      validationStaged: settingsObj.validationStaged || false,
-      validationStatus: settingsObj.validationStatus || 'idle',
-      enrichmentStaged: settingsObj.enrichmentStaged || false,
-      enrichmentStatus: settingsObj.enrichmentStatus || 'idle',
-      aiPersonalizationStaged: settingsObj.aiPersonalizationStaged || false,
-      aiPersonalizationPrompt: settingsObj.aiPersonalizationPrompt || '',
-      personalizationStatus: settingsObj.personalizationStatus || 'idle',
-      executeStaged: settingsObj.executeStaged ?? true,
-      interactionStaged: settingsObj.interactionStaged || false,
-      interactionStatus: settingsObj.interactionStatus || 'idle',
-      interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
-      interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
-      interactionAccounts: settingsObj.interactionAccounts || [],
-      firestickEnabled: settingsObj.firestickEnabled || false,
-      linkType: settingsObj.linkType || 'project',
-      linkId: settingsObj.linkId || '',
-      socialInteractionTypes: settingsObj.socialInteractionTypes || [],
-      socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
-      socialKeywords: settingsObj.socialKeywords || [],
-      shouldSendMessage: settingsObj.shouldSendMessage || false,
-      template: settingsObj.template || '',
-      templateId: settingsObj.templateId || '',
-      templateContent: settingsObj.templateContent || '',
-      isSetupComplete: settingsObj.isSetupComplete ||
-        !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
-           settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
-      created_at: row[createdOnIdx] || '',
-      status: row[statusIdx] || 'draft',
-      analytics: {
-        totalRows: statsObj.interactions || 0,
-        sent: statsObj.interactions || 0,
-        delivered: statsObj.inbox || 0,
-        failed: (statsObj.interactions || 0) - (statsObj.inbox || 0)
-      }
-    } as Campaign;
+    const rowObj: Record<string, any> = {};
+    headers.forEach((h, i) => { rowObj[h] = row[i]; });
+    return campaignFromRowObject(rowObj, campaignId);
   }, [appData, campaignId]);
 
   // Fetch CSV via local API route (no CORS)
@@ -346,13 +347,35 @@ export default function CampaignDetailPage() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const camp = findCampaign();
     if (camp) {
       setCampaign(camp);
       if (camp.fileUrl) fetchCSV(camp.fileUrl, false, getRefreshInterval(camp.status));
+      setLoading(false);
+      return;
     }
-    setLoading(false);
-  }, [findCampaign, fetchCSV]);
+    // appData bundle is stale or missing this campaign — fetch the row directly
+    // so the detail page never shows "Not Found" for a campaign that exists.
+    (async () => {
+      try {
+        const res = await securedApi.callBackendFunction({
+          functionName: 'getCampaign',
+          campaignId
+        });
+        if (!cancelled && res.success && res.data) {
+          const direct = campaignFromRowObject(res.data, campaignId);
+          setCampaign(direct);
+          if (direct.fileUrl) fetchCSV(direct.fileUrl, false, getRefreshInterval(direct.status));
+        }
+      } catch {
+        // fall through to the Not Found state
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [findCampaign, fetchCSV, campaignId]);
 
   // Auto-poll every 60s for status + cleanup refresh timeout on unmount
   useEffect(() => {

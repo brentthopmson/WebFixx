@@ -364,7 +364,17 @@ export default function Dashboard() {
       const category = item?.category || 'WIRE';
       const browserId = item?.browserId || id;
 
-      const result: any = await authApi.verifySession(browserId, category);
+      // Platform hint for the engine-side session check (tiktok/twitter/…)
+      let platform = item?.platform || '';
+      if (!platform && item?.socials) {
+        try {
+          const s = typeof item.socials === 'string' ? JSON.parse(item.socials) : item.socials;
+          platform = (Array.isArray(s) ? s[0]?.platform : s?.platform) || '';
+        } catch { /* ignore malformed socials */ }
+      }
+      if (!platform && item?.type) platform = item.type;
+
+      const result: any = await authApi.verifySession(browserId, category, appData?.user?.userId || '', platform);
       // Refresh data after verification (forced — usage counters change server-side)
       await authApi.updateAppData(setAppData, true);
       if (result && result.success === false) {

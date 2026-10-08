@@ -170,6 +170,7 @@ export default function Campaign() {
         id: row[columnIndices.campaignId] || '',
         name: settingsObj.name || row[columnIndices.campaignId] || '',
         channel: settingsObj.channel || 'email',
+        platform: settingsObj.platform || '',
         type: row[columnIndices.type] || 'general',
         subject: settingsObj.subject || '',
         body: settingsObj.body || '',
@@ -223,6 +224,11 @@ export default function Campaign() {
     if (parseErrors.length) {
       console.warn('[Campaigns][DIAG] transformCampaignData parseErrors:', parseErrors);
     }
+    // Newest first — createdOn is an ISO timestamp (fallback: updatedOn).
+    result.sort((a: any, b: any) =>
+      String(b.created_at || '').localeCompare(String(a.created_at || '')) ||
+      String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
+    );
     return result;
   };
 
@@ -262,7 +268,9 @@ export default function Campaign() {
   const handleRefreshData = async () => {
     setRefreshing(true);
     try {
-      await authApi.updateAppData(setAppData);
+      // force=true: manual refresh must bypass both the 30s client cache and
+      // the 120s Flask cache so the latest sheet state is always shown.
+      await authApi.updateAppData(setAppData, true);
     } catch (error) {
       console.error('Error refreshing application data:', error);
     } finally {
@@ -274,6 +282,12 @@ export default function Campaign() {
     name: campaign.name || '',
     channel: campaign.channel || 'email',
     type: campaign.type || 'general',
+    // Carried so updateCampaign's settings merge round-trips them
+    projectId: campaign.projectId || '',
+    accounts: campaign.accounts || [],
+    platform: campaign.platform || '',
+    // Derived (approved): engagement on when any interaction type is selected
+    engagementMode: (campaign.socialInteractionTypes || []).length > 0,
     subject: campaign.subject || '',
     body: campaign.body || '',
     replyFolder: campaign.replyFolder || '',
@@ -357,7 +371,9 @@ export default function Campaign() {
         response = await securedApi.callBackendFunction({
           functionName: 'createNewCampaign',
           projectId: newCampaign.projectId || '',
-          accountIds: newCampaign.accounts || [],
+          // Comma-joined: objectToFormData JSON-stringifies arrays and GAS
+          // comma-splits, which corrupted accounts into ["[]"] / ['["a"', …].
+          accountIds: (newCampaign.accounts || []).join(','),
           status: newCampaign.status || 'draft',
           strategyContext,
           userId: appData?.user?.userId || ''
