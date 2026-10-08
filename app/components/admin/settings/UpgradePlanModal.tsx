@@ -4,7 +4,6 @@ import {
   faUser,
   faLock,
   faShield,
-  faKey,
   faEdit,
   faSync,
   faTimes // Added for close button
@@ -26,10 +25,14 @@ export interface UpgradePlanModalProps {
 const UpgradePlanModal = ({ isOpen, onClose, appData, userLimits, onConfirm, selectedPlan, setSelectedPlan, isUpgradingPlan }: UpgradePlanModalProps) => {
   if (!isOpen) return null;
 
-  const availablePlans = appData?.data?.limits?.data || [];
   const planHeaders = appData?.data?.limits?.headers || [];
 
   const getPlanIndex = (header: string) => planHeaders.indexOf(header);
+
+  const planColumn = getPlanIndex('plan');
+  const availablePlans = (appData?.data?.limits?.data || []).filter(
+    (row: any) => String(row?.[planColumn] ?? '').trim() !== ''
+  );
 
   const currentPlan = appData?.user?.plan ? appData.user.plan.toLowerCase() : 'free'; // Safely access and convert to lowercase
   const planExpiry = appData?.user?.planExpiry;
@@ -82,13 +85,12 @@ const UpgradePlanModal = ({ isOpen, onClose, appData, userLimits, onConfirm, sel
                 </p>
                 <div className="text-sm text-gray-500 dark:text-gray-400 mt-2 space-y-1">
                   <p><FontAwesomeIcon icon={faEdit} className="w-3 h-3 mr-2 text-blue-400" />Redirect Path Limit (Plan-based): <span className="font-semibold">{plan[getPlanIndex('redirectPathLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faShield} className="w-3 h-3 mr-2 text-green-400" />SMTP Checker Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('smtpCheckerLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faUser} className="w-3 h-3 mr-2 text-purple-400" />Sender Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('senderLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faLock} className="w-3 h-3 mr-2 text-yellow-400" />Verify Login Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('verifyLoginLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faKey} className="w-3 h-3 mr-2 text-indigo-400" />Get Cookie Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('getCookieLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faSync} className="w-3 h-3 mr-2 text-pink-400" />Extraction Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('extractionLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faUser} className="w-3 h-3 mr-2 text-teal-400" />Shoot Contacts Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('shootContactsLimit')]}</span></p>
-                  <p><FontAwesomeIcon icon={faEdit} className="w-3 h-3 mr-2 text-orange-400" />Interaction Limit (Daily): <span className="font-semibold">{plan[getPlanIndex('interactionLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faShield} className="w-3 h-3 mr-2 text-green-400" />SMTP Checker Limit (Monthly): <span className="font-semibold">{plan[getPlanIndex('smtpCheckerLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faUser} className="w-3 h-3 mr-2 text-purple-400" />Sender Limit (Monthly): <span className="font-semibold">{plan[getPlanIndex('senderLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faLock} className="w-3 h-3 mr-2 text-yellow-400" />Verify Login Limit (Monthly): <span className="font-semibold">{plan[getPlanIndex('verifyLoginLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faSync} className="w-3 h-3 mr-2 text-pink-400" />Extraction Limit (Monthly): <span className="font-semibold">{plan[getPlanIndex('extractionLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faUser} className="w-3 h-3 mr-2 text-teal-400" />Shoot Contacts Limit (Monthly): <span className="font-semibold">{plan[getPlanIndex('shootContactsLimit')]}</span></p>
+                  <p><FontAwesomeIcon icon={faEdit} className="w-3 h-3 mr-2 text-orange-400" />Interaction Limit (Monthly): <span className="font-semibold">{plan[getPlanIndex('interactionLimit')]}</span></p>
                 </div>
                 {isCurrentPlan && (
                   <span className="mt-3 inline-block bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Current Plan</span>
