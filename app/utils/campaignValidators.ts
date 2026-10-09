@@ -339,9 +339,11 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
     if (!campaign.socialStrategyPrompt || campaign.socialStrategyPrompt.trim().length === 0) {
       return { field: 'socialStrategyPrompt', message: 'Social strategy prompt is required for social campaigns' };
     }
-    // Engine hard-fails execution on empty keywords unless a CSV provides them
-    if ((campaign.socialKeywords || []).length === 0 && !campaign.fileUrl) {
-      return { field: 'socialKeywords', message: 'Add at least one social keyword (or upload a contact CSV) so the campaign knows what to search for' };
+    // Engine needs targets: CSV handles, keyword chips, or the inbox hook —
+    // inbox monitors/answers DMs and requires no list at all.
+    const hasInboxHook = (campaign.socialInteractionTypes || []).includes('inbox');
+    if ((campaign.socialKeywords || []).length === 0 && !campaign.fileUrl && !hasInboxHook) {
+      return { field: 'socialKeywords', message: 'Add at least one social keyword, upload a CSV with a SOCIALUSERNAME column, or enable the inbox hook (works without a list)' };
     }
   }
 

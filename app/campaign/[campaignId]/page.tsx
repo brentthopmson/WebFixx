@@ -57,7 +57,7 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     name: settingsObj.name || row.campaignId || '',
     channel: settingsObj.channel || 'email',
     platform: settingsObj.platform || '',
-    type: row.type || 'general',
+    type: row.type || settingsObj.type || 'general',
     subject: settingsObj.subject || '',
     body: settingsObj.body || '',
     projectId: settingsObj.projectId || '',
@@ -529,17 +529,23 @@ export default function CampaignDetailPage() {
           </p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700">
-          <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">Delivery</p>
-          <p className="text-sm font-semibold mt-1 dark:text-white capitalize">{campaign.deliveryMethod || 'N/A'}</p>
+          <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">{campaign.channel === 'social' ? 'Mode' : 'Delivery'}</p>
+          <p className="text-sm font-semibold mt-1 dark:text-white capitalize">
+            {campaign.channel === 'social'
+              ? `${campaign.platform || 'social'} · ${(campaign.socialInteractionTypes || []).length > 0 ? 'engagement' : 'read-only'}`
+              : campaign.deliveryMethod || 'N/A'}
+          </p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700">
-          <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">CSV Contacts</p>
+          <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">{campaign.channel === 'social' ? 'Profile List' : 'CSV Contacts'}</p>
           <p className="text-sm font-semibold mt-1 dark:text-white">{csvData.length.toLocaleString()}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700">
           <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">Progress</p>
           <p className="text-sm font-semibold mt-1 dark:text-white">
-            {campaign.analytics?.sent || 0} sent / {campaign.analytics?.delivered || 0} delivered
+            {campaign.channel === 'social'
+              ? `${campaign.analytics?.sent || 0} executed / ${(csvData.length || campaign.analytics?.totalRows || 0).toLocaleString()} targets`
+              : `${campaign.analytics?.sent || 0} sent / ${campaign.analytics?.delivered || 0} delivered`}
           </p>
         </div>
       </div>
@@ -549,14 +555,24 @@ export default function CampaignDetailPage() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pipeline Stages</h3>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[
-            { label: 'Validation', icon: faShieldAlt, staged: campaign.validationStaged, status: campaign.validationStatus, field: 'validationStaged' as const },
-            { label: 'Enrichment', icon: faSearch, staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus, field: 'enrichmentStaged' as const },
-            { label: 'AI Personalization', icon: faMagic, staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus, field: 'aiPersonalizationStaged' as const },
-            { label: 'Execute', icon: faRocket, staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle', field: 'executeStaged' as const },
-            { label: 'Interaction', icon: faComments, staged: campaign.interactionStaged, status: campaign.interactionStatus || 'idle', field: 'interactionStaged' as const },
-          ].map(item => {
+        <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${campaign.channel === 'social' ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
+          {(campaign.channel === 'social'
+            ? [
+                { label: 'Execute', icon: faRocket, staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
+                { label: 'Interaction', icon: faComments, staged: campaign.interactionStaged, status: campaign.interactionStatus || 'idle' },
+                ...(campaign.socialInteractionTypes || []).includes('inbox') ? [{ label: 'Inbox Hook', icon: faEnvelope, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : [],
+                ...(campaign.socialInteractionTypes || []).includes('search') ? [{ label: 'Search Hook', icon: faSearch, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : [],
+                ...(campaign.socialInteractionTypes || []).includes('other') ? [{ label: 'Page Hook', icon: faRobot, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : [],
+                ...(campaign.shouldSendMessage ? [{ label: 'Direct Message', icon: faEnvelope, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : []),
+              ]
+            : [
+                { label: 'Validation', icon: faShieldAlt, staged: campaign.validationStaged, status: campaign.validationStatus },
+                { label: 'Enrichment', icon: faSearch, staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
+                { label: 'AI Personalization', icon: faMagic, staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
+                { label: 'Execute', icon: faRocket, staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
+                { label: 'Interaction', icon: faComments, staged: campaign.interactionStaged, status: campaign.interactionStatus || 'idle' },
+              ]
+          ).map(item => {
             const statusIcon = item.status === 'completed' ? faCheckCircle
               : item.status === 'processing' ? faSpinner
               : item.status === 'failed' ? faTimesCircle
@@ -600,7 +616,7 @@ export default function CampaignDetailPage() {
       <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden">
         <div className="p-4 border-b dark:border-gray-700 flex items-center justify-between">
           <h3 className="text-sm font-bold dark:text-white">
-            CSV Contacts Data
+            {campaign.channel === 'social' ? 'Profile List Data' : 'CSV Contacts Data'}
             {csvLoading && <FontAwesomeIcon icon={faSpinner} className="ml-2 w-3.5 h-3.5 text-blue-500 animate-spin" />}
           </h3>
           <div className="flex items-center space-x-2">
@@ -658,7 +674,7 @@ export default function CampaignDetailPage() {
               ) : (
                 <div className="p-8 text-center">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {csvLoading ? 'Loading CSV data...' : campaign.fileUrl ? 'No CSV data loaded.' : 'No CSV file uploaded for this campaign.'}
+                    {csvLoading ? 'Loading CSV data...' : campaign.fileUrl ? 'No CSV data loaded.' : campaign.channel === 'social' ? 'No profile list uploaded for this campaign (keyword / inbox-driven).' : 'No CSV file uploaded for this campaign.'}
                   </p>
                 </div>
               )}
@@ -698,7 +714,9 @@ export default function CampaignDetailPage() {
         onClose={() => setShowExecuteConfirm(false)}
         onConfirm={handleExecutePipeline}
         title="Start Pipeline?"
-        message="This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?"
+        message={campaign?.channel === 'social'
+          ? 'This will start executing the social campaign pipeline (queue interactions / send DMs via your selected profiles). This action cannot be undone. Continue?'
+          : 'This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?'}
         confirmText="Start Pipeline"
         cancelText="Cancel"
         confirmDisabled={exhaustedStagedQuotas.length > 0}

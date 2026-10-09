@@ -171,7 +171,7 @@ export default function Campaign() {
         name: settingsObj.name || row[columnIndices.campaignId] || '',
         channel: settingsObj.channel || 'email',
         platform: settingsObj.platform || '',
-        type: row[columnIndices.type] || 'general',
+        type: row[columnIndices.type] || settingsObj.type || 'general',
         subject: settingsObj.subject || '',
         body: settingsObj.body || '',
         replyFolder: settingsObj.replyFolder || '',
@@ -205,6 +205,7 @@ export default function Campaign() {
         socialInteractionTypes: settingsObj.socialInteractionTypes || [],
         socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
         socialKeywords: settingsObj.socialKeywords || [],
+        shouldSendMessage: settingsObj.shouldSendMessage || false,
         isSetupComplete: settingsObj.isSetupComplete ||
           !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
              settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
@@ -634,7 +635,20 @@ export default function Campaign() {
                 <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">{campaign.id}</p>
                 <div className="flex items-center gap-3 mt-1.5 text-xxs text-gray-500 dark:text-gray-400">
                   <span className="capitalize">{campaign.channel}</span>
-                  {campaign.deliveryMethod && <span>· {campaign.deliveryMethod} rotation</span>}
+                  {campaign.channel === 'social' ? (
+                    <>
+                      {campaign.platform && <span className="capitalize">· {campaign.platform}</span>}
+                      <span className="capitalize">
+                        · {((): string => {
+                          const hooks = campaign.socialInteractionTypes || [];
+                          if (hooks.length === 0 && !campaign.shouldSendMessage) return 'read-only';
+                          return [...hooks.map(t => t === 'other' ? 'page' : t), ...(campaign.shouldSendMessage ? ['dm'] : [])].join(' / ');
+                        })()}
+                      </span>
+                    </>
+                  ) : (
+                    campaign.deliveryMethod && <span>· {campaign.deliveryMethod} rotation</span>
+                  )}
                   {campaign.type && <span>· {campaign.type.replace(/_/g, ' ')}</span>}
                   {created && <span>· {created}</span>}
                 </div>
@@ -663,13 +677,29 @@ export default function Campaign() {
             {/* Staging pipeline badges + progress bar */}
             <div className="px-4 pb-3 flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2.5 text-xxs">
-                {[
-                  { label: 'Validate', staged: campaign.validationStaged, status: campaign.validationStatus },
-                  { label: 'Enrich', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
-                  { label: 'AI', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
-                  { label: 'Execute', staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
-                  { label: 'Interact', staged: campaign.interactionStaged, status: (campaign as any).interactionStatus || 'idle' },
-                ].map(s => {
+                {(campaign.channel === 'social'
+                  ? [
+                      { label: 'Execute', staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
+                      { label: 'Interact', staged: campaign.interactionStaged, status: (campaign as any).interactionStatus || 'idle' },
+                      ...(campaign.socialInteractionTypes || []).map(t => ({
+                        label: t === 'other' ? 'Page' : t.charAt(0).toUpperCase() + t.slice(1),
+                        staged: true,
+                        status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle',
+                      })),
+                      ...(campaign.shouldSendMessage ? [{
+                        label: 'DM',
+                        staged: true,
+                        status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle',
+                      }] : []),
+                    ]
+                  : [
+                      { label: 'Validate', staged: campaign.validationStaged, status: campaign.validationStatus },
+                      { label: 'Enrich', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
+                      { label: 'AI', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
+                      { label: 'Execute', staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
+                      { label: 'Interact', staged: campaign.interactionStaged, status: (campaign as any).interactionStatus || 'idle' },
+                    ]
+                ).map(s => {
                   const si = stageIcon(s.staged, s.status);
                   return (
                     <span key={s.label} className={`flex items-center gap-1 ${si.color}`}>

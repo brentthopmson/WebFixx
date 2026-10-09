@@ -253,7 +253,20 @@ export function buildCSVFromContacts(
   return stringifyCSV(rows);
 }
 
-export function generateSampleCSV(): string {
+export function generateSampleCSV(channel?: 'email' | 'social'): string {
+  if (channel === 'social') {
+    // Social targets template: one handle per row, optional per-row DM override
+    // (empty socialMessage falls back to the campaign's DM content template).
+    const columns = ['SOCIALPLATFORM', 'SOCIALUSERNAME', 'socialMessage'];
+    const sampleRows = [
+      'twitter,@elonmusk,Hey — loved your take on shipping fast. Open to a quick chat?',
+      'tiktok,@saasfounder,,',
+      'facebook,jane.doe,Following your page for a while — mind if I ask a quick question?',
+      'instagram,@growth.hacks,,',
+    ];
+    return [columns.join(','), ...sampleRows].join('\n');
+  }
+
   const columns = [
     'FIRSTNAME', 'LASTNAME', 'EMAIL', 'ADDRESS', 'CITY', 'STATE', 'COUNTRY', 'ZIPCODE', 'PHONE', 'SEX',
     'BUSINESSNAME', 'BUSINESSADDRESS', 'BUSINESSCITY', 'BUSINESSSTATE', 'BUSINESSCOUNTRY', 'BUSINESSZIPCODE', 'BUSINESSPHONE', 'BUSINESSEMAIL',

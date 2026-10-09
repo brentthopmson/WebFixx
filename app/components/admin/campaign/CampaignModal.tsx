@@ -746,11 +746,11 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 <a
                   onClick={(e) => {
                     e.stopPropagation();
-                    const blob = new Blob([generateSampleCSV()], { type: 'text/csv' });
+                    const blob = new Blob([generateSampleCSV(formData.channel === 'social' ? 'social' : 'email')], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'sample-campaign.csv';
+                    a.download = formData.channel === 'social' ? 'sample-social-targets.csv' : 'sample-campaign.csv';
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -790,7 +790,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               <div className="bg-blue-50/50 dark:bg-blue-950/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50 flex items-center space-x-3">
                 <FontAwesomeIcon icon={faCheckCircle} className="w-5 h-5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-xs font-semibold dark:text-white">Contacts Database Synced</p>
+                  <p className="text-xs font-semibold dark:text-white">{formData.channel === 'social' ? 'Profile List Synced' : 'Contacts Database Synced'}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 leading-relaxed">{csvAnalytics.summary}</p>
                 </div>
               </div>
@@ -809,12 +809,12 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 <div className="p-4 space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Campaign Name</label>
-                    <input type="text" placeholder="e.g. Q2 Customer Outreach Strategy" className={`w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none ${isEditing ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-70' : ''}`} value={formData.name || ''} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} disabled={isEditing} />
+                    <input type="text" placeholder="e.g. Q2 Customer Outreach Strategy" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.name || ''} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Niche Category</label>
-                      <select className={`w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none ${isEditing ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-70' : ''}`} value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))} disabled={isEditing}>
+                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))}>
                         <option value="general">General Niche</option>
                         <option value="email_logs">Email Logs</option>
                         <option value="bank_logs">Bank Logs</option>
@@ -875,11 +875,16 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     </div>
                   )}
 
-                  {formData.projectId && (
+                  {(formData.channel === 'social' || formData.projectId) && (
                     <div>
                       <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         Select Active {formData.channel === 'social' ? 'Social' : 'Email'} Profiles ({accountsList.length} Found)
                       </label>
+                      {formData.channel === 'social' && (formData.accounts || []).length > 0 && (
+                        <p className="text-xxs text-emerald-600 dark:text-emerald-400 font-semibold mb-1.5">
+                          Platform: {Array.from(new Set(accountsList.filter((a: any) => (formData.accounts || []).includes(a.accountId)).map((a: any) => a.type))).join(' · ')}
+                        </p>
+                      )}
                       {accountsList.length === 0 ? (
                         <p className="text-xs text-amber-600 italic bg-amber-50 p-3 rounded-xl dark:bg-amber-950/20 dark:text-amber-400 flex items-start gap-2">
                           <FontAwesomeIcon icon={faInfoCircle} className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
@@ -1511,6 +1516,14 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     if ((formData.channel === 'social' || formData.deliveryMethod !== 'smtp') && (!formData.accounts || formData.accounts.length === 0)) {
                       alert('Please select at least one active profile/account to proceed.');
                       return;
+                    }
+                    if (formData.channel === 'social') {
+                      const hasInboxHook = (formData.socialInteractionTypes || []).includes('inbox');
+                      const hasTargets = (formData.socialKeywords || []).length > 0 || !!formData.fileUrl || hasInboxHook;
+                      if (!hasTargets) {
+                        alert('Add at least one targeting keyword, upload a CSV with a SOCIALUSERNAME column, or enable the inbox hook (works without a list).');
+                        return;
+                      }
                     }
                   }
                   setStep(prev => prev + 1);
