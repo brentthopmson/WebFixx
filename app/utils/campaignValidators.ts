@@ -345,6 +345,12 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
     if ((campaign.socialKeywords || []).length === 0 && !campaign.fileUrl && !hasInboxHook) {
       return { field: 'socialKeywords', message: 'Add at least one social keyword, upload a CSV with a SOCIALUSERNAME column, or enable the inbox hook (works without a list)' };
     }
+    // The search hook performs keyword-based discovery: keywords required
+    // unless a CSV with handles was uploaded (CSV handles satisfy the rule).
+    const hasSearchHook = (campaign.socialInteractionTypes || []).includes('search');
+    if (hasSearchHook && (campaign.socialKeywords || []).length === 0 && !campaign.fileUrl) {
+      return { field: 'socialKeywords', message: 'The search hook needs targets: add at least one discovery keyword or upload a CSV profile list with handles' };
+    }
   }
 
   // Interaction stage requires limits

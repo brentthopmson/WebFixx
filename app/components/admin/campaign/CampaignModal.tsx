@@ -98,6 +98,53 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const projectsList = getProjectsList();
   const redirectsList = getRedirectsList();
 
+  // --- Social platform resolution helpers -----------------------------------
+  // Normalize any platform-ish value ("TikTok", "x", "Instagram") to a canonical
+  // slug used by the engine's interact routes.
+  const normalizeSocialPlatformName = (value: any): string => {
+    const p = String(value || '').toLowerCase().trim();
+    if (!p) return '';
+    if (p.includes('tiktok')) return 'tiktok';
+    if (p.includes('twitter')) return 'twitter';
+    if (p.includes('instagram')) return 'instagram';
+    if (p.includes('facebook')) return 'facebook';
+    if (p.includes('whatsapp')) return 'whatsapp';
+    if (p.includes('discord')) return 'discord';
+    if (p.includes('linkedin')) return 'linkedin';
+    if (p === 'x') return 'twitter';
+    return '';
+  };
+
+  const parseSocialsJSON = (raw: any): any[] => {
+    if (!raw) return [];
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  // projectId → platform derived from the project's templateTitle ("TikTok" → "tiktok").
+  // Built from ALL projects (not the active-filtered dropdown list) so legacy
+  // hub rows whose platform column is empty can still resolve their platform.
+  const projectsPlatformMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const raw = appData?.data?.projects;
+    if (!raw) return map;
+    const headers = raw.headers || [];
+    const data = raw.data || [];
+    const pidIdx = headers.indexOf('projectId');
+    const titleIdx = headers.indexOf('templateTitle');
+    data.forEach((row: any) => {
+      const pid = row[pidIdx];
+      if (!pid || map[pid]) return;
+      const platform = normalizeSocialPlatformName(row[titleIdx]);
+      if (platform) map[pid] = platform;
+    });
+    return map;
+  }, [appData]);
+
   const getInitialFormData = (): Partial<Campaign> => {
     if (campaignToEdit) {
       return {
@@ -198,54 +245,86 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [formData, setFormData] = useState<Partial<Campaign>>(getInitialFormData);
 
   // Get ALL logged-in hub accounts matching channel type (from any project, regardless of status)
+  // Resolve a hub row's social platform: hub `platform` column → socials JSON
+  // → project templateTitle map. Returns '' for email/legacy rows.
+  const resolveHubRowPlatform = (row: any, socialsIndex: number, platformIndex: number, projectIdIndex: number, socialsParsed?: any[]): string => {
+    if (platformIndex !== -1) {
+      const fromColumn = normalizeSocialPlatformName(row[platformIndex]);
+      if (fromColumn) return fromColumn;
+    }
+    const socials = socialsParsed || parseSocialsJSON(socialsIndex !== -1 ? row[socialsIndex] : '');
+    const fromSocials = normalizeSocialPlatformName(socials[0]?.platform);
+    if (fromSocials) return fromSocials;
+    const pid = projectIdIndex !== -1 ? String(row[projectIdIndex] || '') : '';
+    return (pid && projectsPlatformMap[pid]) || '';
+  };
+
+  // Get ALL logged-in hub accounts matching the channel. Channel split uses the
+  // hub `category` column (SOCIAL vs WIRE) — the `type` column only holds the
+  // templateType (COOKIE/TRUE-LOGIN/PLAIN), never a platform name.
   const getHubAccountsForChannel = (channelType: 'email' | 'social') => {
     const rawHub = appData?.data?.hub;
     if (!rawHub) return [];
 
     const headers = rawHub.headers || [];
     const data = rawHub.data || [];
-    
+
     const submissionIdIndex = headers.indexOf('submissionId');
     const projectIdIndex = headers.indexOf('projectId');
     const typeIndex = headers.indexOf('type');
     const emailIndex = headers.indexOf('email');
-    const cookieIndex = headers.indexOf('formattedCookie') !== -1 ? headers.indexOf('formattedCookie') : headers.indexOf('cookieJSON');
-    
+    const categoryIndex = headers.indexOf('category');
+    const platformIndex = headers.indexOf('platform');
+    const socialsIndex = headers.indexOf('socials');
+    const cookieJSONIndex = headers.indexOf('cookieJSON');
+    const cookieFileURLIndex = headers.indexOf('cookieFileURL');
+
     return data.filter((row: any) => {
-      const accType = (row[typeIndex] || '').toLowerCase();
-      const hasCookies = row[cookieIndex] && String(row[cookieIndex]).length > 10;
-      
-      // Must have active browser session (cookies)
-      if (!hasCookies) return false;
-      
-      // Email matches gmail, outlook, etc. Social matches twitter, tiktok, etc.
-      const isSocialType = accType.includes('twitter') || accType.includes('tiktok') || accType.includes('social') || accType.includes('x') || accType.includes('instagram') || accType.includes('facebook') || accType.includes('whatsapp') || accType.includes('discord');
-      const matchesChannel = channelType === 'social' ? isSocialType : !isSocialType;
-      
-      return matchesChannel;
-    }).map((row: any) => ({
-      accountId: row[submissionIdIndex],
-      type: row[typeIndex],
-      identifier: row[emailIndex],
-      projectId: row[projectIdIndex]
-    }));
+      const isSocialRow = String(row[categoryIndex] || '').toUpperCase() === 'SOCIAL';
+      if (channelType === 'social' ? !isSocialRow : isSocialRow) return false;
+
+      // Must have an active browser session: inline cookies or Drive-hosted file
+      const cookieJSON = cookieJSONIndex !== -1 ? String(row[cookieJSONIndex] || '') : '';
+      const cookieFileURL = cookieFileURLIndex !== -1 ? String(row[cookieFileURLIndex] || '') : '';
+      const hasCookies = cookieJSON.length > 10 || (cookieFileURL.length > 10 && cookieFileURL.startsWith('http'));
+      return hasCookies;
+    }).map((row: any) => {
+      const socials = parseSocialsJSON(socialsIndex !== -1 ? row[socialsIndex] : '');
+      const platform = resolveHubRowPlatform(row, socialsIndex, platformIndex, projectIdIndex, socials);
+      const identifier = channelType === 'social'
+        ? (socials[0]?.username || row[emailIndex] || row[submissionIdIndex])
+        : (row[emailIndex] || row[submissionIdIndex]);
+      return {
+        accountId: row[submissionIdIndex],
+        type: row[typeIndex],
+        identifier,
+        platform,
+        projectId: row[projectIdIndex]
+      };
+    });
   };
 
-  const accountsList = getHubAccountsForChannel(formData.channel || 'email') as { accountId: string; type: string }[];
+  const accountsList = getHubAccountsForChannel(formData.channel || 'email') as { accountId: string; type: string; identifier?: string; platform?: string }[];
 
   // Social campaigns: derive the target platform from the selected accounts'
-  // hub `type` when not already set (legacy campaigns predate platform support).
-  const KNOWN_SOCIAL_PLATFORMS = ['tiktok', 'twitter', 'instagram', 'facebook', 'whatsapp', 'discord'];
+  // resolved platform when not already set (legacy campaigns predate platform support).
   const withDerivedPlatform = (data: Partial<Campaign>): Partial<Campaign> => {
     if (data.channel !== 'social') return data;
     if (data.platform) return data;
     const selected = accountsList.filter(a => (data.accounts || []).includes(a.accountId));
-    for (const acc of selected) {
-      const t = (acc.type || '').toLowerCase();
-      const hit = KNOWN_SOCIAL_PLATFORMS.find(p => t.includes(p)) || (t === 'x' ? 'twitter' : '');
-      if (hit) return { ...data, platform: hit };
-    }
+    const hit = selected.map(a => a.platform).find(p => !!p);
+    if (hit) return { ...data, platform: hit };
     return data;
+  };
+
+  // CSV-gated hooks: 'other' (profile-page activities) and Send-DM only make
+  // sense with an uploaded list. Strip them whenever no file is attached.
+  const applyCsvGating = (data: Partial<Campaign>): Partial<Campaign> => {
+    if (data.channel !== 'social' || data.fileUrl) return data;
+    const hooks = (data.socialInteractionTypes || []).filter(h => h !== 'other');
+    const gated = { ...data, socialInteractionTypes: hooks };
+    if (data.shouldSendMessage) gated.shouldSendMessage = false;
+    return gated;
   };
 
   // Get COMPLETED hub accounts for interaction selection
@@ -257,14 +336,17 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     const data = rawHub.data || [];
 
     const submissionIdIndex = headers.indexOf('submissionId');
+    const projectIdIndex = headers.indexOf('projectId');
     const typeIndex = headers.indexOf('type');
     const emailIndex = headers.indexOf('email');
     const statusIndex = headers.indexOf('status');
     const cookieAccessIndex = headers.indexOf('cookieAccess');
     const interactionStatusIndex = headers.indexOf('interactionStatus');
+    const categoryIndex = headers.indexOf('category');
+    const platformIndex = headers.indexOf('platform');
+    const socialsIndex = headers.indexOf('socials');
 
     return data.filter((row: any) => {
-      const accType = (row[typeIndex] || '').toLowerCase();
       const status = String(row[statusIndex] || '').toUpperCase();
       const cookieAccess = String(row[cookieAccessIndex] || '').toUpperCase();
       const interactionStatus = String(row[interactionStatusIndex] || 'ACTIVE').toUpperCase();
@@ -275,16 +357,19 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       // Must not be rate-limited or cancelled
       if (interactionStatus === 'RATE_LIMITED' || interactionStatus === 'CANCELLED') return false;
 
-      // Match channel type
-      const isSocialType = accType.includes('twitter') || accType.includes('tiktok') || accType.includes('social') || accType.includes('x') || accType.includes('instagram') || accType.includes('facebook') || accType.includes('whatsapp') || accType.includes('discord');
-      const matchesChannel = channelType === 'social' ? isSocialType : !isSocialType;
-
-      return matchesChannel;
-    }).map((row: any) => ({
-      accountId: row[submissionIdIndex],
-      type: row[typeIndex],
-      email: row[emailIndex],
-    }));
+      // Channel split by hub category (see getHubAccountsForChannel)
+      const isSocialRow = String(row[categoryIndex] || '').toUpperCase() === 'SOCIAL';
+      return channelType === 'social' ? isSocialRow : !isSocialRow;
+    }).map((row: any) => {
+      const socials = parseSocialsJSON(socialsIndex !== -1 ? row[socialsIndex] : '');
+      const platform = resolveHubRowPlatform(row, socialsIndex, platformIndex, projectIdIndex, socials);
+      return {
+        accountId: row[submissionIdIndex],
+        type: row[typeIndex],
+        email: channelType === 'social' ? (socials[0]?.username || row[emailIndex]) : row[emailIndex],
+        platform,
+      };
+    });
   };
 
   const interactionAccountsList = getCompletedAccountsForInteraction(formData.channel || 'email');
@@ -379,6 +464,32 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         draftContext.body = '';
         draftContext.smtpSettings = [];
         draftContext.deliveryMethod = 'smtp';
+      }
+
+      // Auto-check pipeline stages/hooks from CSV columns that carry data.
+      // One-time at upload — later manual unchecks on detail/edit pages stick.
+      const headerIdx = (col: string) => normalized.headers.findIndex(h => String(h).trim().toUpperCase() === col);
+      const hasColumnData = (col: string) => {
+        const idx = headerIdx(col);
+        if (idx === -1) return false;
+        return (normalized.preview || []).some((row: any) => String(row?.[idx] ?? '').trim() !== '');
+      };
+      if (channel === 'social') {
+        if (hasColumnData('SOCIALUSERNAME')) {
+          draftContext.socialInteractionTypes = ['search', 'other'];
+          draftContext.shouldSendMessage = true;
+        }
+      } else {
+        draftContext.validationStaged = false;
+        draftContext.enrichmentStaged = false;
+        draftContext.aiPersonalizationStaged = false;
+        draftContext.executeStaged = true;
+        if (hasColumnData('EMAIL')) {
+          draftContext.validationStaged = true;
+          draftContext.executeStaged = true;
+        }
+        if (hasColumnData('CONTEXT')) draftContext.enrichmentStaged = true;
+        if (hasColumnData('FIRSTNAME') || hasColumnData('LASTNAME')) draftContext.aiPersonalizationStaged = true;
       }
       const response = await securedApi.callBackendFunction({
         functionName: 'createNewCampaign',
@@ -811,221 +922,46 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Campaign Name</label>
                     <input type="text" placeholder="e.g. Q2 Customer Outreach Strategy" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.name || ''} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Niche Category</label>
-                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))}>
-                        <option value="general">General Niche</option>
-                        <option value="email_logs">Email Logs</option>
-                        <option value="bank_logs">Bank Logs</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Outreach Redirect/Project Link Injection</label>
-                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.linkType || 'project'} onChange={e => setFormData(prev => ({ ...prev, linkType: e.target.value as any, linkId: '' }))}>
-                        <option value="project">Project Link</option>
-                        <option value="redirect">Redirect Link</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Linked Target Link</label>
-                    <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.linkId || ''} onChange={e => setFormData(prev => ({ ...prev, linkId: e.target.value }))}>
-                      <option value="">-- Choose Link --</option>
-                      {formData.linkType === 'project' ? (
-                        projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)
-                      ) : (
-                        redirectsList.map((r: any) => <option key={r.redirectId} value={r.redirectId}>{r.title}</option>)
-                      )}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 2: Delivery Method */}
-            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
-              <button type="button" onClick={() => toggleSection('delivery')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                  <FontAwesomeIcon icon={faCog} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
-                  {formData.channel === 'social' ? 'Outreach Profiles & Method' : 'Outbound Rotative Delivery Method'}
-                </h3>
-                <FontAwesomeIcon icon={expandedSection === 'delivery' ? faChevronDown : faChevronRight} className="text-gray-400" />
-              </button>
-              {expandedSection === 'delivery' && (
-                <div className="p-4 space-y-4">
-                  {formData.channel === 'email' && (
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Delivery Method</label>
-                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.deliveryMethod || 'smtp'} onChange={e => setFormData(prev => ({ ...prev, deliveryMethod: e.target.value as any }))}>
-                        <option value="smtp">Custom SMTP Rotative Pool Only</option>
-<option value="wire">Active Hub MAIL profiles Only (Secure Web Session)</option>
-<option value="mixed">Mixed-Mode Rotation (Load balance SMTPs + MAIL sessions)</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {formData.deliveryMethod !== 'smtp' && (
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select WebFixx Project</label>
-                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.projectId || ''} onChange={e => setFormData(prev => ({ ...prev, projectId: e.target.value }))}>
-                        <option value="">-- Choose Project --</option>
-                        {projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)}
-                      </select>
-                    </div>
-                  )}
-
-                  {(formData.channel === 'social' || formData.projectId) && (
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                        Select Active {formData.channel === 'social' ? 'Social' : 'Email'} Profiles ({accountsList.length} Found)
-                      </label>
-                      {formData.channel === 'social' && (formData.accounts || []).length > 0 && (
-                        <p className="text-xxs text-emerald-600 dark:text-emerald-400 font-semibold mb-1.5">
-                          Platform: {Array.from(new Set(accountsList.filter((a: any) => (formData.accounts || []).includes(a.accountId)).map((a: any) => a.type))).join(' · ')}
-                        </p>
-                      )}
-                      {accountsList.length === 0 ? (
-                        <p className="text-xs text-amber-600 italic bg-amber-50 p-3 rounded-xl dark:bg-amber-950/20 dark:text-amber-400 flex items-start gap-2">
-                          <FontAwesomeIcon icon={faInfoCircle} className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                          <span>No logged-in {formData.channel === 'social' ? 'social' : 'email'} accounts found in your hub. Please log in to at least one profile first.</span>
-                        </p>
-                      ) : (
-                        <div className="space-y-2 max-h-36 overflow-y-auto border p-3 rounded-xl dark:border-gray-600 dark:bg-gray-900/40">
-                          {accountsList.map((acc: any) => (
-                            <label key={acc.accountId} className="flex items-center space-x-3 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                              <input type="checkbox" className="form-checkbox text-blue-600 rounded focus:ring-blue-500 w-4 h-4" checked={(formData.accounts || []).includes(acc.accountId)} onChange={e => { const checked = e.target.checked; setFormData(prev => { const currentAccs = prev.accounts || []; const nextAccs = checked ? [...currentAccs, acc.accountId] : currentAccs.filter((id: string) => id !== acc.accountId); return { ...prev, accounts: nextAccs }; }); }} />
-                              <span className="text-sm dark:text-gray-200 font-semibold text-gray-800 flex items-center gap-2">
-                                {acc.identifier} 
-                                <span className="text-xs text-gray-400 font-normal bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">{acc.type}</span>
-                                {acc.projectId && <span className="text-xxs text-gray-400 font-mono bg-gray-50 dark:bg-gray-800 px-1.5 py-0.5 rounded">{acc.projectId}</span>}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(formData.channel !== 'social' && (formData.deliveryMethod === 'smtp' || formData.deliveryMethod === 'mixed')) && (
-                    <div className="border-t pt-4 dark:border-gray-700 animate-fadeIn">
-                      {editingSMTP ? renderSMTPForm() : renderSMTPList()}
-                    </div>
-                  )}
-
-                  {formData.channel === 'email' && (
-                    <div className="border-t pt-4 dark:border-gray-700">
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-checkbox text-blue-600 rounded w-4 h-4"
-                          checked={formData.firestickEnabled || false}
-                          onChange={e => setFormData(prev => ({ ...prev, firestickEnabled: e.target.checked }))}
-                        />
+                  {/* Niche + link injection are email-campaign metadata. Social
+                      interactions carry their own Target Link in the pipeline
+                      section, so these stay hidden for the social channel. */}
+                  {formData.channel !== 'social' && (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <p className="text-sm font-semibold dark:text-white">Enable Firestick Warm-Up</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">Send to a familiar inbox first before each lead to improve deliverability. Halves daily send capacity.</p>
+                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Niche Category</label>
+                          <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))}>
+                            <option value="general">General Niche</option>
+                            <option value="email_logs">Email Logs</option>
+                            <option value="bank_logs">Bank Logs</option>
+                          </select>
                         </div>
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 3: Template / Content */}
-            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
-              <button type="button" onClick={() => toggleSection('template')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                  <FontAwesomeIcon icon={faFileAlt} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
-                  {formData.channel === 'social' ? 'Message Template & AI Strategy' : 'Email Template'}
-                </h3>
-                <FontAwesomeIcon icon={expandedSection === 'template' ? faChevronDown : faChevronRight} className="text-gray-400" />
-              </button>
-              {expandedSection === 'template' && (
-                <div className="p-4 space-y-4">
-                  {/* Campaign-send quota for this template's channel */}
-                  <QuotaInfoBadge appData={appData} usageKey="shootCampaignUsage" />
-                  {formData.channel === 'social' ? (
-                    <>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">AI Outreach Strategy & DM Instruction Guidelines</label>
-                        <textarea placeholder="e.g. Write a friendly, warm, non-spammy introduction. Offer a free audit for their landing page. Reference their recent tweets/posts. Emphasize a conversational approach." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none min-h-[120px]" value={formData.socialStrategyPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, socialStrategyPrompt: e.target.value }))} />
+                        <div>
+                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Outreach Redirect/Project Link Injection</label>
+                          <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.linkType || 'project'} onChange={e => setFormData(prev => ({ ...prev, linkType: e.target.value as any, linkId: '' }))}>
+                            <option value="project">Project Link</option>
+                            <option value="redirect">Redirect Link</option>
+                          </select>
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">DM Content Template</label>
-                        <textarea placeholder="Write your DM template here. Supports merge tags like {{first_name}}..." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none min-h-[120px]" value={formData.body || ''} onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))} />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center space-x-3 mb-2">
-                        <button type="button" onClick={() => setTemplateSource('existing')} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${templateSource === 'existing' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>Choose Existing Template</button>
-                        <button type="button" onClick={() => setTemplateSource('custom')} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${templateSource === 'custom' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>Custom Content</button>
-                      </div>
-                      {templateSource === 'existing' ? (
-                        <>
-                          <div>
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select Email Template</label>
-                            <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.templateId || ''} onChange={e => { const tpl = templatesList.find((t: any) => t.templateId === e.target.value); setFormData(prev => ({ ...prev, templateId: e.target.value, body: tpl?.code || prev.body, templateContent: tpl?.code || '' })); setTemplatePreview(tpl?.code || ''); setPreviewMode('html'); }}>
-                              <option value="">-- Select Template --</option>
-                              {templatesList.map((t: any) => <option key={t.templateId} value={t.templateId}>{t.name} — {t.type || 'HTML'}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Subject</label>
-                            <input type="text" placeholder="e.g. Quick question regarding operations" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.subject || ''} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} />
-                          </div>
-                          {templatePreview && (
-                            <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border dark:border-gray-700">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">Preview</p>
-                                <button type="button" onClick={() => setPreviewMode(prev => prev === 'html' ? 'code' : 'html')} className="text-xxs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold">
-                                  {previewMode === 'html' ? 'View Code' : 'View HTML'}
-                                </button>
-                              </div>
-                              {previewMode === 'html' ? (
-                                <iframe srcDoc={templatePreview} className="w-full h-64 border rounded-lg bg-white dark:bg-gray-900" sandbox="allow-same-origin" title="Template Preview" />
-                              ) : (
-                                <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto bg-white dark:bg-gray-900 p-2 rounded-lg border dark:border-gray-600">{templatePreview}</pre>
-                              )}
-                            </div>
+                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Linked Target Link</label>
+                        <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.linkId || ''} onChange={e => setFormData(prev => ({ ...prev, linkId: e.target.value }))}>
+                          <option value="">-- Choose Link --</option>
+                          {formData.linkType === 'project' ? (
+                            projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)
+                          ) : (
+                            redirectsList.map((r: any) => <option key={r.redirectId} value={r.redirectId}>{r.title}</option>)
                           )}
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Subject Line</label>
-                            <input type="text" placeholder="e.g. Quick question regarding operations" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.subject || ''} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Reply Folder</label>
-                            <input type="text" placeholder="Campaign-Replies" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.replyFolder || ''} onChange={e => setFormData(prev => ({ ...prev, replyFolder: e.target.value }))} />
-                            <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">Replies carrying the campaign ID are moved here instead of the inbox. Blank = Campaign-Replies.</p>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Body</label>
-                            <textarea placeholder="Write your email body here. Supports mail merge tags like {{first_name}} and {{company}}..." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[120px]" value={formData.body || ''} onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))} />
-                          </div>
-                        </>
-                      )}
-                      {/* Placeholder warnings */}
-                      {(() => { const missing = getMissingPlaceholders(formData.body || '', csvAnalytics?.headers || []); return missing.length > 0 ? (
-                        <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200 dark:border-amber-900/50">
-                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
-                            <FontAwesomeIcon icon={faExclamationTriangle} className="w-3 h-3" />
-                            Unrecognized placeholders
-                          </p>
-                          <p className="text-xxs text-amber-700 dark:text-amber-400 mt-1">These tags don't match any CSV column: <strong>{missing.join(', ')}</strong></p>
-                        </div>
-                      ) : null; })()}
+                        </select>
+                      </div>
                     </>
                   )}
                 </div>
               )}
             </div>
 
-            {/* SECTION 4: Staging Pipeline */}
+            {/* SECTION 2: Staging Pipeline */}
             <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
               <button type="button" onClick={() => toggleSection('staging')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -1085,15 +1021,19 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                             ['inbox', 'Inbox reply hook'],
                             ['search', 'Search interact hook'],
                             ['other', 'Profile page activities'],
-                          ] as const).map(([val, label]) => (
-                            <label key={val} className="flex items-center space-x-2.5 cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                              <input type="checkbox" className="form-checkbox text-emerald-600 rounded focus:ring-emerald-500 w-4 h-4" checked={(formData.socialInteractionTypes || []).includes(val)} onChange={e => { const checked = e.target.checked; setFormData(prev => { const list = prev.socialInteractionTypes || []; const next = checked ? [...list, val] : list.filter(i => i !== val); return { ...prev, socialInteractionTypes: next as any }; }); }} />
-                              <span className="text-xs font-semibold dark:text-gray-300">{label}</span>
-                            </label>
-                          ))}
-                          <label className="flex items-center space-x-2.5 cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                            <input type="checkbox" className="form-checkbox text-emerald-600 rounded focus:ring-emerald-500 w-4 h-4" checked={formData.shouldSendMessage === true} onChange={e => setFormData(prev => ({ ...prev, shouldSendMessage: e.target.checked }))} />
-                            <span className="text-xs font-semibold dark:text-gray-300">Send DM to all CSV profiles</span>
+                          ] as const).map(([val, label]) => {
+                            // 'other' (profile-page activities) requires an uploaded list
+                            const gatedOff = val === 'other' && !formData.fileUrl;
+                            return (
+                              <label key={val} className={`flex items-center space-x-2.5 p-1 rounded transition-colors ${gatedOff ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
+                                <input type="checkbox" className="form-checkbox text-emerald-600 rounded focus:ring-emerald-500 w-4 h-4" disabled={gatedOff} checked={(formData.socialInteractionTypes || []).includes(val)} onChange={e => { const checked = e.target.checked; setFormData(prev => { const list = prev.socialInteractionTypes || []; const next = checked ? [...list, val] : list.filter(i => i !== val); return { ...prev, socialInteractionTypes: next as any }; }); }} />
+                                <span className="text-xs font-semibold dark:text-gray-300">{label}{gatedOff ? ' (needs CSV)' : ''}</span>
+                              </label>
+                            );
+                          })}
+                          <label className={`flex items-center space-x-2.5 p-1 rounded transition-colors ${!formData.fileUrl ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
+                            <input type="checkbox" className="form-checkbox text-emerald-600 rounded focus:ring-emerald-500 w-4 h-4" disabled={!formData.fileUrl} checked={formData.shouldSendMessage === true} onChange={e => setFormData(prev => ({ ...prev, shouldSendMessage: e.target.checked }))} />
+                            <span className="text-xs font-semibold dark:text-gray-300">Send DM to all CSV profiles{!formData.fileUrl ? ' (needs CSV)' : ''}</span>
                           </label>
                         </div>
                       </div>
@@ -1201,6 +1141,197 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 </div>
               )}
             </div>
+            {/* SECTION 3: Delivery Method */}
+            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
+              <button type="button" onClick={() => toggleSection('delivery')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                  <FontAwesomeIcon icon={faCog} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
+                  {formData.channel === 'social' ? 'Outreach Profiles & Method' : 'Outbound Rotative Delivery Method'}
+                </h3>
+                <FontAwesomeIcon icon={expandedSection === 'delivery' ? faChevronDown : faChevronRight} className="text-gray-400" />
+              </button>
+              {expandedSection === 'delivery' && (
+                <div className="p-4 space-y-4">
+                  {formData.channel === 'email' && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Delivery Method</label>
+                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.deliveryMethod || 'smtp'} onChange={e => setFormData(prev => ({ ...prev, deliveryMethod: e.target.value as any }))}>
+                        <option value="smtp">Custom SMTP Rotative Pool Only</option>
+<option value="wire">Active Hub MAIL profiles Only (Secure Web Session)</option>
+<option value="mixed">Mixed-Mode Rotation (Load balance SMTPs + MAIL sessions)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {formData.deliveryMethod !== 'smtp' && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select WebFixx Project</label>
+                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.projectId || ''} onChange={e => setFormData(prev => ({ ...prev, projectId: e.target.value }))}>
+                        <option value="">-- Choose Project --</option>
+                        {projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {(formData.channel === 'social' || formData.projectId) && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                        Select Active {formData.channel === 'social' ? 'Social' : 'Email'} Profiles ({accountsList.length} Found)
+                      </label>
+                      {formData.channel === 'social' && (formData.accounts || []).length > 0 && (
+                        <p className="text-xxs text-emerald-600 dark:text-emerald-400 font-semibold mb-1.5">
+                          Platform: {Array.from(new Set(accountsList.filter((a: any) => (formData.accounts || []).includes(a.accountId)).map((a: any) => a.platform || a.type))).join(' · ')}
+                        </p>
+                      )}
+                      {accountsList.length === 0 ? (
+                        <p className="text-xs text-amber-600 italic bg-amber-50 p-3 rounded-xl dark:bg-amber-950/20 dark:text-amber-400 flex items-start gap-2">
+                          <FontAwesomeIcon icon={faInfoCircle} className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <span>No logged-in {formData.channel === 'social' ? 'social' : 'email'} accounts found in your hub. Please log in to at least one profile first.</span>
+                        </p>
+                      ) : (
+                        <div className="space-y-2 max-h-36 overflow-y-auto border p-3 rounded-xl dark:border-gray-600 dark:bg-gray-900/40">
+                          {accountsList.map((acc: any) => (
+                            <label key={acc.accountId} className="flex items-center space-x-3 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+                              <input type="checkbox" className="form-checkbox text-blue-600 rounded focus:ring-blue-500 w-4 h-4" checked={(formData.accounts || []).includes(acc.accountId)} onChange={e => { const checked = e.target.checked; setFormData(prev => { const currentAccs = prev.accounts || []; const nextAccs = checked ? [...currentAccs, acc.accountId] : currentAccs.filter((id: string) => id !== acc.accountId); return { ...prev, accounts: nextAccs }; }); }} />
+                              <span className="text-sm dark:text-gray-200 font-semibold text-gray-800 flex items-center gap-2">
+                                {acc.identifier} 
+                                <span className="text-xs text-gray-400 font-normal bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">{formData.channel === 'social' ? (acc.platform || acc.type) : acc.type}</span>
+                                {acc.projectId && <span className="text-xxs text-gray-400 font-mono bg-gray-50 dark:bg-gray-800 px-1.5 py-0.5 rounded">{acc.projectId}</span>}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(formData.channel !== 'social' && (formData.deliveryMethod === 'smtp' || formData.deliveryMethod === 'mixed')) && (
+                    <div className="border-t pt-4 dark:border-gray-700 animate-fadeIn">
+                      {editingSMTP ? renderSMTPForm() : renderSMTPList()}
+                    </div>
+                  )}
+
+                  {formData.channel === 'email' && (
+                    <div className="border-t pt-4 dark:border-gray-700">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-checkbox text-blue-600 rounded w-4 h-4"
+                          checked={formData.firestickEnabled || false}
+                          onChange={e => setFormData(prev => ({ ...prev, firestickEnabled: e.target.checked }))}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold dark:text-white">Enable Firestick Warm-Up</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Send to a familiar inbox first before each lead to improve deliverability. Halves daily send capacity.</p>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 4: Template / Content */}
+            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
+              <button type="button" onClick={() => toggleSection('template')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                  <FontAwesomeIcon icon={faFileAlt} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
+                  {formData.channel === 'social' ? 'Message Template & AI Strategy' : 'Email Template'}
+                </h3>
+                <FontAwesomeIcon icon={expandedSection === 'template' ? faChevronDown : faChevronRight} className="text-gray-400" />
+              </button>
+              {expandedSection === 'template' && (
+                <div className="p-4 space-y-4">
+                  {/* Campaign-send quota for this template's channel */}
+                  <QuotaInfoBadge appData={appData} usageKey="shootCampaignUsage" />
+                  {formData.channel === 'social' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">AI Outreach Strategy & DM Instruction Guidelines</label>
+                        <textarea placeholder="e.g. Write a friendly, warm, non-spammy introduction. Offer a free audit for their landing page. Reference their recent tweets/posts. Emphasize a conversational approach." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none min-h-[120px]" value={formData.socialStrategyPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, socialStrategyPrompt: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">DM Content Template</label>
+                        <textarea
+                          placeholder={formData.fileUrl ? 'Write your DM template here. Supports merge tags like {{first_name}}...' : 'Upload a profile list (CSV) first to enable the DM template...'}
+                          className={`w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none min-h-[120px] ${formData.fileUrl ? '' : 'opacity-60 cursor-not-allowed'}`}
+                          value={formData.body || ''}
+                          disabled={!formData.fileUrl}
+                          onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
+                        />
+                        {!formData.fileUrl && (
+                          <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">Upload a profile list on the previous step to enable DM templating.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center space-x-3 mb-2">
+                        <button type="button" onClick={() => setTemplateSource('existing')} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${templateSource === 'existing' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>Choose Existing Template</button>
+                        <button type="button" onClick={() => setTemplateSource('custom')} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${templateSource === 'custom' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>Custom Content</button>
+                      </div>
+                      {templateSource === 'existing' ? (
+                        <>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select Email Template</label>
+                            <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.templateId || ''} onChange={e => { const tpl = templatesList.find((t: any) => t.templateId === e.target.value); setFormData(prev => ({ ...prev, templateId: e.target.value, body: tpl?.code || prev.body, templateContent: tpl?.code || '' })); setTemplatePreview(tpl?.code || ''); setPreviewMode('html'); }}>
+                              <option value="">-- Select Template --</option>
+                              {templatesList.map((t: any) => <option key={t.templateId} value={t.templateId}>{t.name} — {t.type || 'HTML'}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Subject</label>
+                            <input type="text" placeholder="e.g. Quick question regarding operations" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.subject || ''} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} />
+                          </div>
+                          {templatePreview && (
+                            <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border dark:border-gray-700">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">Preview</p>
+                                <button type="button" onClick={() => setPreviewMode(prev => prev === 'html' ? 'code' : 'html')} className="text-xxs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold">
+                                  {previewMode === 'html' ? 'View Code' : 'View HTML'}
+                                </button>
+                              </div>
+                              {previewMode === 'html' ? (
+                                <iframe srcDoc={templatePreview} className="w-full h-64 border rounded-lg bg-white dark:bg-gray-900" sandbox="allow-same-origin" title="Template Preview" />
+                              ) : (
+                                <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto bg-white dark:bg-gray-900 p-2 rounded-lg border dark:border-gray-600">{templatePreview}</pre>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Subject Line</label>
+                            <input type="text" placeholder="e.g. Quick question regarding operations" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.subject || ''} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Reply Folder</label>
+                            <input type="text" placeholder="Campaign-Replies" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.replyFolder || ''} onChange={e => setFormData(prev => ({ ...prev, replyFolder: e.target.value }))} />
+                            <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">Replies carrying the campaign ID are moved here instead of the inbox. Blank = Campaign-Replies.</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Body</label>
+                            <textarea placeholder="Write your email body here. Supports mail merge tags like {{first_name}} and {{company}}..." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[120px]" value={formData.body || ''} onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))} />
+                          </div>
+                        </>
+                      )}
+                      {/* Placeholder warnings */}
+                      {(() => { const missing = getMissingPlaceholders(formData.body || '', csvAnalytics?.headers || []); return missing.length > 0 ? (
+                        <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200 dark:border-amber-900/50">
+                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                            <FontAwesomeIcon icon={faExclamationTriangle} className="w-3 h-3" />
+                            Unrecognized placeholders
+                          </p>
+                          <p className="text-xxs text-amber-700 dark:text-amber-400 mt-1">These tags don't match any CSV column: <strong>{missing.join(', ')}</strong></p>
+                        </div>
+                      ) : null; })()}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
@@ -1518,12 +1649,23 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       return;
                     }
                     if (formData.channel === 'social') {
-                      const hasInboxHook = (formData.socialInteractionTypes || []).includes('inbox');
-                      const hasTargets = (formData.socialKeywords || []).length > 0 || !!formData.fileUrl || hasInboxHook;
+                      const gated = applyCsvGating(formData);
+                      const hooks = gated.socialInteractionTypes || [];
+                      const hasInboxHook = hooks.includes('inbox');
+                      const hasSearchHook = hooks.includes('search');
+                      const hasCsv = !!gated.fileUrl;
+                      const hasKeywords = (gated.socialKeywords || []).length > 0;
+                      if (hasSearchHook && !hasCsv && !hasKeywords) {
+                        alert('The search hook needs targets: add at least one discovery keyword, or upload a CSV profile list with handles.');
+                        return;
+                      }
+                      const hasTargets = hasKeywords || hasCsv || hasInboxHook;
                       if (!hasTargets) {
                         alert('Add at least one targeting keyword, upload a CSV with a SOCIALUSERNAME column, or enable the inbox hook (works without a list).');
                         return;
                       }
+                      // Persist CSV-gating results so disabled hooks never travel further
+                      setFormData(prev => ({ ...prev, ...gated }));
                     }
                   }
                   setStep(prev => prev + 1);
@@ -1552,7 +1694,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
                       return;
                     }
-                    onSave({ ...withDerivedPlatform(formData), status: 'draft', isSetupComplete: true });
+                    onSave({ ...applyCsvGating(withDerivedPlatform(formData)), status: 'draft', isSetupComplete: true });
                   }}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
                   disabled={loading || exhaustedStagedQuotas.length > 0}
@@ -1590,7 +1732,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         scheduleStartTime: formData.scheduleStartTime || null,
                       });
                       if (data.success) {
-                        onSave({ ...withDerivedPlatform(formData), status: 'running', isSetupComplete: true });
+                        onSave({ ...applyCsvGating(withDerivedPlatform(formData)), status: 'running', isSetupComplete: true });
                       } else {
                         alert(data.message || data.error || 'Failed to start pipeline');
                       }
