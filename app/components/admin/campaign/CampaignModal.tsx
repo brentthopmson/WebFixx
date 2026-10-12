@@ -560,15 +560,21 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     setEditingSMTP(null);
   };
 
+  // Split raw keyword input on commas/newlines into individual chips.
+  const parseKeywordTokens = (text: string): string[] =>
+    text.split(/[,\n]/).map(t => t.trim()).filter(Boolean);
+
   const handleAddSocialKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && socialKeywordInput.trim()) {
       e.preventDefault();
-      const newKeyword = socialKeywordInput.trim();
-      if (!(formData.socialKeywords || []).includes(newKeyword)) {
-        setFormData(prev => ({
-          ...prev,
-          socialKeywords: [...(prev.socialKeywords || []), newKeyword]
-        }));
+      const tokens = parseKeywordTokens(socialKeywordInput);
+      if (tokens.length) {
+        setFormData(prev => {
+          const existing = prev.socialKeywords || [];
+          const merged = [...existing];
+          tokens.forEach(t => { if (!merged.includes(t)) merged.push(t); });
+          return { ...prev, socialKeywords: merged };
+        });
       }
       setSocialKeywordInput('');
     }
@@ -700,12 +706,19 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
 
   // ==================== Staged-aware monthly quota ====================
   // Which quota keys this campaign's staged steps will spend at create/execute time.
+  // Social campaigns never spend shootCampaignUsage — the engine charges
+  // interactionUsage per task and senderUsage per DM recipient.
   const stagedQuotaKeys: string[] = [];
-  if (formData.validationStaged) stagedQuotaKeys.push('validateUsage');
-  if (formData.enrichmentStaged) stagedQuotaKeys.push('enrichUsage');
-  if (formData.aiPersonalizationStaged) stagedQuotaKeys.push('personalizeUsage');
-  if (formData.executeStaged ?? true) stagedQuotaKeys.push('shootCampaignUsage');
-  if (formData.interactionStaged) stagedQuotaKeys.push('interactionUsage');
+  if (formData.channel === 'social') {
+    stagedQuotaKeys.push('interactionUsage');
+    if (formData.shouldSendMessage) stagedQuotaKeys.push('senderUsage');
+  } else {
+    if (formData.validationStaged) stagedQuotaKeys.push('validateUsage');
+    if (formData.enrichmentStaged) stagedQuotaKeys.push('enrichUsage');
+    if (formData.aiPersonalizationStaged) stagedQuotaKeys.push('personalizeUsage');
+    if (formData.executeStaged ?? true) stagedQuotaKeys.push('shootCampaignUsage');
+    if (formData.interactionStaged) stagedQuotaKeys.push('interactionUsage');
+  }
   const exhaustedStagedQuotas = stagedQuotaKeys
     .map(k => getQuotaInfo(appData, k))
     .filter((q): q is NonNullable<typeof q> => !!q && q.exhausted);
@@ -972,20 +985,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               </button>
               {expandedSection === 'staging' && (
                 <div className="p-4 space-y-4">
-                  {/* Target link — AI weaves this destination into its messages (both channels) */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                      Target Link <span className="text-xxs font-normal lowercase text-gray-400">(AI will craft messages with this link in mind — optional)</span>
-                    </label>
-                    <input
-                      type="url"
-                      placeholder="https://your-destination-link.com"
-                      className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
-                      value={formData.targetLink || ''}
-                      onChange={e => setFormData(prev => ({ ...prev, targetLink: e.target.value }))}
-                    />
-                  </div>
-
                   {/* Email interactions-only: keywords + strategy for the AI inbox watcher */}
                   {formData.channel === 'email' && formData.campaignMode === 'interactions-only' && (
                     <div className="space-y-3 p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/50">
@@ -1242,8 +1241,19 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               </button>
               {expandedSection === 'template' && (
                 <div className="p-4 space-y-4">
-                  {/* Campaign-send quota for this template's channel */}
-                  <QuotaInfoBadge appData={appData} usageKey="shootCampaignUsage" />
+                  {/* Target link — AI weaves this destination into its messages (both channels) */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                      Target Link <span className="text-xxs font-normal lowercase text-gray-400">(AI will craft messages with this link in mind — optional)</span>
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://your-destination-link.com"
+                      className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
+                      value={formData.targetLink || ''}
+                      onChange={e => setFormData(prev => ({ ...prev, targetLink: e.target.value }))}
+                    />
+                  </div>
                   {formData.channel === 'social' ? (
                     <>
                       <div>
@@ -1259,9 +1269,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                           disabled={!formData.fileUrl}
                           onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
                         />
-                        {!formData.fileUrl && (
-                          <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">Upload a profile list on the previous step to enable DM templating.</p>
-                        )}
                       </div>
                     </>
                   ) : (
@@ -1421,13 +1428,15 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 )}
 
                 <div className="col-span-1 sm:col-span-2">
-                  <p className="text-gray-400 font-medium">Outreach injection Target Link</p>
+                  <p className="text-gray-400 font-medium">{formData.channel === 'social' ? 'Target Link' : 'Outreach injection Target Link'}</p>
                   <p className="font-bold text-sm text-blue-600 dark:text-blue-400 mt-0.5 font-mono">
-                    {formData.linkId ? `Linked via ${formData.linkType}: ${
-                      formData.linkType === 'project'
-                        ? projectsList.find((p: any) => p.projectId === formData.linkId)?.title || formData.linkId
-                        : redirectsList.find((r: any) => r.redirectId === formData.linkId)?.title || formData.linkId
-                    }` : 'No redirect tracking injected'}
+                    {formData.channel === 'social'
+                      ? (formData.targetLink || 'No target link set')
+                      : formData.linkId ? `Linked via ${formData.linkType}: ${
+                          formData.linkType === 'project'
+                            ? projectsList.find((p: any) => p.projectId === formData.linkId)?.title || formData.linkId
+                            : redirectsList.find((r: any) => r.redirectId === formData.linkId)?.title || formData.linkId
+                        }` : 'No redirect tracking injected'}
                   </p>
                 </div>
 
@@ -1503,17 +1512,15 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 )}
               </div>
 
-              {/* Plan usage — the monthly quotas this campaign's staged steps will spend */}
+              {/* Plan usage — the monthly quotas this campaign will spend */}
               <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700 space-y-2">
                 <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Plan usage (monthly quota)</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {formData.validationStaged && <QuotaInfoBadge appData={appData} usageKey="validateUsage" />}
-                  {formData.enrichmentStaged && <QuotaInfoBadge appData={appData} usageKey="enrichUsage" />}
-                  {formData.aiPersonalizationStaged && <QuotaInfoBadge appData={appData} usageKey="personalizeUsage" />}
-                  {(formData.executeStaged ?? true) && <QuotaInfoBadge appData={appData} usageKey="shootCampaignUsage" />}
-                  {formData.interactionStaged && <QuotaInfoBadge appData={appData} usageKey="interactionUsage" />}
+                  {stagedQuotaKeys.map(k => (
+                    <QuotaInfoBadge key={k} appData={appData} usageKey={k} />
+                  ))}
                 </div>
-                {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged && (
+                {stagedQuotaKeys.length === 0 && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 italic">No stages selected — no quota will be spent.</p>
                 )}
               </div>
@@ -1649,7 +1656,13 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       return;
                     }
                     if (formData.channel === 'social') {
-                      const gated = applyCsvGating(formData);
+                      // Flush pending keyword input (typed but not registered via
+                      // Enter) so validation sees it and it gets persisted.
+                      const pendingTokens = parseKeywordTokens(socialKeywordInput);
+                      const mergedKeywords = [...(formData.socialKeywords || [])];
+                      pendingTokens.forEach(t => { if (!mergedKeywords.includes(t)) mergedKeywords.push(t); });
+                      if (pendingTokens.length) setSocialKeywordInput('');
+                      const gated = applyCsvGating({ ...formData, socialKeywords: mergedKeywords });
                       const hooks = gated.socialInteractionTypes || [];
                       const hasInboxHook = hooks.includes('inbox');
                       const hasSearchHook = hooks.includes('search');
@@ -1664,8 +1677,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         alert('Add at least one targeting keyword, upload a CSV with a SOCIALUSERNAME column, or enable the inbox hook (works without a list).');
                         return;
                       }
-                      // Persist CSV-gating results so disabled hooks never travel further
-                      setFormData(prev => ({ ...prev, ...gated }));
+                      // Persist flushed keywords + CSV-gating results
+                      setFormData(prev => ({ ...prev, socialKeywords: mergedKeywords, ...gated }));
                     }
                   }
                   setStep(prev => prev + 1);
