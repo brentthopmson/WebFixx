@@ -270,8 +270,11 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
   // ─── Interactions-only campaigns: no contact list, AI-driven ────
   // Skips all file/subject/body/SMTP checks — requires keywords (or strategy
   // prompt), at least one interaction account, and the interaction stage.
-  const isInteractionsOnly = campaign.campaignMode === 'interactions-only'
-    || (campaign.channel === 'email' && !campaign.fileUrl && campaign.interactionStaged === true);
+  // Social is excluded: it has its own dedicated block below and never sets
+  // the email-pipeline `interactionStaged` flag.
+  const isInteractionsOnly = campaign.channel !== 'social' && (
+    campaign.campaignMode === 'interactions-only'
+    || (campaign.channel === 'email' && !campaign.fileUrl && campaign.interactionStaged === true));
   if (isInteractionsOnly) {
     if (!campaign.interactionStaged) {
       return { field: 'pipeline', message: 'The interaction stage must be enabled for interactions-only campaigns' };
