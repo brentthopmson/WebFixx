@@ -322,11 +322,13 @@ export default function CampaignDetailPage() {
   const handleExecutePipeline = async () => {
     if (!isFeatureEnabled(appData, 'allowShooting')) {
       alert(featureDisabledMessage('allowShooting', 'campaign execution'));
+      setShowExecuteConfirm(false);
       return;
     }
     // Block if ANY staged step's monthly quota is exhausted (skip backend)
     if (exhaustedQuotaMessage) {
       toast.error('Monthly quota reached', { description: exhaustedQuotaMessage });
+      setShowExecuteConfirm(false);
       return;
     }
     // Loading state: blocks double-submit (each extra click fired another
@@ -361,6 +363,7 @@ export default function CampaignDetailPage() {
       toast.error(err?.message || 'Failed to start pipeline');
     } finally {
       setIsStartingPipeline(false);
+      setShowExecuteConfirm(false);
     }
   };
 

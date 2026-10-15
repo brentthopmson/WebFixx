@@ -480,7 +480,7 @@ export const ItemDetailsModal = ({
     const ACTION_TYPES = [
       'likeOnStory', 'likesOnPost', 'likesOnComment',
       'commentOnComment', 'commentOnStory', 'commentOnPost',
-      'follow', 'unfollow', 'coldMessage', 'extract',
+      'follow', 'unfollow', 'coldMessage', 'inboxReply', 'extract',
     ];
     const num = (value: any): number => {
       const n = parseInt(value, 10);
