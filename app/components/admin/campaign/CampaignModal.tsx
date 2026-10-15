@@ -46,6 +46,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
+  const [isStartingPipeline, setIsStartingPipeline] = useState(false);
 
   // Parse projects list from appData (active only)
   const getProjectsList = () => {
@@ -1736,7 +1737,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   onClose={() => setShowExecuteConfirm(false)}
                   onConfirm={async () => {
                     if (exhaustedStagedQuotas.length) return;
-                    setShowExecuteConfirm(false);
+                    // Loading state: blocks double-submit while GAS dispatches
+                    // (each extra click fired another runCampaignPipeline).
+                    // Modal stays open showing the spinner until the call settles.
+                    setIsStartingPipeline(true);
                     try {
                       const data: any = await securedApi.callBackendFunction({
                         functionName: 'runCampaignPipeline',
@@ -1751,13 +1755,17 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       }
                     } catch (err: any) {
                       alert(err?.message || 'Failed to start pipeline');
+                    } finally {
+                      setIsStartingPipeline(false);
+                      setShowExecuteConfirm(false);
                     }
                   }}
                   title="Start Pipeline?"
                   message="This will start executing the campaign pipeline (sending emails / running interactions). This action cannot be undone. Continue?"
-                  confirmText={loading ? 'Starting...' : 'Start Pipeline'}
+                  confirmText="Start Pipeline"
                   cancelText="Cancel"
                   confirmDisabled={exhaustedStagedQuotas.length > 0}
+                  confirmLoading={isStartingPipeline}
                 >
                   <div className="mb-5 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-lg border dark:border-gray-700 space-y-2">
                     <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monthly quota this run will spend</p>

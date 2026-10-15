@@ -658,6 +658,7 @@ export default function Campaign() {
                 campaign.status === 'running' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
                 campaign.status === 'paused' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
                 campaign.status === 'Limit Reached' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
+                campaign.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
                 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
               }`}>
                 {campaign.status}
@@ -671,6 +672,14 @@ export default function Campaign() {
                   <FontAwesomeIcon icon={faClock} className="w-3.5 h-3.5 animate-pulse shrink-0" />
                   <span>Plan limit (<strong>{limit}</strong>) reached. <button onClick={() => setShowUpgradeModal(true)} className="font-semibold underline hover:no-underline">Upgrade</button></span>
                 </div>
+              </div>
+            )}
+
+            {/* Failed banner */}
+            {campaign.status === 'failed' && (
+              <div className="mx-4 mb-3 p-2.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg flex items-center gap-2">
+                <FontAwesomeIcon icon={faTimesCircle} className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
+                <span className="text-xs text-red-800 dark:text-red-300 font-semibold">Pipeline failed — check the debug sheet / Telegram alerts, then re-trigger from the campaign page.</span>
               </div>
             )}
 

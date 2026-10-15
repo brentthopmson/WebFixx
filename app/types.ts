@@ -105,7 +105,7 @@ export interface Campaign {
   scheduleStartTime?: string; // ISO datetime for when to start scheduled sends
 
   created_at: string; // Added
-  status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached'; // Made required
+  status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached' | 'failed'; // Made required
   analytics?: {
       totalRows: number;
       sent: number;

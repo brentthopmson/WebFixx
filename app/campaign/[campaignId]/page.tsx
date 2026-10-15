@@ -110,6 +110,7 @@ export default function CampaignDetailPage() {
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
+  const [isStartingPipeline, setIsStartingPipeline] = useState(false);
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,6 +321,9 @@ export default function CampaignDetailPage() {
       toast.error('Monthly quota reached', { description: exhaustedQuotaMessage });
       return;
     }
+    // Loading state: blocks double-submit (each extra click fired another
+    // runCampaignPipeline → duplicate orchestrator invocations).
+    setIsStartingPipeline(true);
     try {
       const data: any = await securedApi.callBackendFunction({
         functionName: 'runCampaignPipeline',
@@ -336,6 +340,10 @@ export default function CampaignDetailPage() {
           ...(prev.aiPersonalizationStaged ? { personalizationStatus: 'processing' } : {}),
           ...(prev.interactionStaged ? { interactionStatus: 'processing' } : {}),
         } : prev);
+        // Pull the authoritative row status right away (GAS wrote 'running'
+        // server-side) so the controlling-key chip reflects truth, not just
+        // the optimistic state.
+        pollCampaign();
       } else {
         toast.error(data.message || data.error || 'Failed to start pipeline', {
           description: data.error || data.message
@@ -343,6 +351,8 @@ export default function CampaignDetailPage() {
       }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to start pipeline');
+    } finally {
+      setIsStartingPipeline(false);
     }
   };
 
@@ -377,10 +387,15 @@ export default function CampaignDetailPage() {
     return () => { cancelled = true; };
   }, [findCampaign, fetchCSV, campaignId]);
 
-  // Auto-poll every 60s for status + cleanup refresh timeout on unmount
+  // Auto-poll for status + cleanup refresh timeout on unmount.
+  // 15s while running (so started→finished flips show fast), 60s otherwise.
+  // Stop on terminal states: completed / draft / failed.
   useEffect(() => {
-    if (!campaign || campaign.status === 'completed' || campaign.status === 'draft') return;
-    const interval = setInterval(pollCampaign, 60000);
+    if (!campaign) return;
+    const s = campaign.status;
+    if (s === 'completed' || s === 'draft' || s === 'failed') return;
+    const intervalMs = s === 'running' ? 15000 : 60000;
+    const interval = setInterval(pollCampaign, intervalMs);
     return () => {
       clearInterval(interval);
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
@@ -430,6 +445,7 @@ export default function CampaignDetailPage() {
       case 'running': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
       case 'paused': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300';
       case 'Limit Reached': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
+      case 'failed': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
@@ -720,6 +736,7 @@ export default function CampaignDetailPage() {
         confirmText="Start Pipeline"
         cancelText="Cancel"
         confirmDisabled={exhaustedStagedQuotas.length > 0}
+        confirmLoading={isStartingPipeline}
       >
         <div className="mb-5 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-lg border dark:border-gray-700 space-y-2">
           <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monthly quota this run will spend</p>
