@@ -298,12 +298,20 @@ export default function CampaignDetailPage() {
   };
 
   // ==================== Staged-aware monthly quota ====================
+  // Social campaigns spend interactionUsage (+ senderUsage if DMs enabled),
+  // never shootCampaignUsage ("Campaign sends" is email-only) — mirrors
+  // CampaignModal's channel-aware quota keys.
   const stagedQuotaKeys: string[] = [];
-  if (campaign?.validationStaged) stagedQuotaKeys.push('validateUsage');
-  if (campaign?.enrichmentStaged) stagedQuotaKeys.push('enrichUsage');
-  if (campaign?.aiPersonalizationStaged) stagedQuotaKeys.push('personalizeUsage');
-  if (campaign?.executeStaged ?? true) stagedQuotaKeys.push('shootCampaignUsage');
-  if (campaign?.interactionStaged) stagedQuotaKeys.push('interactionUsage');
+  if (campaign?.channel === 'social') {
+    stagedQuotaKeys.push('interactionUsage');
+    if (campaign?.shouldSendMessage) stagedQuotaKeys.push('senderUsage');
+  } else {
+    if (campaign?.validationStaged) stagedQuotaKeys.push('validateUsage');
+    if (campaign?.enrichmentStaged) stagedQuotaKeys.push('enrichUsage');
+    if (campaign?.aiPersonalizationStaged) stagedQuotaKeys.push('personalizeUsage');
+    if (campaign?.executeStaged ?? true) stagedQuotaKeys.push('shootCampaignUsage');
+    if (campaign?.interactionStaged) stagedQuotaKeys.push('interactionUsage');
+  }
   const exhaustedStagedQuotas = stagedQuotaKeys
     .map(k => getQuotaInfo(appData, k))
     .filter((q): q is NonNullable<typeof q> => !!q && q.exhausted);
