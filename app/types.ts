@@ -78,7 +78,6 @@ export interface Campaign {
 
   // Per-campaign interaction limits
   interactionStopAfterHours?: number; // Default: 72
-  interactionMaxReplies?: number; // Default: 100
 
   // Setup completion tracking
   isSetupComplete?: boolean; // True when campaign setup wizard is fully completed

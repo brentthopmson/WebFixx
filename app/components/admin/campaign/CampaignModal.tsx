@@ -176,7 +176,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         interactionStaged: campaignToEdit.interactionStaged || false,
         interactionStatus: campaignToEdit.interactionStatus || 'idle',
         interactionStopAfterHours: campaignToEdit.interactionStopAfterHours || 72,
-        interactionMaxReplies: campaignToEdit.interactionMaxReplies || 100,
         deliveryMethod: campaignToEdit.deliveryMethod || 'smtp',
         firestickEnabled: campaignToEdit.firestickEnabled || false,
         linkType: campaignToEdit.linkType || 'project',
@@ -223,7 +222,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       interactionStaged: false,
       interactionStatus: 'idle',
       interactionStopAfterHours: 72,
-      interactionMaxReplies: 100,
       deliveryMethod: 'smtp',
       firestickEnabled: false,
       linkType: 'project',
@@ -1081,15 +1079,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       {formData.interactionStaged && (
                         <div className="animate-fadeIn space-y-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
                           <QuotaInfoBadge appData={appData} usageKey="interactionUsage" />
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
-                              <input type="number" min="1" max="720" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionStopAfterHours || 72} onChange={e => setFormData(prev => ({ ...prev, interactionStopAfterHours: parseInt(e.target.value) || 72 }))} />
-                            </div>
-                            <div>
-                              <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Max Replies</label>
-                              <input type="number" min="1" max="10000" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionMaxReplies || 100} onChange={e => setFormData(prev => ({ ...prev, interactionMaxReplies: parseInt(e.target.value) || 100 }))} />
-                            </div>
+                          <div>
+                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
+                            <input type="number" min="1" max="720" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionStopAfterHours || 72} onChange={e => setFormData(prev => ({ ...prev, interactionStopAfterHours: parseInt(e.target.value) || 72 }))} />
                           </div>
                           <div>
                             <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1.5">
@@ -1396,7 +1388,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         {formData.enrichmentStaged ? '✓ Enrichment ' : ''}
                         {formData.aiPersonalizationStaged ? '✓ AI Personalization ' : ''}
                         {(formData.executeStaged ?? true) ? '✓ Execute ' : ''}
-                        {formData.interactionStaged ? `✓ Interaction (${formData.interactionStopAfterHours || 72}h / ${formData.interactionMaxReplies || 100} replies) ` : ''}
+                        {formData.interactionStaged ? `✓ Interaction (${formData.interactionStopAfterHours || 72}h) ` : ''}
                         {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged ? 'No stages selected' : ''}
                       </p>
                     </div>

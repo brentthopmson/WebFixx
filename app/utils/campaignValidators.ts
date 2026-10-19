@@ -292,9 +292,6 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
     if (!campaign.interactionStopAfterHours || campaign.interactionStopAfterHours <= 0) {
       return { field: 'interactionStopAfterHours', message: 'Stop after hours is required when interaction stage is enabled' };
     }
-    if (!campaign.interactionMaxReplies || campaign.interactionMaxReplies <= 0) {
-      return { field: 'interactionMaxReplies', message: 'Max replies is required when interaction stage is enabled' };
-    }
     return null;
   }
 
@@ -360,9 +357,6 @@ export function validateCampaignCreation(campaign: Partial<Campaign>): Validatio
   if (campaign.interactionStaged) {
     if (!campaign.interactionStopAfterHours || campaign.interactionStopAfterHours <= 0) {
       return { field: 'interactionStopAfterHours', message: 'Stop after hours is required when interaction stage is enabled' };
-    }
-    if (!campaign.interactionMaxReplies || campaign.interactionMaxReplies <= 0) {
-      return { field: 'interactionMaxReplies', message: 'Max replies is required when interaction stage is enabled' };
     }
   }
 

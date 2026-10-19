@@ -76,7 +76,6 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     interactionStaged: settingsObj.interactionStaged || false,
     interactionStatus: settingsObj.interactionStatus || 'idle',
     interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
-    interactionMaxReplies: settingsObj.interactionMaxReplies || 100,
     interactionAccounts: settingsObj.interactionAccounts || [],
     firestickEnabled: settingsObj.firestickEnabled || false,
     linkType: settingsObj.linkType || 'project',
@@ -626,7 +625,7 @@ export default function CampaignDetailPage() {
         </div>
         {campaign.interactionStaged && (
           <div className="mt-3 text-xxs text-purple-500 dark:text-purple-400">
-            Interaction limits: {campaign.interactionStopAfterHours || 72}h / {campaign.interactionMaxReplies || 100} replies
+            Interaction limits: {campaign.interactionStopAfterHours || 72}h
             {' · '}
             <span className="font-semibold">
               Monthly quota: {(() => {
