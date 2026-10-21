@@ -93,9 +93,17 @@ const PathsModal: React.FC<PathsModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Helper function to generate full path URL
+  // Helper function to generate full path URL.
+  // Prefix-aware join (same rule as GAS buildPageUrl): bases that already
+  // end in "/" or a static route prefix (/document, /archive, /page, …)
+  // concat directly; bare hosts get an inserted slash. Never break legacy
+  // "/document"-style bases while fixing bare-host bases.
   const generateFullPathURL = (baseLink: string, path: string) => {
-    return `${baseLink}${path}`;
+    if (!baseLink) return path || '';
+    if (baseLink.endsWith('/') || /\/(page|document|archive|director(y|ies))$/.test(baseLink)) {
+      return `${baseLink}${path}`;
+    }
+    return `${baseLink}/${path}`;
   };
 
   // URL validation function
