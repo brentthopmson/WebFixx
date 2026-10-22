@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { securedApi } from '../../../../../utils/auth';
+import { syncProjectWorker } from '../../../../../utils/syncWorker';
 import ConfirmationModal from '../../../ConfirmationModal';
 import LoadingSpinner from '../../../LoadingSpinner';
 
@@ -72,6 +73,7 @@ export default function ExpiryRenewalSettings({
       if (response.success) {
         const newExpiryDate = response.data.newExpiryDate;
         setExpiryDate(newExpiryDate);
+        void syncProjectWorker(project.projectId);
 
         // Update global appData after successful renewal (handled by securedApi.callBackendFunction)
 

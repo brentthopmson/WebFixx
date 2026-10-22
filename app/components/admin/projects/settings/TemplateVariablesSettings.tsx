@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { securedApi } from '../../../../../utils/auth';
 import { authApi } from '../../../../../utils/auth';
+import { syncProjectWorker } from '../../../../../utils/syncWorker';
 import { useAppState } from '../../../../context/AppContext';
 
 interface TemplateVariablesSettingsProps {
@@ -135,6 +136,7 @@ export default function TemplateVariablesSettings({
 
       if (response.success) {
         setSuccess(true);
+        void syncProjectWorker(project.projectId);
         if (onSave) {
           onSave(resultString);
         }

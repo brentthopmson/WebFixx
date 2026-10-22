@@ -5,7 +5,7 @@ import { useAppState } from '../../../context/AppContext';
 import { securedApi } from '../../../../utils/auth';
 import { rowsToObjects } from '../../../utils/rows';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCog, faSpinner, faRobot, faShieldAlt, faSave } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faSpinner, faRobot, faShieldAlt, faSave, faServer } from '@fortawesome/free-solid-svg-icons';
 
 export interface SettingsRow {
   settingsKey: string;
@@ -19,6 +19,9 @@ export default function AdminSettingsPanel() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, { v1: string; v2: string }>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: number; total: number; failedCount: number; failedNames: string[] } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const settings: SettingsRow[] = useMemo(() => {
     const s = appData?.data?.settings;
@@ -78,6 +81,38 @@ export default function AdminSettingsPanel() {
 
   const updateEdit = (key: string, field: 'v1' | 'v2', value: string) => {
     setEdits((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+  };
+
+  const runWorkerSync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    setSyncResult(null);
+    try {
+      const result: any = await securedApi.callBackendFunction({
+        functionName: 'syncWorkers'
+      });
+      if (result?.success) {
+        setSyncResult({
+          ok: result.ok ?? 0,
+          total: result.total ?? 0,
+          failedCount: result.failed?.length ?? 0,
+          failedNames: (result.failed || []).map((f: any) => f.workerName || f.error)
+        });
+      } else {
+        setSyncResult({
+          ok: result?.ok ?? 0,
+          total: result?.total ?? 0,
+          failedCount: result?.failed?.length ?? 0,
+          failedNames: (result?.failed || []).map((f: any) => f.workerName || f.error)
+        });
+        setSyncError(result?.error || 'Worker sync failed');
+      }
+    } catch (e: any) {
+      console.error('[SettingsSave] worker sync error', { error: e?.message });
+      setSyncError(e?.message || 'Worker sync failed');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const renderToggle = (row: SettingsRow) => {
@@ -206,6 +241,55 @@ export default function AdminSettingsPanel() {
                 <div className="py-3 text-sm text-gray-500 dark:text-gray-400">No additional settings found.</div>
               )}
             </div>
+          </div>
+
+          {/* Edge worker sync (admin trigger) */}
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg">
+            <div className="flex items-center mb-4">
+              <FontAwesomeIcon icon={faServer} className="w-5 h-5 text-blue-500 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Edge Workers</h2>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Re-deploys the current engine source into every Cloudflare Worker tracked in the
+              links + redirect sheets. Same worker names, so all URLs stay valid. Also runs
+              automatically on every push to the engine repo and after project-settings saves.
+            </p>
+            <button
+              onClick={runWorkerSync}
+              disabled={syncing}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-60"
+            >
+              {syncing ? (
+                <>
+                  <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 mr-2 animate-spin" />
+                  Syncing…
+                </>
+              ) : (
+                <>
+                  <FontAwesomeIcon icon={faServer} className="w-4 h-4 mr-2" />
+                  Sync all workers now
+                </>
+              )}
+            </button>
+            {syncResult && (
+              <div
+                className={`mt-3 text-sm rounded-md px-3 py-2 ${
+                  syncResult.failedCount === 0
+                    ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                    : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                }`}
+              >
+                Synced {syncResult.ok}/{syncResult.total} · {syncResult.failedCount} failed
+                {syncResult.failedCount > 0 && (
+                  <div className="mt-1 text-xs break-all">{syncResult.failedNames.join(', ')}</div>
+                )}
+              </div>
+            )}
+            {syncError && (
+              <div className="mt-3 text-sm bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-md px-3 py-2">
+                {syncError}
+              </div>
+            )}
           </div>
         </div>
       )}

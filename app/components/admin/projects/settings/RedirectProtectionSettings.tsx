@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { securedApi } from '../../../../../utils/auth';
+import { syncProjectWorker } from '../../../../../utils/syncWorker';
 import ConfirmationModal from '../../../ConfirmationModal';
 import LoadingSpinner from '../../../LoadingSpinner';
 import { useAppState } from '../../../../context/AppContext';
@@ -136,6 +137,7 @@ export default function RedirectProtectionSettings({ project, onSave }: Redirect
               });
               if (response.success) {
                 setShowConfirmationModal(false);
+                void syncProjectWorker(project.projectId);
                 if (onSave) {
                   onSave({ redirectId: response.data.redirectId, redirectURL: response.data.redirectURL });
                 }

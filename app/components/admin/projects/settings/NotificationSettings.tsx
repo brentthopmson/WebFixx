@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { securedApi } from '../../../../../utils/auth';
 import { authApi } from '../../../../../utils/auth';
+import { syncProjectWorker } from '../../../../../utils/syncWorker';
 import { useAppState } from '../../../../context/AppContext';
 import LoadingSpinner from '../../../LoadingSpinner';
 
@@ -51,6 +52,7 @@ export default function NotificationSettings({
 
       if (response.success) {
         setSuccess(true);
+        void syncProjectWorker(project.projectId);
         if (onSave) {
           onSave({ telegramGroupId: telegramId, email });
         }

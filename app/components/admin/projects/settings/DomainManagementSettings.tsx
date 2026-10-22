@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { securedApi } from '../../../../../utils/auth';
+import { syncProjectWorker } from '../../../../../utils/syncWorker';
 import ConfirmationModal from '../../../ConfirmationModal';
 import LoadingSpinner from '../../../LoadingSpinner';
 
@@ -112,6 +113,7 @@ export default function DomainManagementSettings({ project, onSave }: DomainMana
               });
               if (response.success) {
                 setShowDomainConfirmation(false);
+                void syncProjectWorker(project.projectId);
                 if (onSave) {
                   onSave({ domainId: response.data.domainId, domainURL: response.data.domainURL });
                 }

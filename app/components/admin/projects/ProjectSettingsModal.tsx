@@ -10,6 +10,7 @@ import {
   faSpinner // For loading state
 } from '@fortawesome/free-solid-svg-icons';
 import { securedApi } from '../../../../utils/auth'; // Import securedApi
+import { syncProjectWorker } from '../../../../utils/syncWorker';
 import { useAppState } from '../../../context/AppContext'; // Import useAppState
 
 import { 
@@ -97,6 +98,7 @@ export default function ProjectSettingsModal({ project, onClose, onSave }: Proje
 
       if (response.success) {
         setIsNotifyingVisits(newNotifyVisitsState);
+        void syncProjectWorker(project.projectId);
         // The securedApi.callBackendFunction automatically updates appData,
         // so no need to call authApi.updateAppData(setAppData) explicitly here.
         alert(`Notify Visits ${newNotifyVisitsState ? 'enabled' : 'disabled'} successfully!`);
