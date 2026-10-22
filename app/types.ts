@@ -89,6 +89,9 @@ export interface Campaign {
   socialInteractionTypes?: Array<'inbox' | 'search' | 'other'>; // Serverless hooks
   socialStrategyPrompt?: string; // Outreach prompt for AI replies/posts
   socialKeywords?: string[]; // Targeting search queries
+  // Per-account per-tag resume state: tagStatus[profileId][tag] = 'done'.
+  // Engine-managed; keys absent = pending. Removed tags are pruned from all accounts.
+  tagStatus?: Record<string, Record<string, string>>;
   shouldSendMessage?: boolean; // Send DM to all social profiles in CSV
   platform?: string; // Social target platform (tiktok/twitter/instagram/…)
   engagementMode?: boolean; // true = perform write actions (like/comment/follow), false = read/scrape only

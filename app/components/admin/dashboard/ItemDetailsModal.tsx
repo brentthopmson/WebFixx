@@ -478,8 +478,9 @@ export const ItemDetailsModal = ({
     const override = usage && typeof usage._limits === 'object' && usage._limits ? usage._limits : null;
 
     const ACTION_TYPES = [
-      'likeOnStory', 'likesOnPost', 'likesOnComment',
-      'commentOnComment', 'commentOnStory', 'commentOnPost',
+      'likeOnStory', 'repostOnStory', 'commentOnStory',
+      'likesOnPost', 'repostOnPost', 'commentOnPost',
+      'likesOnComment', 'repostOnComment', 'commentOnComment',
       'follow', 'unfollow', 'coldMessage', 'inboxReply', 'extract',
     ];
     const num = (value: any): number => {

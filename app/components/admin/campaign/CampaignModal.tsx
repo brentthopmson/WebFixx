@@ -183,6 +183,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         socialInteractionTypes: campaignToEdit.socialInteractionTypes || [],
         socialStrategyPrompt: campaignToEdit.socialStrategyPrompt || '',
         socialKeywords: campaignToEdit.socialKeywords || [],
+        tagStatus: campaignToEdit.tagStatus || {},
         platform: campaignToEdit.platform || '',
         campaignMode: campaignToEdit.campaignMode || (campaignToEdit.fileUrl ? 'file' : 'interactions-only'),
         targetLink: campaignToEdit.targetLink || '',
@@ -229,6 +230,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       socialInteractionTypes: [],
       socialStrategyPrompt: '',
       socialKeywords: [],
+      tagStatus: {},
       platform: '',
       campaignMode: 'file',
       targetLink: '',
@@ -580,10 +582,22 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   };
 
   const handleRemoveSocialKeyword = (keyword: string) => {
-    setFormData(prev => ({
-      ...prev,
-      socialKeywords: (prev.socialKeywords || []).filter(k => k !== keyword)
-    }));
+    setFormData(prev => {
+      // Prune this tag from every account's resume map (tagStatus[profileId][tag])
+      // so re-adding it starts pending again instead of being skipped as 'done'.
+      const tagStatus = prev.tagStatus || {};
+      const pruned: Record<string, Record<string, string>> = {};
+      for (const [pid, map] of Object.entries(tagStatus)) {
+        const next = { ...(map || {}) };
+        delete next[keyword];
+        pruned[pid] = next;
+      }
+      return {
+        ...prev,
+        socialKeywords: (prev.socialKeywords || []).filter(k => k !== keyword),
+        tagStatus: pruned,
+      };
+    });
   };
 
   const handleAddEmailKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
