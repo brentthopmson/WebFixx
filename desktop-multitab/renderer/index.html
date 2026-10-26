@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebFixx Multi-Tab Session Launcher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="logo">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <rect width="48" height="48" rx="12" fill="#6366f1"/>
+        <path d="M14 18h20v4H14zM14 24h20v2H14zM14 28h16v2H14z" fill="#fff" opacity="0.9"/>
+        <circle cx="34" cy="30" r="6" fill="#22d3ee" opacity="0.8"/>
+      </svg>
+    </div>
+    <h1>WebFixx Multi-Tab Launcher</h1>
+    <div id="status-container">
+      <div id="spinner" class="spinner"></div>
+      <p id="status-text">Initializing...</p>
+      <p id="status-detail"></p>
+    </div>
+    <div id="action-buttons" class="hidden">
+      <button id="retry-btn">Retry</button>
+      <button id="close-btn">Close</button>
+    </div>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>

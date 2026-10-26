@@ -1,0 +1,58 @@
+{
+  "name": "webfixx-multitab-session-launcher",
+  "version": "1.0.0",
+  "description": "WebFixx Multi-Tab Session Launcher - Open saved browser sessions with multiple tabs automatically in an isolated Chrome instance",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.webfixx.multitab-session-launcher",
+    "productName": "WebFixx Multi-Tab Session Launcher",
+    "protocols": {
+      "name": "WebFixx Multi-Tab Protocol",
+      "schemes": [
+        "webfixx-multi",
+        "webfixx"
+      ]
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico",
+      "signDlls": false,
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "icon.png"
+    },
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "extract-zip": "^2.0.1",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}

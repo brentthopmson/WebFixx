@@ -1,0 +1,9 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  onSessionStatus: (callback) => {
+    ipcRenderer.on('session-status', (_event, data) => callback(data));
+  },
+  closeApp: () => ipcRenderer.send('close-app'),
+  retrySession: () => ipcRenderer.send('retry-session'),
+});
