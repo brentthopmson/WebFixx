@@ -256,7 +256,22 @@ export function validateSMTPSettings(
  * Validates campaign before creation
  * Main orchestrator function — checks all required fields for setup completion
  */
-export function validateCampaignCreation(campaign: Partial<Campaign>): ValidationError | null {
+export function validateCampaignCreation(campaign: Partial<Campaign>, maxAccounts?: number): ValidationError | null {
+  // Max accounts per campaign limit
+  if (typeof maxAccounts === 'number' && maxAccounts > 0) {
+    const accs = campaign.accounts || [];
+    if (accs.length > maxAccounts) {
+      return {
+        field: 'accounts',
+        message: You can only select up to  account per campaign. You selected .\n      };
+    }
+    const intAccs = campaign.interactionAccounts || [];
+    if (intAccs.length > maxAccounts) {
+      return {
+        field: 'interactionAccounts',
+        message: You can only select up to  interaction account per campaign. You selected .\n      };
+    }
+  }
   // Required fields
   const nameError = validateCampaignName(campaign.name || '');
   if (nameError) return nameError;

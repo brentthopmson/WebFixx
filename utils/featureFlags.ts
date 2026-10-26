@@ -38,3 +38,29 @@ export function isFeatureEnabled(appData: AppDataShape | null | undefined, flagK
 export function featureDisabledMessage(flagKey: string, label?: string): string {
   return `Feature disabled. Enable '${flagKey}' in Admin Settings to use ${label || 'this feature'}.`;
 }
+
+/**
+ * Reads a setting string value (settingsValue1) by its settingsKey from appData.data.settings.
+ */
+export function getSettingValueFromAppData(
+  appData: AppDataShape | null | undefined,
+  key: string,
+  fallback: string = ''
+): string {
+  const rows = getSettingsRows(appData);
+  const row = rows.find((r) => r.settingsKey && String(r.settingsKey).trim() === key);
+  if (!row) return fallback;
+  const value = row.settingsValue1;
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  return String(value).trim();
+}
+
+/**
+ * Gets the maximum accounts allowed per campaign from the SETTINGS sheet.
+ * Falls back to 1 if not set or invalid.
+ */
+export function getMaxAccountsPerCampaign(appData: AppDataShape | null | undefined): number {
+  const val = getSettingValueFromAppData(appData, 'maxAccountsPerCampaign', '1');
+  const parsed = parseInt(val, 10);
+  return isNaN(parsed) || parsed <= 0 ? 1 : parsed;
+}

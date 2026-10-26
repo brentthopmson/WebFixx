@@ -23,7 +23,7 @@ import {
   faRocket
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
-import { isFeatureEnabled, featureDisabledMessage } from '../../utils/featureFlags';
+import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign } from '../../utils/featureFlags';
 import { CampaignModal } from '../components/admin/campaign/CampaignModal';
 import type { Campaign } from '../types';
 import { securedApi, authApi } from '../../utils/auth';
@@ -340,7 +340,8 @@ export default function Campaign() {
     let response: any = null;
     try {
       // Validate campaign data before sending to backend
-      const validationError = validateCampaignCreation(newCampaign);
+      const maxCampaignAccounts = getMaxAccountsPerCampaign(appData);
+      const validationError = validateCampaignCreation(newCampaign, maxCampaignAccounts);
       if (validationError) {
         const errorMessage = getValidationErrorMessage(validationError);
         console.warn('[Campaign] Validation failed:', validationError);

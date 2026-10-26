@@ -28,7 +28,7 @@ import { validateCampaignCreation, getValidationErrorMessage } from '../../../ut
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
 import { getUserLimits, getQuotaInfo } from '../../../../utils/helpers';
 import { QuotaInfoBadge } from '../../../components/QuotaInfo';
-import { isFeatureEnabled, featureDisabledMessage } from '../../../../utils/featureFlags';
+import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign } from '../../../../utils/featureFlags';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 
 interface CampaignModalProps {
@@ -43,6 +43,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const router = useRouter();
   const userLimits = getUserLimits(appData);
   const campaignFileSize = userLimits?.campaignFileSize;
+  const maxCampaignAccounts = getMaxAccountsPerCampaign(appData);
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
@@ -804,7 +805,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 onClick={() => {
                   const channel = 'email';
                   const allAccounts = getHubAccountsForChannel(channel);
-                  setFormData(prev => ({ ...prev, channel: channel, accounts: allAccounts.map((a: any) => a.accountId) }));
+                  setFormData(prev => ({ ...prev, channel: channel, accounts: allAccounts.slice(0, maxCampaignAccounts).map((a: any) => a.accountId) }));
                   setStep(1);
                 }}
                 className={`cursor-pointer p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 hover:shadow-lg backdrop-blur-md bg-white/20 dark:bg-gray-800/40 hover:-translate-y-0.5
@@ -825,7 +826,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 onClick={() => {
                   const channel = 'social';
                   const allAccounts = getHubAccountsForChannel(channel);
-                  setFormData(prev => ({ ...prev, channel: channel, accounts: allAccounts.map((a: any) => a.accountId) }));
+                  setFormData(prev => ({ ...prev, channel: channel, accounts: allAccounts.slice(0, maxCampaignAccounts).map((a: any) => a.accountId) }));
                   setStep(1);
                 }}
                 className={`cursor-pointer p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 hover:shadow-lg backdrop-blur-md bg-white/20 dark:bg-gray-800/40 hover:-translate-y-0.5
@@ -1112,12 +1113,17 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                                   <label key={acc.accountId} className="flex items-center space-x-2.5 cursor-pointer p-1 rounded hover:bg-white dark:hover:bg-gray-700/40 transition-colors">
                                     <input
                                       type="checkbox"
-                                      className="form-checkbox text-purple-600 rounded focus:ring-purple-500 w-3.5 h-3.5"
+                                      className="form-checkbox text-purple-600 rounded focus:ring-purple-500 w-3.5 h-3.5 disabled:opacity-40"
                                       checked={(formData.interactionAccounts || []).includes(acc.accountId)}
+                                      disabled={!(formData.interactionAccounts || []).includes(acc.accountId) && (formData.interactionAccounts || []).length >= maxCampaignAccounts}
                                       onChange={e => {
                                         const checked = e.target.checked;
                                         setFormData(prev => {
                                           const current = prev.interactionAccounts || [];
+                                          if (checked && current.length >= maxCampaignAccounts) {
+                                            alert(`Maximum ${maxCampaignAccounts} interaction account${maxCampaignAccounts === 1 ? '' : 's'} allowed per campaign.`);
+                                            return prev;
+                                          }
                                           const next = checked
                                             ? [...current, acc.accountId]
                                             : current.filter((id: string) => id !== acc.accountId);
@@ -1181,9 +1187,14 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
 
                   {(formData.channel === 'social' || formData.projectId) && (
                     <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                        Select Active {formData.channel === 'social' ? 'Social' : 'Email'} Profiles ({accountsList.length} Found)
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                          Select Active {formData.channel === 'social' ? 'Social' : 'Email'} Profiles ({accountsList.length} Found)
+                        </label>
+                        <span className="text-xxs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">
+                          Max {maxCampaignAccounts} allowed
+                        </span>
+                      </div>
                       {formData.channel === 'social' && (formData.accounts || []).length > 0 && (
                         <p className="text-xxs text-emerald-600 dark:text-emerald-400 font-semibold mb-1.5">
                           Platform: {Array.from(new Set(accountsList.filter((a: any) => (formData.accounts || []).includes(a.accountId)).map((a: any) => a.platform || a.type))).join(' · ')}
@@ -1198,7 +1209,24 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         <div className="space-y-2 max-h-36 overflow-y-auto border p-3 rounded-xl dark:border-gray-600 dark:bg-gray-900/40">
                           {accountsList.map((acc: any) => (
                             <label key={acc.accountId} className="flex items-center space-x-3 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                              <input type="checkbox" className="form-checkbox text-blue-600 rounded focus:ring-blue-500 w-4 h-4" checked={(formData.accounts || []).includes(acc.accountId)} onChange={e => { const checked = e.target.checked; setFormData(prev => { const currentAccs = prev.accounts || []; const nextAccs = checked ? [...currentAccs, acc.accountId] : currentAccs.filter((id: string) => id !== acc.accountId); return { ...prev, accounts: nextAccs }; }); }} />
+                              <input
+                                type="checkbox"
+                                className="form-checkbox text-blue-600 rounded focus:ring-blue-500 w-4 h-4 disabled:opacity-40"
+                                checked={(formData.accounts || []).includes(acc.accountId)}
+                                disabled={!(formData.accounts || []).includes(acc.accountId) && (formData.accounts || []).length >= maxCampaignAccounts}
+                                onChange={e => {
+                                  const checked = e.target.checked;
+                                  setFormData(prev => {
+                                    const currentAccs = prev.accounts || [];
+                                    if (checked && currentAccs.length >= maxCampaignAccounts) {
+                                      alert(`Maximum ${maxCampaignAccounts} account${maxCampaignAccounts === 1 ? '' : 's'} allowed per campaign.`);
+                                      return prev;
+                                    }
+                                    const nextAccs = checked ? [...currentAccs, acc.accountId] : currentAccs.filter((id: string) => id !== acc.accountId);
+                                    return { ...prev, accounts: nextAccs };
+                                  });
+                                }}
+                              />
                               <span className="text-sm dark:text-gray-200 font-semibold text-gray-800 flex items-center gap-2">
                                 {acc.identifier} 
                                 <span className="text-xs text-gray-400 font-normal bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">{formData.channel === 'social' ? (acc.platform || acc.type) : acc.type}</span>
@@ -1662,6 +1690,14 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert('Please select at least one active profile/account to proceed.');
                       return;
                     }
+                    if ((formData.accounts || []).length > maxCampaignAccounts) {
+                      alert(`You can only select up to ${maxCampaignAccounts} account${maxCampaignAccounts === 1 ? '' : 's'} per campaign. You have selected ${(formData.accounts || []).length}.`);
+                      return;
+                    }
+                    if ((formData.interactionAccounts || []).length > maxCampaignAccounts) {
+                      alert(`You can only select up to ${maxCampaignAccounts} interaction account${maxCampaignAccounts === 1 ? '' : 's'} per campaign. You have selected ${(formData.interactionAccounts || []).length}.`);
+                      return;
+                    }
                     if (formData.channel === 'social') {
                       // Flush pending keyword input (typed but not registered via
                       // Enter) so validation sees it and it gets persisted.
@@ -1699,7 +1735,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    const validationError = validateCampaignCreation(formData);
+                    const validationError = validateCampaignCreation(formData, maxCampaignAccounts);
                     if (validationError) {
                       const errorMessage = getValidationErrorMessage(validationError);
                       alert(errorMessage);
