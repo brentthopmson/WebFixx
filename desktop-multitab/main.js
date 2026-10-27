@@ -441,8 +441,8 @@ async function launchSession(browserId, token) {
           }
         };
         appendCookies(cookieJSON);
-        appendCookies(accountCookieJSON);
-        appendCookies(driveCookieJSON);
+        // appendCookies(accountCookieJSON);
+        // appendCookies(driveCookieJSON);
 
         let cookiesSet = 0;
         let cookiesFailed = 0;
