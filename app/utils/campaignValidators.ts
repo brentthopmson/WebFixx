@@ -263,13 +263,15 @@ export function validateCampaignCreation(campaign: Partial<Campaign>, maxAccount
     if (accs.length > maxAccounts) {
       return {
         field: 'accounts',
-        message: You can only select up to  account per campaign. You selected .\n      };
+        message: `You can only select up to ${maxAccounts} account${maxAccounts > 1 ? 's' : ''} per campaign. You selected ${accs.length}.`,
+      };
     }
     const intAccs = campaign.interactionAccounts || [];
     if (intAccs.length > maxAccounts) {
       return {
         field: 'interactionAccounts',
-        message: You can only select up to  interaction account per campaign. You selected .\n      };
+        message: `You can only select up to ${maxAccounts} interaction account${maxAccounts > 1 ? 's' : ''} per campaign. You selected ${intAccs.length}.`,
+      };
     }
   }
   // Required fields
