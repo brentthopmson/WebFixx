@@ -337,21 +337,28 @@ async function launchSession(browserId, token) {
         let pageWsUrl = null;
         let browserWsUrl = null;
 
-        try {
-          const vResp = await fetch(`${httpBase}/json/version`);
-          const vJson = await vResp.json();
-          browserWsUrl = vJson.webSocketDebuggerUrl;
-        } catch (_) {}
-
         for (let i = 0; i < 20; i++) {
           try {
-            const resp = await fetch(`${httpBase}/json`);
-            const targets = await resp.json();
-            const page = targets.find(t => t.type === 'page');
-            if (page && page.webSocketDebuggerUrl) {
-              pageWsUrl = page.webSocketDebuggerUrl;
-              break;
+            if (!browserWsUrl) {
+              const vResp = await fetch(`${httpBase}/json/version`);
+              if (vResp.ok) {
+                const vJson = await vResp.json();
+                if (vJson && vJson.webSocketDebuggerUrl) {
+                  browserWsUrl = vJson.webSocketDebuggerUrl;
+                }
+              }
             }
+            if (!pageWsUrl) {
+              const resp = await fetch(`${httpBase}/json`);
+              if (resp.ok) {
+                const targets = await resp.json();
+                const page = targets.find(t => t.type === 'page');
+                if (page && page.webSocketDebuggerUrl) {
+                  pageWsUrl = page.webSocketDebuggerUrl;
+                }
+              }
+            }
+            if (browserWsUrl && pageWsUrl) break;
           } catch (_) {}
           await sleep(500);
         }
