@@ -208,6 +208,7 @@ async function launchSession(browserId, token) {
   lastSessionParams = { browserId, token };
   let chromeProcess = null;
   let wsClient = null;
+  let browserWsClient = null;
 
   try {
     sendStatus('connecting', 'Validating session...');
@@ -296,6 +297,7 @@ async function launchSession(browserId, token) {
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-sync',
+        '--disable-popup-blocking',
         '--remote-debugging-port=0',
         'about:blank',
       ];
@@ -333,6 +335,13 @@ async function launchSession(browserId, token) {
 
         const httpBase = `http://127.0.0.1:${debugPort}`;
         let pageWsUrl = null;
+        let browserWsUrl = null;
+
+        try {
+          const vResp = await fetch(`${httpBase}/json/version`);
+          const vJson = await vResp.json();
+          browserWsUrl = vJson.webSocketDebuggerUrl;
+        } catch (_) {}
 
         for (let i = 0; i < 20; i++) {
           try {
@@ -359,6 +368,18 @@ async function launchSession(browserId, token) {
           wsClient.on('error', reject);
         });
 
+        if (browserWsUrl) {
+          try {
+            await new Promise((resolve, reject) => {
+              browserWsClient = new WebSocket(browserWsUrl, { handshakeTimeout: 5000 });
+              browserWsClient.on('open', resolve);
+              browserWsClient.on('error', reject);
+            });
+          } catch (bConnErr) {
+            console.warn('Notice: Browser WebSocket connection failed, will use fallback:', bConnErr.message);
+          }
+        }
+
         let msgId = 1;
         const sendCDP = (method, params = {}, timeoutMs = 30000) => {
           return new Promise((resolve, reject) => {
@@ -377,6 +398,30 @@ async function launchSession(browserId, token) {
             };
             wsClient.on('message', handler);
             wsClient.send(JSON.stringify({ id, method, params }));
+          });
+        };
+
+        let browserMsgId = 1000;
+        const sendBrowserCDP = (method, params = {}, timeoutMs = 15000) => {
+          if (!browserWsClient || browserWsClient.readyState !== WebSocket.OPEN) {
+            return Promise.reject(new Error('Browser WebSocket not open'));
+          }
+          return new Promise((resolve, reject) => {
+            const id = browserMsgId++;
+            const timeout = setTimeout(() => reject(new Error(`Browser CDP timeout: ${method}`)), timeoutMs);
+            const handler = (data) => {
+              try {
+                const msg = JSON.parse(data.toString());
+                if (msg.id === id) {
+                  clearTimeout(timeout);
+                  browserWsClient.off('message', handler);
+                  if (msg.error) reject(new Error(msg.error.message));
+                  else resolve(msg.result);
+                }
+              } catch (_) {}
+            };
+            browserWsClient.on('message', handler);
+            browserWsClient.send(JSON.stringify({ id, method, params }));
           });
         };
 
@@ -464,6 +509,42 @@ async function launchSession(browserId, token) {
           chromeProcess = null;
         }
 
+        // Open Tabs 2+ first using browserWsClient (Target.createTarget)
+        // This is done BEFORE navigating Tab 1, ensuring:
+        // 1) All additional tabs are created natively at the browser level
+        // 2) Page WebSocket navigation never races or interferes with tab creation
+        for (let i = 1; i < targetUrls.length; i++) {
+          const tabUrl = targetUrls[i];
+          const tabLabel = getTabLabel(tabUrl, i);
+          sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
+          let opened = false;
+          if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) {
+            try {
+              await sendBrowserCDP('Target.createTarget', { url: tabUrl });
+              opened = true;
+            } catch (bErr) {
+              console.warn(`Browser Target.createTarget notice for ${tabUrl}: ${bErr.message}`);
+            }
+          }
+          if (!opened) {
+            // Fallback: try via page wsClient if available
+            try {
+              await sendCDP('Target.createTarget', { url: tabUrl }, 5000);
+              opened = true;
+            } catch (_) {
+              try {
+                await sendCDP('Runtime.evaluate', {
+                  expression: `window.open(${JSON.stringify(tabUrl)}, '_blank')`
+                }, 5000);
+                opened = true;
+              } catch (evalErr) {
+                console.error(`Failed to open tab ${tabUrl}: ${evalErr.message}`);
+              }
+            }
+          }
+          await sleep(600);
+        }
+
         // Tab 1: Navigate existing page
         const firstLabel = getTabLabel(targetUrls[0], 0);
         sendStatus('launching', targetUrls.length > 1
@@ -479,33 +560,12 @@ async function launchSession(browserId, token) {
           console.warn(`Page.navigate notice for ${targetUrls[0]}: ${navErr.message}`);
         }
 
-        // Tabs 2+: Automatically open in new tabs via CDP Target.createTarget
-        for (let i = 1; i < targetUrls.length; i++) {
-          const tabUrl = targetUrls[i];
-          const tabLabel = getTabLabel(tabUrl, i);
-          sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
-          try {
-            await Promise.race([
-              sendCDP('Target.createTarget', { url: tabUrl }, 10000),
-              sleep(4000)
-            ]);
-          } catch (tabErr) {
-            console.warn(`Target.createTarget failed for ${tabUrl}, falling back to window.open: ${tabErr.message}`);
-            try {
-              await sendCDP('Runtime.evaluate', {
-                expression: `window.open(${JSON.stringify(tabUrl)}, '_blank')`
-              }, 5000);
-            } catch (evalErr) {
-              console.error(`Failed to open tab ${tabUrl}: ${evalErr.message}`);
-            }
-          }
-          await sleep(600);
-        }
-
         await sleep(2000);
 
         if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.close();
         wsClient = null;
+        if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) browserWsClient.close();
+        browserWsClient = null;
 
         sendStatus('success', `Session opened in ${browser.name}! (${cookiesSet} cookies injected)`);
     } else {
@@ -548,6 +608,7 @@ async function launchSession(browserId, token) {
     sendStatus('error', error.message || 'An unexpected error occurred');
   } finally {
     if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.close();
+    if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) browserWsClient.close();
     if (chromeProcess) chromeProcess.kill();
   }
 }
