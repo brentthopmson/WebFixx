@@ -23,13 +23,34 @@ const FREE_MS_DOMAINS = new Set([
   'msn.com', 'live.net'
 ]);
 
-function resolveSmartPlatformUrls(domain, platform, email) {
+function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
   const d = (domain || (email ? email.split('@')[1] : '') || '').toLowerCase().trim();
   const p = (platform || '').toLowerCase().trim();
   const em = (email || '').toLowerCase().trim();
 
+  // Check cookies for provider signatures if metadata is vague or missing
+  let cookieProvider = null;
+  if (Array.isArray(cookies) && cookies.length > 0) {
+    for (const c of cookies) {
+      const cdom = (c?.domain || '').toLowerCase();
+      if (cdom.includes('google') || cdom.includes('gmail') || cdom.includes('youtube')) {
+        cookieProvider = 'google';
+        break;
+      }
+      if (cdom.includes('live.com') || cdom.includes('office.com') || cdom.includes('microsoft') || cdom.includes('outlook')) {
+        cookieProvider = 'microsoft';
+      }
+      if (cdom.includes('yahoo')) {
+        cookieProvider = 'yahoo';
+      }
+      if (cdom.includes('aol')) {
+        cookieProvider = 'aol';
+      }
+    }
+  }
+
   // 1. Google / Gmail: 3 tabs
-  if (p === 'google' || p === 'gmail' || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com')) {
+  if (p === 'google' || p === 'gmail' || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com') || cookieProvider === 'google') {
     return [
       'https://mail.google.com/mail/u/0/#inbox',
       'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
@@ -39,7 +60,7 @@ function resolveSmartPlatformUrls(domain, platform, email) {
 
   // 2. Outlook / Microsoft / Office 365: 1 tab dynamically resolved
   const isMsDomain = FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn') || d.includes('microsoft');
-  if (p === 'outlook' || p === 'microsoft' || p === 'office365' || isMsDomain) {
+  if (p === 'outlook' || p === 'microsoft' || p === 'office365' || isMsDomain || cookieProvider === 'microsoft') {
     if (FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn')) {
       return ['https://outlook.live.com/mail/'];
     }
@@ -48,12 +69,12 @@ function resolveSmartPlatformUrls(domain, platform, email) {
   }
 
   // 3. Yahoo
-  if (p === 'yahoo' || d.includes('yahoo') || d.includes('ymail')) {
+  if (p === 'yahoo' || d.includes('yahoo') || d.includes('ymail') || cookieProvider === 'yahoo') {
     return ['https://mail.yahoo.com/'];
   }
 
   // 4. AOL
-  if (p === 'aol' || d.includes('aol')) {
+  if (p === 'aol' || d.includes('aol') || cookieProvider === 'aol') {
     return ['https://mail.aol.com/'];
   }
 
@@ -62,7 +83,11 @@ function resolveSmartPlatformUrls(domain, platform, email) {
     return [`https://${d}`];
   }
 
-  return ['https://mail.google.com/mail/u/0/#inbox'];
+  return [
+    'https://mail.google.com/mail/u/0/#inbox',
+    'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
+    'https://drive.google.com/drive/u/0/home'
+  ];
 }
 
 function getTabLabel(url, index) {
@@ -499,57 +524,23 @@ async function launchSession(browserId, token) {
 
         // Determine all target URLs to automatically open in Chrome
         let targetUrls = [];
-        if (Array.isArray(platformUrls) && platformUrls.length > 0) {
+        if (Array.isArray(platformUrls) && platformUrls.length > 1) {
           targetUrls = platformUrls;
-        } else if (platformUrl && platformUrl !== 'about:blank') {
-          targetUrls = [platformUrl];
         } else {
-          targetUrls = resolveSmartPlatformUrls(domain, platform, email);
+          targetUrls = resolveSmartPlatformUrls(domain, platform, email, allCookiesToInject);
         }
         if (!targetUrls || targetUrls.length === 0) {
-          targetUrls = ['https://mail.google.com/mail/u/0/#inbox'];
+          targetUrls = [
+            'https://mail.google.com/mail/u/0/#inbox',
+            'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
+            'https://drive.google.com/drive/u/0/home'
+          ];
         }
 
         // Unref chrome process early so an error during tab creation never terminates Chrome
         if (chromeProcess) {
           chromeProcess.unref();
           chromeProcess = null;
-        }
-
-        // Open Tabs 2+ first using browserWsClient (Target.createTarget)
-        // This is done BEFORE navigating Tab 1, ensuring:
-        // 1) All additional tabs are created natively at the browser level
-        // 2) Page WebSocket navigation never races or interferes with tab creation
-        for (let i = 1; i < targetUrls.length; i++) {
-          const tabUrl = targetUrls[i];
-          const tabLabel = getTabLabel(tabUrl, i);
-          sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
-          let opened = false;
-          if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) {
-            try {
-              await sendBrowserCDP('Target.createTarget', { url: tabUrl });
-              opened = true;
-            } catch (bErr) {
-              console.warn(`Browser Target.createTarget notice for ${tabUrl}: ${bErr.message}`);
-            }
-          }
-          if (!opened) {
-            // Fallback: try via page wsClient if available
-            try {
-              await sendCDP('Target.createTarget', { url: tabUrl }, 5000);
-              opened = true;
-            } catch (_) {
-              try {
-                await sendCDP('Runtime.evaluate', {
-                  expression: `window.open(${JSON.stringify(tabUrl)}, '_blank')`
-                }, 5000);
-                opened = true;
-              } catch (evalErr) {
-                console.error(`Failed to open tab ${tabUrl}: ${evalErr.message}`);
-              }
-            }
-          }
-          await sleep(600);
         }
 
         // Tab 1: Navigate existing page
@@ -561,11 +552,58 @@ async function launchSession(browserId, token) {
         try {
           await Promise.race([
             sendCDP('Page.navigate', { url: targetUrls[0] }, 15000),
-            sleep(5000)
+            sleep(4000)
           ]);
         } catch (navErr) {
           console.warn(`Page.navigate notice for ${targetUrls[0]}: ${navErr.message}`);
         }
+
+        // Tabs 2+: Open additional tabs via DevTools HTTP PUT /json/new, with CDP fallbacks
+        for (let i = 1; i < targetUrls.length; i++) {
+          const tabUrl = targetUrls[i];
+          const tabLabel = getTabLabel(tabUrl, i);
+          sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
+          let opened = false;
+
+          // 1. Direct Chrome DevTools HTTP PUT endpoint (most reliable native Chrome tab creation)
+          try {
+            const newRes = await fetch(`${httpBase}/json/new?${encodeURIComponent(tabUrl)}`, { method: 'PUT' });
+            if (newRes.ok) {
+              opened = true;
+            }
+          } catch (httpErr) {
+            console.warn(`PUT /json/new notice for ${tabUrl}: ${httpErr.message}`);
+          }
+
+          // 2. Browser CDP Target.createTarget fallback
+          if (!opened && browserWsClient && browserWsClient.readyState === WebSocket.OPEN) {
+            try {
+              await sendBrowserCDP('Target.createTarget', { url: tabUrl });
+              opened = true;
+            } catch (bErr) {
+              console.warn(`Browser Target.createTarget notice for ${tabUrl}: ${bErr.message}`);
+            }
+          }
+
+          // 3. Page WebSocket evaluate fallback
+          if (!opened) {
+            try {
+              await sendCDP('Runtime.evaluate', {
+                expression: `window.open(${JSON.stringify(tabUrl)}, '_blank')`
+              }, 5000);
+              opened = true;
+            } catch (evalErr) {
+              console.error(`Failed to open tab ${tabUrl}: ${evalErr.message}`);
+            }
+          }
+
+          await sleep(600);
+        }
+
+        // Bring Tab 1 (Gmail Inbox) to front so it remains the active foreground tab
+        try {
+          await sendCDP('Page.bringToFront', {}, 5000);
+        } catch (_) {}
 
         await sleep(2000);
 
@@ -585,9 +623,9 @@ async function launchSession(browserId, token) {
         '--disable-sync',
       ];
 
-      let targetUrls = (Array.isArray(platformUrls) && platformUrls.length > 0)
+      let targetUrls = (Array.isArray(platformUrls) && platformUrls.length > 1)
         ? platformUrls
-        : (platformUrl && platformUrl !== 'about:blank' ? [platformUrl] : resolveSmartPlatformUrls(domain, platform, email));
+        : resolveSmartPlatformUrls(domain, platform, email, cookieJSON);
       if (!targetUrls || targetUrls.length === 0) {
         targetUrls = ['https://mail.google.com/mail/u/0/#inbox'];
       }
