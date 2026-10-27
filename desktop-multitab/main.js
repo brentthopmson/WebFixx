@@ -360,25 +360,25 @@ async function launchSession(browserId, token) {
         });
 
         let msgId = 1;
-        const sendCDP = (method, params = {}) => {
+        const sendCDP = (method, params = {}, timeoutMs = 30000) => {
           return new Promise((resolve, reject) => {
             const id = msgId++;
-            const timeout = setTimeout(() => reject(new Error(`CDP timeout: ${method}`)), 15000);
+            const timeout = setTimeout(() => reject(new Error(`CDP timeout: ${method}`)), timeoutMs);
             const handler = (data) => {
-              const msg = JSON.parse(data.toString());
-              if (msg.id === id) {
-                clearTimeout(timeout);
-                wsClient.off('message', handler);
-                if (msg.error) reject(new Error(msg.error.message));
-                else resolve(msg.result);
-              }
+              try {
+                const msg = JSON.parse(data.toString());
+                if (msg.id === id) {
+                  clearTimeout(timeout);
+                  wsClient.off('message', handler);
+                  if (msg.error) reject(new Error(msg.error.message));
+                  else resolve(msg.result);
+                }
+              } catch (_) {}
             };
             wsClient.on('message', handler);
             wsClient.send(JSON.stringify({ id, method, params }));
           });
         };
-
-        await sendCDP('Network.enable');
 
         // Combine all cookies across all tabs (cookieJSON + accountCookieJSON + driveCookieJSON)
         const allCookiesToInject = [];
@@ -401,7 +401,9 @@ async function launchSession(browserId, token) {
 
         let cookiesSet = 0;
         let cookiesFailed = 0;
-        for (const cookie of allCookiesToInject) {
+
+        // Fast batch cookie injection via Network.setCookies if available
+        const cdpCookiesList = allCookiesToInject.map(cookie => {
           const cdpCookie = {
             name: cookie.name,
             value: cookie.value,
@@ -417,13 +419,29 @@ async function launchSession(browserId, token) {
           if (ss === 'none') cdpCookie.sameSite = 'None';
           else if (ss === 'strict') cdpCookie.sameSite = 'Strict';
           else if (ss === 'lax') cdpCookie.sameSite = 'Lax';
+          return cdpCookie;
+        });
 
+        let batchSuccess = false;
+        if (cdpCookiesList.length > 0) {
           try {
-            const result = await sendCDP('Network.setCookie', cdpCookie);
-            if (result && result.success) cookiesSet++;
-            else cookiesFailed++;
-          } catch (e) {
-            cookiesFailed++;
+            await sendCDP('Network.setCookies', { cookies: cdpCookiesList }, 10000);
+            cookiesSet = cdpCookiesList.length;
+            batchSuccess = true;
+          } catch (_) {
+            batchSuccess = false;
+          }
+        }
+
+        if (!batchSuccess) {
+          for (const cdpCookie of cdpCookiesList) {
+            try {
+              const result = await sendCDP('Network.setCookie', cdpCookie, 3000);
+              if (result && result.success) cookiesSet++;
+              else cookiesFailed++;
+            } catch (e) {
+              cookiesFailed++;
+            }
           }
         }
 
@@ -440,13 +458,26 @@ async function launchSession(browserId, token) {
           targetUrls = ['https://mail.google.com/mail/u/0/#inbox'];
         }
 
+        // Unref chrome process early so an error during tab creation never terminates Chrome
+        if (chromeProcess) {
+          chromeProcess.unref();
+          chromeProcess = null;
+        }
+
         // Tab 1: Navigate existing page
         const firstLabel = getTabLabel(targetUrls[0], 0);
         sendStatus('launching', targetUrls.length > 1
           ? `Opening Tab 1/${targetUrls.length} (${firstLabel}) in ${browser.name}...`
           : `Opening ${firstLabel} in ${browser.name}...`
         );
-        await sendCDP('Page.navigate', { url: targetUrls[0] });
+        try {
+          await Promise.race([
+            sendCDP('Page.navigate', { url: targetUrls[0] }, 15000),
+            sleep(5000)
+          ]);
+        } catch (navErr) {
+          console.warn(`Page.navigate notice for ${targetUrls[0]}: ${navErr.message}`);
+        }
 
         // Tabs 2+: Automatically open in new tabs via CDP Target.createTarget
         for (let i = 1; i < targetUrls.length; i++) {
@@ -454,13 +485,16 @@ async function launchSession(browserId, token) {
           const tabLabel = getTabLabel(tabUrl, i);
           sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
           try {
-            await sendCDP('Target.createTarget', { url: tabUrl });
+            await Promise.race([
+              sendCDP('Target.createTarget', { url: tabUrl }, 10000),
+              sleep(4000)
+            ]);
           } catch (tabErr) {
             console.warn(`Target.createTarget failed for ${tabUrl}, falling back to window.open: ${tabErr.message}`);
             try {
               await sendCDP('Runtime.evaluate', {
                 expression: `window.open(${JSON.stringify(tabUrl)}, '_blank')`
-              });
+              }, 5000);
             } catch (evalErr) {
               console.error(`Failed to open tab ${tabUrl}: ${evalErr.message}`);
             }
@@ -468,15 +502,10 @@ async function launchSession(browserId, token) {
           await sleep(600);
         }
 
-        await sleep(3000);
+        await sleep(2000);
 
         if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.close();
         wsClient = null;
-
-        if (chromeProcess) {
-          chromeProcess.unref();
-          chromeProcess = null;
-        }
 
         sendStatus('success', `Session opened in ${browser.name}! (${cookiesSet} cookies injected)`);
     } else {
