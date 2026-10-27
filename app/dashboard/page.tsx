@@ -550,7 +550,7 @@ export default function Dashboard() {
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibility);
       if (!appOpened) {
-        window.location.href = '/downloads/WebFixx-Session-Launcher-Setup.exe';
+        window.location.href = '/downloads/WebFixx-MultiTab-Session-Launcher-Setup.exe';
       }
     }, 1500);
   };
@@ -686,9 +686,9 @@ export default function Dashboard() {
             {!dismissDownload && (
               <div className="flex items-center gap-2">
                 <a
-                  href="/downloads/WebFixx-Session-Launcher-Setup.exe"
+                  href="/downloads/WebFixx-MultiTab-Session-Launcher-Setup.exe"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded flex items-center gap-2 text-sm transition-colors"
-                  title="Download Desktop App"
+                  title="Download Multi-Tab Desktop App"
                 >
                   <FontAwesomeIcon icon={faDownload} className="text-lg" />
                   <span className="hidden sm:inline">Desktop App</span>
