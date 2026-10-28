@@ -231,6 +231,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
             // Only update if we have valid user data
             setAppData({
               user: userData,
+              availableServer: response.availableServer || '',
               isOffline: false, // Ensure isOffline is false on successful session restore
               data: {
                 transactions: data.transactions || [],

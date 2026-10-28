@@ -21,6 +21,7 @@ export interface ApiResponseData<T> {
 }
 
 export interface SecuredApiResponse<T = any> {
+    availableServer?: string;
     success: boolean;
     error?: string;
     data?: T;
@@ -39,6 +40,7 @@ export interface SecuredApiResponse<T = any> {
 }
 
 export interface AppState {
+    availableServer?: string;
     user: UserData | null; // Use UserData here
     isOffline: boolean; // Added isOffline state
     data: {

@@ -255,11 +255,20 @@ async function launchSession(browserId, token) {
     sendStatus('connecting', 'Validating session...');
     appendLog(`[INFO] Validating session for ${browserId}...`);
 
-    const validateRes = await fetch(`${API_BASE}/electron/session-data`, {
+    let base = String(API_BASE || '').trim().replace(/\/+$/, '');
+    let validateRes = await fetch(`${base}/electron/session-data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ browserId, token }),
     });
+
+    if (validateRes.status === 404 && !base.endsWith('/api')) {
+      validateRes = await fetch(`${base}/api/electron/session-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ browserId, token }),
+      });
+    }
 
     if (!validateRes.ok) {
       const err = await validateRes.json();
