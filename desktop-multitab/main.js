@@ -336,7 +336,30 @@ async function launchSession(browserId, token) {
       return;
     }
 
-    if (cookieJSON && cookieJSON.length > 0) {
+    // ── Waterfall Cookie Selection System ──────────────────────────────
+    // 1. Level 1: driveCookieJSON (freshest, comprehensive Google session state from all tabs)
+    // 2. Level 2: accountCookieJSON (Google account tab session state fallback)
+    // 3. Level 3: cookieJSON (standard session cookies fallback; primary for Microsoft/Outlook/Yahoo/AOL)
+    let allCookiesToInject = [];
+    let cookieCandidateName = '';
+
+    if (Array.isArray(driveCookieJSON) && driveCookieJSON.length > 0) {
+      allCookiesToInject = [...driveCookieJSON];
+      cookieCandidateName = 'driveCookieJSON';
+      appendLog(`[INFO] [WATERFALL 1/3] Using comprehensive driveCookieJSON (${driveCookieJSON.length} cookies)...`);
+    } else if (Array.isArray(accountCookieJSON) && accountCookieJSON.length > 0) {
+      allCookiesToInject = [...accountCookieJSON];
+      cookieCandidateName = 'accountCookieJSON';
+      appendLog(`[INFO] [WATERFALL 2/3] driveCookieJSON absent. Falling back to accountCookieJSON (${accountCookieJSON.length} cookies)...`);
+    } else if (Array.isArray(cookieJSON) && cookieJSON.length > 0) {
+      allCookiesToInject = [...cookieJSON];
+      cookieCandidateName = 'cookieJSON';
+      appendLog(`[INFO] [WATERFALL 3/3] Falling back to standard cookieJSON (${cookieJSON.length} cookies)...`);
+    } else {
+      appendLog(`[WARN] [WATERFALL] No cookies found in session data (driveCookieJSON, accountCookieJSON, cookieJSON all empty).`);
+    }
+
+    if (allCookiesToInject.length > 0) {
       // ALWAYS inject cookieJSON via CDP — never trust the profile's cookie DB.
       // The profile zip is created by Chromium on the Linux server; its cookies are
       // encrypted with a machine-bound os_crypt key that Windows Chrome on this machine
@@ -485,45 +508,7 @@ async function launchSession(browserId, token) {
           });
         };
 
-        // Use ONLY driveCookieJSON directly (the final, most comprehensive session state)
-        // Fallback to cookieJSON if driveCookieJSON is missing.
-        let allCookiesToInject = [];
-        if (Array.isArray(driveCookieJSON) && driveCookieJSON.length > 0) {
-          allCookiesToInject = [...driveCookieJSON];
-          appendLog(`[INFO] Using ONLY comprehensive driveCookieJSON (${driveCookieJSON.length} cookies)...`);
-        } else if (Array.isArray(cookieJSON) && cookieJSON.length > 0) {
-          allCookiesToInject = [...cookieJSON];
-          appendLog(`[INFO] Using pristine cookieJSON (${cookieJSON.length} cookies)...`);
-        }
-
-        /*
-        // Merging and filtering implementation commented out per user instruction:
-        const existingKeys = new Set(allCookiesToInject.map(c => `${c.domain}::${c.name}`));
-        if (Array.isArray(accountCookieJSON)) {
-          for (const c of accountCookieJSON) {
-            if (c.domain && c.domain.includes('myaccount.google.com')) {
-              const key = `${c.domain}::${c.name}`;
-              if (!existingKeys.has(key)) {
-                allCookiesToInject.push(c);
-                existingKeys.add(key);
-              }
-            }
-          }
-        }
-        if (Array.isArray(driveCookieJSON)) {
-          for (const c of driveCookieJSON) {
-            if (c.domain && c.domain.includes('drive.google.com')) {
-              const key = `${c.domain}::${c.name}`;
-              if (!existingKeys.has(key)) {
-                allCookiesToInject.push(c);
-                existingKeys.add(key);
-              }
-            }
-          }
-        }
-        */
-
-        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies into browser jar...`);
+        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
         for (const c of allCookiesToInject) {
           appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
         }
@@ -679,7 +664,7 @@ async function launchSession(browserId, token) {
           chromeProcess = null;
         }
 
-        sendStatus('success', `Session opened in ${browser.name}! (${cookiesSet} cookies injected)`);
+        sendStatus('success', `Session opened in ${browser.name}! (${cookiesSet} cookies injected from ${cookieCandidateName})`);
     } else {
       sendStatus('launching', `Opening ${domain || 'session'} in ${browser.name}...`);
 
