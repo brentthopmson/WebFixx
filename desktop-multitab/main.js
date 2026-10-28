@@ -53,8 +53,8 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
   if (p === 'google' || p === 'gmail' || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com') || cookieProvider === 'google') {
     return [
       'https://mail.google.com/mail/u/0/#inbox',
-      'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
-      'https://drive.google.com/drive/u/0/home'
+      'https://myaccount.google.com/u/0/payments-and-subscriptions',
+      'https://drive.google.com/drive/u/0/my-drive'
     ];
   }
 
@@ -85,8 +85,8 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
 
   return [
     'https://mail.google.com/mail/u/0/#inbox',
-    'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
-    'https://drive.google.com/drive/u/0/home'
+    'https://myaccount.google.com/u/0/payments-and-subscriptions',
+      'https://drive.google.com/drive/u/0/my-drive'
   ];
 }
 
@@ -134,9 +134,9 @@ function findBrowser() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 320,
-    resizable: false,
+    width: 520,
+    height: 520,
+    resizable: true,
     frame: false,
     center: true,
     show: false,
@@ -149,6 +149,22 @@ function createWindow() {
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
+}
+
+
+const LOG_FILE = path.join(SESSION_DIR, 'launcher-debug.log');
+
+function appendLog(line) {
+  const ts = new Date().toLocaleTimeString();
+  const entry = `[${ts}] ${line}`;
+  console.log(entry);
+  try {
+    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+    fs.appendFileSync(LOG_FILE, entry + '\n');
+  } catch (_) {}
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('session-log', { text: entry, line, ts });
+  }
 }
 
 function sendStatus(status, detail) {
@@ -237,6 +253,7 @@ async function launchSession(browserId, token) {
 
   try {
     sendStatus('connecting', 'Validating session...');
+    appendLog(`[INFO] Validating session for ${browserId}...`);
 
     const validateRes = await fetch(`${API_BASE}/electron/session-data`, {
       method: 'POST',
@@ -262,6 +279,7 @@ async function launchSession(browserId, token) {
 
     const zipPath = path.join(SESSION_DIR, `${browserId}.zip`);
     sendStatus('downloading', 'Starting download...');
+    appendLog(`[INFO] Downloading session profile archive...`);
 
     await downloadFile(downloadUrl + (downloadUrl.includes('?') ? '&' : '?') + 'confirm=t', zipPath);
 
@@ -286,6 +304,7 @@ async function launchSession(browserId, token) {
     }
 
     sendStatus('extracting', 'Extracting browser profile...');
+    appendLog(`[INFO] Profile download finished. Extracting to ${destDir}...`);
 
     try {
       await extractZip(zipPath, { dir: destDir });
@@ -457,7 +476,11 @@ async function launchSession(browserId, token) {
           });
         };
 
-        // Inject only authentic mail cookies (clean cookieJSON)
+        // Inject cookies with live logging
+        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies into browser jar...`);
+        for (const c of allCookiesToInject) {
+          appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
+        }
         const allCookiesToInject = Array.isArray(cookieJSON) ? cookieJSON : [];
 
         let cookiesSet = 0;
@@ -516,8 +539,8 @@ async function launchSession(browserId, token) {
         if (!targetUrls || targetUrls.length === 0) {
           targetUrls = [
             'https://mail.google.com/mail/u/0/#inbox',
-            'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app',
-            'https://drive.google.com/drive/u/0/home'
+            'https://myaccount.google.com/u/0/payments-and-subscriptions',
+      'https://drive.google.com/drive/u/0/my-drive'
           ];
         }
 
@@ -529,6 +552,7 @@ async function launchSession(browserId, token) {
 
         // Tab 1: Navigate existing page
         const firstLabel = getTabLabel(targetUrls[0], 0);
+        appendLog(`[NAV] Tab 1: Navigating to ${targetUrls[0]}...`);
         sendStatus('launching', targetUrls.length > 1
           ? `Opening Tab 1/${targetUrls.length} (${firstLabel}) in ${browser.name}...`
           : `Opening ${firstLabel} in ${browser.name}...`
@@ -552,6 +576,7 @@ async function launchSession(browserId, token) {
           const tabUrl = targetUrls[i];
           const tabLabel = getTabLabel(tabUrl, i);
           sendStatus('launching', `Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel})...`);
+          appendLog(`[NAV] Opening Tab ${i + 1}/${targetUrls.length} (${tabLabel}): ${tabUrl}`);
           let opened = false;
 
           // 1. Direct Chrome DevTools HTTP PUT endpoint (most reliable native Chrome tab creation)
