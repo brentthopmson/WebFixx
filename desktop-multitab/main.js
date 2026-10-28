@@ -250,7 +250,7 @@ async function launchSession(browserId, token) {
       return;
     }
 
-    const { downloadUrl, platformUrl, platformUrls, email, domain, platform, cookieJSON, accountCookieJSON, driveCookieJSON, browserIdentity } = await validateRes.json();
+    const { downloadUrl, platformUrl, platformUrls, email, domain, platform, cookieJSON, browserIdentity } = await validateRes.json();
 
     if (!downloadUrl) {
       sendStatus('error', 'No saved browser profile found for this session');
@@ -457,24 +457,8 @@ async function launchSession(browserId, token) {
           });
         };
 
-        // Combine all cookies across all tabs (cookieJSON + accountCookieJSON + driveCookieJSON)
-        const allCookiesToInject = [];
-        const seenCookies = new Set();
-        const appendCookies = (list) => {
-          if (Array.isArray(list)) {
-            for (const c of list) {
-              if (!c || !c.name) continue;
-              const k = `${c.name}|${c.domain || ''}|${c.path || '/'}`;
-              if (!seenCookies.has(k)) {
-                seenCookies.add(k);
-                allCookiesToInject.push(c);
-              }
-            }
-          }
-        };
-        appendCookies(cookieJSON);
-        // appendCookies(accountCookieJSON);
-        // appendCookies(driveCookieJSON);
+        // Inject only authentic mail cookies (clean cookieJSON)
+        const allCookiesToInject = Array.isArray(cookieJSON) ? cookieJSON : [];
 
         let cookiesSet = 0;
         let cookiesFailed = 0;
