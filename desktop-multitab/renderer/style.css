@@ -10,7 +10,52 @@ body {
   color: #e5e7eb;
   overflow: hidden;
   user-select: none;
+  width: 100vw;
+  height: 100vh;
+}
+
+.titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0 8px;
+  z-index: 1000;
+}
+
+.titlebar-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 44px;
+  height: 36px;
   -webkit-app-region: drag;
+}
+
+.titlebar-close {
+  -webkit-app-region: no-drag;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 1001;
+  pointer-events: auto;
+}
+
+.titlebar-close:hover {
+  background: rgba(239, 68, 68, 0.9);
+  color: #ffffff;
 }
 
 #app {
@@ -19,19 +64,21 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  padding: 32px 24px;
+  padding: 24px;
   text-align: center;
+  position: relative;
+  z-index: 10;
 }
 
 .logo {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 h1 {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: #f9fafb;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 #status-container {
@@ -42,13 +89,13 @@ h1 {
 }
 
 .spinner {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: 3px solid #374151;
   border-top: 3px solid #6366f1;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .spinner.hidden {
@@ -70,6 +117,7 @@ h1 {
   color: #9ca3af;
   max-width: 360px;
   line-height: 1.4;
+  word-break: break-word;
 }
 
 #status-detail.error {
@@ -85,6 +133,8 @@ h1 {
   margin-top: 20px;
   display: flex;
   gap: 12px;
+  z-index: 100;
+  pointer-events: auto;
 }
 
 #action-buttons.hidden {
@@ -99,7 +149,8 @@ h1 {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.15s ease;
+  pointer-events: auto;
 }
 
 #retry-btn {

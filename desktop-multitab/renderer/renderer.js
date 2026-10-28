@@ -4,6 +4,7 @@ const spinner = document.getElementById('spinner');
 const actionButtons = document.getElementById('action-buttons');
 const closeBtn = document.getElementById('close-btn');
 const retryBtn = document.getElementById('retry-btn');
+const titlebarClose = document.getElementById('titlebar-close');
 
 const ICONS = {
   connecting: '🔗',
@@ -85,7 +86,7 @@ window.electronAPI.onSessionStatus(({ status, detail }) => {
   }
 });
 
-closeBtn.addEventListener('click', () => {
+function triggerClose() {
   if (window.electronAPI) {
     if (typeof window.electronAPI.closeApp === 'function') {
       window.electronAPI.closeApp();
@@ -95,15 +96,42 @@ closeBtn.addEventListener('click', () => {
   } else {
     window.close();
   }
-});
+}
 
-retryBtn.addEventListener('click', () => {
-  hideButtons();
-  if (window.electronAPI) {
-    if (typeof window.electronAPI.retrySession === 'function') {
-      window.electronAPI.retrySession();
-    } else if (typeof window.electronAPI.retryLaunch === 'function') {
-      window.electronAPI.retryLaunch();
+if (closeBtn) {
+  closeBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerClose();
+  });
+}
+
+if (titlebarClose) {
+  titlebarClose.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerClose();
+  });
+}
+
+if (retryBtn) {
+  retryBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    hideButtons();
+    spinner.classList.remove('hidden');
+    statusText.textContent = '⏳ Retrying Launch...';
+    statusDetail.textContent = 'Re-establishing session...';
+    statusDetail.className = '';
+    if (window.electronAPI) {
+      if (typeof window.electronAPI.retrySession === 'function') {
+        window.electronAPI.retrySession();
+      } else if (typeof window.electronAPI.retryLaunch === 'function') {
+        window.electronAPI.retryLaunch();
+      }
     }
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    triggerClose();
   }
 });

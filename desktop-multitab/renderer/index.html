@@ -7,9 +7,17 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div class="titlebar">
+    <div class="titlebar-drag"></div>
+    <button id="titlebar-close" class="titlebar-close" title="Close" type="button">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path d="M1 1L9 9M1 9L9 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
   <div id="app">
     <div class="logo">
-      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <svg width="44" height="44" viewBox="0 0 48 48" fill="none">
         <rect width="48" height="48" rx="12" fill="#6366f1"/>
         <path d="M14 18h20v4H14zM14 24h20v2H14zM14 28h16v2H14z" fill="#fff" opacity="0.9"/>
         <circle cx="34" cy="30" r="6" fill="#22d3ee" opacity="0.8"/>
@@ -22,8 +30,8 @@
       <p id="status-detail"></p>
     </div>
     <div id="action-buttons" class="hidden">
-      <button id="retry-btn">Retry</button>
-      <button id="close-btn">Close</button>
+      <button id="retry-btn" type="button">Retry</button>
+      <button id="close-btn" type="button">Close</button>
     </div>
   </div>
   <script src="renderer.js"></script>

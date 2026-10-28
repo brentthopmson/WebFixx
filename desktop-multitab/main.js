@@ -672,6 +672,13 @@ async function launchSession(browserId, token) {
         if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) browserWsClient.close();
         browserWsClient = null;
 
+        if (chromeProcess) {
+          try {
+            chromeProcess.unref();
+          } catch (_) {}
+          chromeProcess = null;
+        }
+
         sendStatus('success', `Session opened in ${browser.name}! (${cookiesSet} cookies injected)`);
     } else {
       sendStatus('launching', `Opening ${domain || 'session'} in ${browser.name}...`);
@@ -712,20 +719,41 @@ async function launchSession(browserId, token) {
   } catch (error) {
     sendStatus('error', error.message || 'An unexpected error occurred');
   } finally {
-    if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.close();
-    if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) browserWsClient.close();
-    if (chromeProcess) chromeProcess.kill();
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+      try { wsClient.close(); } catch (_) {}
+    }
+    if (browserWsClient && browserWsClient.readyState === WebSocket.OPEN) {
+      try { browserWsClient.close(); } catch (_) {}
+    }
+    if (chromeProcess) {
+      try {
+        if (chromeProcess.pid && process.platform === 'win32') {
+          const { execSync } = require('child_process');
+          execSync(`taskkill /pid ${chromeProcess.pid} /T /F`, { stdio: 'ignore' });
+        } else {
+          chromeProcess.kill();
+        }
+      } catch (_) {}
+      chromeProcess = null;
+    }
   }
 }
 
 function parseProtocolUrl(url) {
   try {
-    const parsed = new URL(url);
-    const browserId = parsed.searchParams.get('browserId');
-    const token = parsed.searchParams.get('token');
-    const api = parsed.searchParams.get('api');
-    if (api) API_BASE = decodeURIComponent(api);
-    return { browserId, token };
+    if (!url) return null;
+    const cleanUrl = String(url).replace(/^["']|["']$/g, '').trim();
+    const parsed = new URL(cleanUrl);
+    let browserId = parsed.searchParams.get('browserId');
+    let token = parsed.searchParams.get('token');
+    let api = parsed.searchParams.get('api');
+    if (browserId) browserId = browserId.replace(/\/+$/, '');
+    if (token) token = token.replace(/\/+$/, '');
+    if (api) {
+      api = decodeURIComponent(api).replace(/\/+$/, '');
+      API_BASE = api;
+    }
+    return { browserId, token, api };
   } catch {
     return null;
   }
@@ -739,10 +767,18 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    const url = argv.find((a) => a.startsWith('webfixx-multi://') || a.startsWith('webfixx://'));
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    const url = argv.find((a) => {
+      const clean = String(a).replace(/^["']|["']$/g, '');
+      return clean.startsWith('webfixx-multi://') || clean.startsWith('webfixx://');
+    });
     if (url) {
       const params = parseProtocolUrl(url);
       if (params && params.browserId && params.token) {
+        lastSessionParams = params;
         launchSession(params.browserId, params.token);
       }
     }
@@ -752,10 +788,14 @@ if (!gotTheLock) {
     createWindow();
 
     mainWindow.webContents.on('did-finish-load', () => {
-      const url = process.argv.find((a) => a.startsWith('webfixx-multi://') || a.startsWith('webfixx://'));
+      const url = process.argv.find((a) => {
+        const clean = String(a).replace(/^["']|["']$/g, '');
+        return clean.startsWith('webfixx-multi://') || clean.startsWith('webfixx://');
+      });
       if (url) {
         const params = parseProtocolUrl(url);
         if (params && params.browserId && params.token) {
+          lastSessionParams = params;
           launchSession(params.browserId, params.token);
         } else {
           sendStatus('error', 'Invalid launch URL');
@@ -771,22 +811,51 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-ipcMain.on('close-app', () => {
-  if (downloadAbortController) downloadAbortController.abort();
+function handleCloseApp() {
+  appendLog('[INFO] Close app requested by user');
+  try {
+    if (downloadAbortController) {
+      downloadAbortController.abort();
+    }
+  } catch (_) {}
+
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.destroy();
+    }
+  } catch (_) {}
+
   app.quit();
-});
-ipcMain.on('close-window', () => {
-  if (downloadAbortController) downloadAbortController.abort();
-  app.quit();
-});
+
+  setTimeout(() => {
+    try {
+      app.exit(0);
+    } catch (_) {}
+  }, 200);
+}
+
+ipcMain.on('close-app', handleCloseApp);
+ipcMain.on('close-window', handleCloseApp);
 
 ipcMain.on('retry-session', () => {
-  if (lastSessionParams) {
+  appendLog('[INFO] Retry session requested by user');
+  if (lastSessionParams && lastSessionParams.browserId && lastSessionParams.token) {
+    if (lastSessionParams.api) {
+      API_BASE = lastSessionParams.api;
+    }
     launchSession(lastSessionParams.browserId, lastSessionParams.token);
+  } else {
+    sendStatus('error', 'Cannot retry: session parameters not found. Please click "Open Session" from the dashboard.');
   }
 });
 ipcMain.on('retry-launch', () => {
-  if (lastSessionParams) {
+  appendLog('[INFO] Retry launch requested by user');
+  if (lastSessionParams && lastSessionParams.browserId && lastSessionParams.token) {
+    if (lastSessionParams.api) {
+      API_BASE = lastSessionParams.api;
+    }
     launchSession(lastSessionParams.browserId, lastSessionParams.token);
+  } else {
+    sendStatus('error', 'Cannot retry: session parameters not found. Please click "Open Session" from the dashboard.');
   }
 });
