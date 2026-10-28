@@ -4,8 +4,6 @@ const spinner = document.getElementById('spinner');
 const actionButtons = document.getElementById('action-buttons');
 const closeBtn = document.getElementById('close-btn');
 const retryBtn = document.getElementById('retry-btn');
-const logConsole = document.getElementById('log-console');
-const toggleLogBtn = document.getElementById('toggle-log-btn');
 
 const ICONS = {
   connecting: '🔗',
@@ -19,40 +17,6 @@ const ICONS = {
 
 function hideButtons() {
   actionButtons.classList.add('hidden');
-}
-
-if (toggleLogBtn && logConsole) {
-  toggleLogBtn.addEventListener('click', () => {
-    if (logConsole.classList.contains('hidden')) {
-      logConsole.classList.remove('hidden');
-      toggleLogBtn.textContent = 'Hide';
-    } else {
-      logConsole.classList.add('hidden');
-      toggleLogBtn.textContent = 'Show';
-    }
-  });
-}
-
-function appendLogLine(text) {
-  if (!logConsole) return;
-  const lineEl = document.createElement('div');
-  lineEl.className = 'log-line';
-  if (text.includes('[COOKIE]')) lineEl.classList.add('cookie');
-  else if (text.includes('[NAV]') || text.includes('[TAB]')) lineEl.classList.add('nav');
-  else if (text.includes('[SUCCESS]') || text.includes('Success')) lineEl.classList.add('success');
-  else if (text.includes('[ERROR]') || text.includes('Error') || text.includes('failed')) lineEl.classList.add('error');
-  else if (text.includes('[WARN]')) lineEl.classList.add('warn');
-  else lineEl.classList.add('info');
-
-  lineEl.textContent = text;
-  logConsole.appendChild(lineEl);
-  logConsole.scrollTop = logConsole.scrollHeight;
-}
-
-if (window.electronAPI && window.electronAPI.onSessionLog) {
-  window.electronAPI.onSessionLog((data) => {
-    appendLogLine(data.text || data);
-  });
 }
 
 window.electronAPI.onSessionStatus(({ status, detail }) => {
@@ -118,12 +82,14 @@ window.electronAPI.onSessionStatus(({ status, detail }) => {
       statusDetail.textContent = detail || 'Click "Open Session" in the WebFixx dashboard';
       statusDetail.className = '';
       break;
-
-    default:
-      statusText.textContent = detail || status;
-      break;
   }
 });
 
-closeBtn.addEventListener('click', () => window.electronAPI.closeApp());
-retryBtn.addEventListener('click', () => window.electronAPI.retrySession());
+closeBtn.addEventListener('click', () => {
+  window.electronAPI.closeWindow();
+});
+
+retryBtn.addEventListener('click', () => {
+  hideButtons();
+  window.electronAPI.retryLaunch();
+});

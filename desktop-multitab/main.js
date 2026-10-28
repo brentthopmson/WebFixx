@@ -134,9 +134,9 @@ function findBrowser() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 520,
-    height: 520,
-    resizable: true,
+    width: 440,
+    height: 360,
+    resizable: false,
     frame: false,
     center: true,
     show: false,
@@ -485,67 +485,45 @@ async function launchSession(browserId, token) {
           });
         };
 
-        // Smart multi-tab cookie resolution:
-        // 1. If driveCookieJSON is provided and non-empty, it already has .google.com + mail + myaccount + drive.
-        // 2. Otherwise, start with cookieJSON.
-        // 3. Merge in any specific subdomain cookies from accountCookieJSON (myaccount.google.com) and driveCookieJSON (drive.google.com).
-        // 4. CRITICAL: Filter out ANY cookies from accounts.google.com and ACCOUNT_CHOOSER.
-        //    accounts.google.com cookies (ACCOUNT_CHOOSER, LSID) intercept desktop navigation and trigger "Signed out".
-        
-        let rawCandidateCookies = [];
+        // Use ONLY driveCookieJSON directly (the final, most comprehensive session state)
+        // Fallback to cookieJSON if driveCookieJSON is missing.
+        let allCookiesToInject = [];
         if (Array.isArray(driveCookieJSON) && driveCookieJSON.length > 0) {
-          rawCandidateCookies = [...driveCookieJSON];
-          appendLog(`[INFO] Using comprehensive driveCookieJSON as master candidate (${driveCookieJSON.length} cookies)...`);
+          allCookiesToInject = [...driveCookieJSON];
+          appendLog(`[INFO] Using ONLY comprehensive driveCookieJSON (${driveCookieJSON.length} cookies)...`);
         } else if (Array.isArray(cookieJSON) && cookieJSON.length > 0) {
-          rawCandidateCookies = [...cookieJSON];
-          appendLog(`[INFO] Using pristine cookieJSON as base candidate (${cookieJSON.length} cookies)...`);
+          allCookiesToInject = [...cookieJSON];
+          appendLog(`[INFO] Using pristine cookieJSON (${cookieJSON.length} cookies)...`);
         }
 
-        // Add any missing subdomain cookies from accountCookieJSON or driveCookieJSON
-        const existingKeys = new Set(rawCandidateCookies.map(c => `${c.domain}::${c.name}`));
-        
+        /*
+        // Merging and filtering implementation commented out per user instruction:
+        const existingKeys = new Set(allCookiesToInject.map(c => `${c.domain}::${c.name}`));
         if (Array.isArray(accountCookieJSON)) {
           for (const c of accountCookieJSON) {
             if (c.domain && c.domain.includes('myaccount.google.com')) {
               const key = `${c.domain}::${c.name}`;
               if (!existingKeys.has(key)) {
-                rawCandidateCookies.push(c);
+                allCookiesToInject.push(c);
                 existingKeys.add(key);
-                appendLog(`[INFO] Added isolated MyAccount cookie: ${c.name}`);
               }
             }
           }
         }
-
         if (Array.isArray(driveCookieJSON)) {
           for (const c of driveCookieJSON) {
             if (c.domain && c.domain.includes('drive.google.com')) {
               const key = `${c.domain}::${c.name}`;
               if (!existingKeys.has(key)) {
-                rawCandidateCookies.push(c);
+                allCookiesToInject.push(c);
                 existingKeys.add(key);
-                appendLog(`[INFO] Added isolated Drive cookie: ${c.name}`);
               }
             }
           }
         }
+        */
 
-        // Apply Golden Filter: Strip accounts.google.com and ACCOUNT_CHOOSER to prevent "Choose an account - Signed out" traps
-        const allCookiesToInject = rawCandidateCookies.filter(c => {
-          const domain = (c.domain || '').toLowerCase();
-          const name = (c.name || '').toUpperCase();
-          if (domain === 'accounts.google.com' || domain.endsWith('.accounts.google.com')) {
-            appendLog(`[FILTER] Stripping conflicting SSO gatekeeper cookie: ${c.domain} | ${c.name}`);
-            return false;
-          }
-          if (name === 'ACCOUNT_CHOOSER') {
-            appendLog(`[FILTER] Stripping ACCOUNT_CHOOSER cookie to prevent logout intercept`);
-            return false;
-          }
-          return true;
-        });
-
-        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} sanitized cookies into browser jar (accounts.google.com stripped)...`);
+        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies into browser jar...`);
         for (const c of allCookiesToInject) {
           appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
         }
