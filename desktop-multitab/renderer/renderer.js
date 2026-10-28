@@ -86,10 +86,24 @@ window.electronAPI.onSessionStatus(({ status, detail }) => {
 });
 
 closeBtn.addEventListener('click', () => {
-  window.electronAPI.closeWindow();
+  if (window.electronAPI) {
+    if (typeof window.electronAPI.closeApp === 'function') {
+      window.electronAPI.closeApp();
+    } else if (typeof window.electronAPI.closeWindow === 'function') {
+      window.electronAPI.closeWindow();
+    }
+  } else {
+    window.close();
+  }
 });
 
 retryBtn.addEventListener('click', () => {
   hideButtons();
-  window.electronAPI.retryLaunch();
+  if (window.electronAPI) {
+    if (typeof window.electronAPI.retrySession === 'function') {
+      window.electronAPI.retrySession();
+    } else if (typeof window.electronAPI.retryLaunch === 'function') {
+      window.electronAPI.retryLaunch();
+    }
+  }
 });

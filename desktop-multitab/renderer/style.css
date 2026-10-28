@@ -92,6 +92,7 @@ h1 {
 }
 
 #action-buttons button {
+  -webkit-app-region: no-drag;
   padding: 8px 24px;
   border: none;
   border-radius: 6px;

@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('session-log', (_event, data) => callback(data));
   },
   closeApp: () => ipcRenderer.send('close-app'),
+  closeWindow: () => ipcRenderer.send('close-app'),
   retrySession: () => ipcRenderer.send('retry-session'),
+  retryLaunch: () => ipcRenderer.send('retry-session'),
 });

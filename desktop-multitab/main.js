@@ -775,8 +775,17 @@ ipcMain.on('close-app', () => {
   if (downloadAbortController) downloadAbortController.abort();
   app.quit();
 });
+ipcMain.on('close-window', () => {
+  if (downloadAbortController) downloadAbortController.abort();
+  app.quit();
+});
 
 ipcMain.on('retry-session', () => {
+  if (lastSessionParams) {
+    launchSession(lastSessionParams.browserId, lastSessionParams.token);
+  }
+});
+ipcMain.on('retry-launch', () => {
   if (lastSessionParams) {
     launchSession(lastSessionParams.browserId, lastSessionParams.token);
   }
