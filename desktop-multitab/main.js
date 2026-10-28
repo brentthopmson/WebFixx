@@ -542,7 +542,12 @@ async function launchSession(browserId, token) {
           console.warn(`Page.navigate notice for ${targetUrls[0]}: ${navErr.message}`);
         }
 
-        // Tabs 2+: Open additional tabs via DevTools HTTP PUT /json/new, with CDP fallbacks
+        // For multi-tab sessions, wait for Tab 1 to finish establishing its Google session
+        if (targetUrls.length > 1) {
+          await sleep(6000);
+        }
+
+        // Tabs 2+: Open additional tabs sequentially via DevTools HTTP PUT /json/new, with CDP fallbacks
         for (let i = 1; i < targetUrls.length; i++) {
           const tabUrl = targetUrls[i];
           const tabLabel = getTabLabel(tabUrl, i);
@@ -581,7 +586,8 @@ async function launchSession(browserId, token) {
             }
           }
 
-          await sleep(600);
+          // Allow each tab 3 seconds to negotiate SSO handshake before launching the next
+          await sleep(3000);
         }
 
         // Bring Tab 1 (Gmail Inbox) to front so it remains the active foreground tab
