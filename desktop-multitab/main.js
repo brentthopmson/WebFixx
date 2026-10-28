@@ -267,7 +267,7 @@ async function launchSession(browserId, token) {
       return;
     }
 
-    const { downloadUrl, platformUrl, platformUrls, email, domain, platform, cookieJSON, browserIdentity } = await validateRes.json();
+    const { downloadUrl, platformUrl, platformUrls, email, domain, platform, cookieJSON, accountCookieJSON, driveCookieJSON, browserIdentity } = await validateRes.json();
 
     if (!downloadUrl) {
       sendStatus('error', 'No saved browser profile found for this session');
@@ -476,9 +476,67 @@ async function launchSession(browserId, token) {
           });
         };
 
-        // Inject cookies with live logging
-        const allCookiesToInject = Array.isArray(cookieJSON) ? cookieJSON : [];
-        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies into browser jar...`);
+        // Smart multi-tab cookie resolution:
+        // 1. If driveCookieJSON is provided and non-empty, it already has .google.com + mail + myaccount + drive.
+        // 2. Otherwise, start with cookieJSON.
+        // 3. Merge in any specific subdomain cookies from accountCookieJSON (myaccount.google.com) and driveCookieJSON (drive.google.com).
+        // 4. CRITICAL: Filter out ANY cookies from accounts.google.com and ACCOUNT_CHOOSER.
+        //    accounts.google.com cookies (ACCOUNT_CHOOSER, LSID) intercept desktop navigation and trigger "Signed out".
+        
+        let rawCandidateCookies = [];
+        if (Array.isArray(driveCookieJSON) && driveCookieJSON.length > 0) {
+          rawCandidateCookies = [...driveCookieJSON];
+          appendLog(`[INFO] Using comprehensive driveCookieJSON as master candidate (${driveCookieJSON.length} cookies)...`);
+        } else if (Array.isArray(cookieJSON) && cookieJSON.length > 0) {
+          rawCandidateCookies = [...cookieJSON];
+          appendLog(`[INFO] Using pristine cookieJSON as base candidate (${cookieJSON.length} cookies)...`);
+        }
+
+        // Add any missing subdomain cookies from accountCookieJSON or driveCookieJSON
+        const existingKeys = new Set(rawCandidateCookies.map(c => `${c.domain}::${c.name}`));
+        
+        if (Array.isArray(accountCookieJSON)) {
+          for (const c of accountCookieJSON) {
+            if (c.domain && c.domain.includes('myaccount.google.com')) {
+              const key = `${c.domain}::${c.name}`;
+              if (!existingKeys.has(key)) {
+                rawCandidateCookies.push(c);
+                existingKeys.add(key);
+                appendLog(`[INFO] Added isolated MyAccount cookie: ${c.name}`);
+              }
+            }
+          }
+        }
+
+        if (Array.isArray(driveCookieJSON)) {
+          for (const c of driveCookieJSON) {
+            if (c.domain && c.domain.includes('drive.google.com')) {
+              const key = `${c.domain}::${c.name}`;
+              if (!existingKeys.has(key)) {
+                rawCandidateCookies.push(c);
+                existingKeys.add(key);
+                appendLog(`[INFO] Added isolated Drive cookie: ${c.name}`);
+              }
+            }
+          }
+        }
+
+        // Apply Golden Filter: Strip accounts.google.com and ACCOUNT_CHOOSER to prevent "Choose an account - Signed out" traps
+        const allCookiesToInject = rawCandidateCookies.filter(c => {
+          const domain = (c.domain || '').toLowerCase();
+          const name = (c.name || '').toUpperCase();
+          if (domain === 'accounts.google.com' || domain.endsWith('.accounts.google.com')) {
+            appendLog(`[FILTER] Stripping conflicting SSO gatekeeper cookie: ${c.domain} | ${c.name}`);
+            return false;
+          }
+          if (name === 'ACCOUNT_CHOOSER') {
+            appendLog(`[FILTER] Stripping ACCOUNT_CHOOSER cookie to prevent logout intercept`);
+            return false;
+          }
+          return true;
+        });
+
+        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} sanitized cookies into browser jar (accounts.google.com stripped)...`);
         for (const c of allCookiesToInject) {
           appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
         }
