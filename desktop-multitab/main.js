@@ -477,11 +477,11 @@ async function launchSession(browserId, token) {
         };
 
         // Inject cookies with live logging
+        const allCookiesToInject = Array.isArray(cookieJSON) ? cookieJSON : [];
         appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies into browser jar...`);
         for (const c of allCookiesToInject) {
           appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
         }
-        const allCookiesToInject = Array.isArray(cookieJSON) ? cookieJSON : [];
 
         let cookiesSet = 0;
         let cookiesFailed = 0;
