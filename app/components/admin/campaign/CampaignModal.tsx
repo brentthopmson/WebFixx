@@ -28,7 +28,7 @@ import { validateCampaignCreation, getValidationErrorMessage } from '../../../ut
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
 import { getUserLimits, getQuotaInfo } from '../../../../utils/helpers';
 import { QuotaInfoBadge } from '../../../components/QuotaInfo';
-import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign } from '../../../../utils/featureFlags';
+import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign, getMaxCampaignDurationDays } from '../../../../utils/featureFlags';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 
 interface CampaignModalProps {
@@ -44,6 +44,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const userLimits = getUserLimits(appData);
   const campaignFileSize = userLimits?.campaignFileSize;
   const maxCampaignAccounts = getMaxAccountsPerCampaign(appData);
+  const maxCampaignDurationDays = getMaxCampaignDurationDays(appData);
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
@@ -177,6 +178,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         interactionStaged: campaignToEdit.interactionStaged || false,
         interactionStatus: campaignToEdit.interactionStatus || 'idle',
         interactionStopAfterHours: campaignToEdit.interactionStopAfterHours || 72,
+        durationDays: campaignToEdit.durationDays || 7,
         deliveryMethod: campaignToEdit.deliveryMethod || 'smtp',
         firestickEnabled: campaignToEdit.firestickEnabled || false,
         linkType: campaignToEdit.linkType || 'project',
@@ -224,6 +226,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       interactionStaged: false,
       interactionStatus: 'idle',
       interactionStopAfterHours: 72,
+      durationDays: 7,
       deliveryMethod: 'smtp',
       firestickEnabled: false,
       linkType: 'project',
@@ -1150,6 +1153,32 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       )}
                     </>
                   )}
+
+                  {/* Campaign Run Duration (Universal for both Social and Email) */}
+                  <div className="pt-3 mt-3 border-t dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <FontAwesomeIcon icon={faClock} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
+                        <span>Campaign Run Duration (Days)</span>
+                      </label>
+                      <span className="text-xxs text-gray-400">Default: 7 days · Admin ceiling: {maxCampaignDurationDays} days</span>
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max={maxCampaignDurationDays}
+                      className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
+                      value={formData.durationDays || 7}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10);
+                        const clamped = isNaN(val) ? 7 : Math.min(Math.max(1, val), maxCampaignDurationDays);
+                        setFormData(prev => ({ ...prev, durationDays: clamped }));
+                      }}
+                    />
+                    <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
+                      Continuous multi-day lifecycle. Executes daily waves and automatically rests during rate limit cooldowns until this duration expires.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1431,6 +1460,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         {formData.aiPersonalizationStaged ? '✓ AI Personalization ' : ''}
                         {(formData.executeStaged ?? true) ? '✓ Execute ' : ''}
                         {formData.interactionStaged ? `✓ Interaction (${formData.interactionStopAfterHours || 72}h) ` : ''}
+                        · Duration: {formData.durationDays || 7}d
                         {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged ? 'No stages selected' : ''}
                       </p>
                     </div>

@@ -64,3 +64,14 @@ export function getMaxAccountsPerCampaign(appData: AppDataShape | null | undefin
   const parsed = parseInt(val, 10);
   return isNaN(parsed) || parsed <= 0 ? 1 : parsed;
 }
+
+/**
+ * Gets the maximum campaign run duration in days from the SETTINGS sheet.
+ * Used strictly as an admin ceiling during campaign creation.
+ * Defaults to 30 days if not configured.
+ */
+export function getMaxCampaignDurationDays(appData: AppDataShape | null | undefined): number {
+  const val = getSettingValueFromAppData(appData, 'campaignMaxDurationDays', '30');
+  const parsed = parseInt(val, 10);
+  return isNaN(parsed) || parsed <= 0 ? 30 : parsed;
+}

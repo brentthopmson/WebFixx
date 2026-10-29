@@ -205,6 +205,8 @@ export default function Campaign() {
         socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
         socialKeywords: settingsObj.socialKeywords || [],
         shouldSendMessage: settingsObj.shouldSendMessage || false,
+        durationDays: settingsObj.durationDays || 7,
+        restUntil: settingsObj.restUntil || null,
         isSetupComplete: settingsObj.isSetupComplete ||
           !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
              settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
@@ -621,7 +623,15 @@ export default function Campaign() {
           const sent = campaign.analytics?.sent || 0;
           const limit = userLimits?.shootCampaignLimit || 0;
           const pct = limit > 0 ? Math.min(100, Math.round((sent / limit) * 100)) : 0;
-          const created = campaign.created_at ? new Date(campaign.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+          const durationDays = campaign.durationDays || 7;
+          const createdDate = campaign.created_at ? new Date(campaign.created_at) : null;
+          const created = createdDate ? createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+          const endDate = createdDate ? new Date(createdDate.getTime() + durationDays * 86400000) : null;
+          const now = Date.now();
+          const isResting = campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil));
+          const restRemainingMin = campaign.restUntil ? Math.max(0, Math.ceil((Number(campaign.restUntil) - now) / 60000)) : 0;
+          const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now) / 86400000)) : 0;
+          const isExpired = endDate ? now >= endDate.getTime() : false;
           return (
           <div key={campaign.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-100 dark:border-gray-700 animate-fadeIn overflow-hidden">
             {/* Top row: name, ID, status */}
@@ -649,18 +659,23 @@ export default function Campaign() {
                     campaign.deliveryMethod && <span>· {campaign.deliveryMethod} rotation</span>
                   )}
                   {campaign.type && <span>· {campaign.type.replace(/_/g, ' ')}</span>}
-                  {created && <span>· {created}</span>}
+                  {created && (
+                    <span title={endDate ? `Ends ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : undefined}>
+                      · {created} ({durationDays}d schedule{endDate ? ` → ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''})
+                    </span>
+                  )}
                 </div>
               </div>
               <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${
                 campaign.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                isResting ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border border-purple-300 dark:border-purple-700 animate-pulse' :
                 campaign.status === 'running' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
                 campaign.status === 'paused' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
                 campaign.status === 'Limit Reached' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
                 campaign.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
                 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
               }`}>
-                {campaign.status}
+                {isResting ? `Resting (${restRemainingMin}m left)` : campaign.status === 'running' ? (isExpired ? 'Running · Expired' : `Running · ${daysRemaining}d left`) : campaign.status}
               </span>
             </div>
 

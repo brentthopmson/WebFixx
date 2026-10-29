@@ -87,6 +87,8 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     template: settingsObj.template || '',
     templateId: settingsObj.templateId || '',
     templateContent: settingsObj.templateContent || '',
+    durationDays: settingsObj.durationDays || 7,
+    restUntil: settingsObj.restUntil || null,
     isSetupComplete: settingsObj.isSetupComplete ||
       !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
          settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
@@ -575,6 +577,63 @@ export default function CampaignDetailPage() {
           </p>
         </div>
       </div>
+
+      {/* Campaign Duration & Lifecycle Card */}
+      {(() => {
+        const durationDays = campaign.durationDays || 7;
+        const createdDate = campaign.created_at ? new Date(campaign.created_at) : null;
+        const endDate = createdDate ? new Date(createdDate.getTime() + durationDays * 86400000) : null;
+        const now = Date.now();
+        const elapsedMs = createdDate ? Math.max(0, now - createdDate.getTime()) : 0;
+        const totalMs = durationDays * 86400000;
+        const elapsedPct = Math.min(100, Math.round((elapsedMs / totalMs) * 100));
+        const remainingMs = endDate ? endDate.getTime() - now : 0;
+        const daysLeft = Math.max(0, Math.ceil(remainingMs / 86400000));
+        const isResting = campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil));
+        const restMins = campaign.restUntil ? Math.max(0, Math.ceil((Number(campaign.restUntil) - now) / 60000)) : 0;
+
+        return (
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2.5">
+              <div className="flex items-center gap-2">
+                <FontAwesomeIcon icon={faClock} className="w-4 h-4 text-purple-500" />
+                <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider">
+                  Campaign Lifecycle & Schedule ({durationDays} Days)
+                </h3>
+                {isResting && (
+                  <span className="px-2 py-0.5 text-xxs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full animate-pulse border border-purple-300 dark:border-purple-700">
+                    Cooldown Rest · Resumes in {restMins}m
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {createdDate && (
+                  <span>
+                    Started: <strong className="text-gray-700 dark:text-gray-200">{createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+                  </span>
+                )}
+                {endDate && (
+                  <span className="ml-3">
+                    Scheduled End: <strong className="text-gray-700 dark:text-gray-200">{endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 ${elapsedPct >= 100 ? 'bg-gray-400' : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500'}`}
+                  style={{ width: `${elapsedPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xxs text-gray-400">
+                <span>{elapsedPct}% elapsed</span>
+                <span>{remainingMs > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining` : 'Duration reached (completed)'}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Unified Pipeline View */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">

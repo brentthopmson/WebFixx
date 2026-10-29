@@ -78,6 +78,8 @@ export interface Campaign {
 
   // Per-campaign interaction limits
   interactionStopAfterHours?: number; // Default: 72
+  durationDays?: number; // Default: 7, bounded by SETTINGS.campaignMaxDurationDays at creation
+  restUntil?: number | string | null;
 
   // Setup completion tracking
   isSetupComplete?: boolean; // True when campaign setup wizard is fully completed
@@ -107,7 +109,7 @@ export interface Campaign {
   scheduleStartTime?: string; // ISO datetime for when to start scheduled sends
 
   created_at: string; // Added
-  status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached' | 'failed'; // Made required
+  status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached' | 'failed' | 'resting'; // Made required
   analytics?: {
       totalRows: number;
       sent: number;
