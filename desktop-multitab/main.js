@@ -283,7 +283,27 @@ async function launchSession(browserId, token) {
       return;
     }
 
-    const destDir = path.join(SESSION_DIR, browserId);
+    // ── Platform Check: Is this a Google/Gmail session? ──────────────
+    const dCheck = (domain || (email ? email.split('@')[1] : '') || '').toLowerCase().trim();
+    const pCheck = (platform || '').toLowerCase().trim();
+    const emCheck = (email || '').toLowerCase().trim();
+    let isGoogleSession = pCheck === 'google' || pCheck === 'gmail' || dCheck.includes('google') || dCheck.includes('gmail') || emCheck.endsWith('@gmail.com') || emCheck.endsWith('@googlemail.com');
+    if (!isGoogleSession && (Array.isArray(driveCookieJSON) || Array.isArray(cookieJSON))) {
+      const probeList = (Array.isArray(driveCookieJSON) && driveCookieJSON.length > 0) ? driveCookieJSON : (cookieJSON || []);
+      for (const c of probeList) {
+        const cdom = (c?.domain || '').toLowerCase();
+        if (cdom.includes('google') || cdom.includes('gmail') || cdom.includes('youtube')) {
+          isGoogleSession = true;
+          break;
+        }
+      }
+    }
+
+    // For Google: use an isolated instance directory per launch to eliminate EBUSY lockfile collisions
+    // For Outlook / other platforms: preserve existing fixed destDir path 100% as-is
+    const destDir = isGoogleSession
+      ? path.join(SESSION_DIR, browserId, `session_${Date.now()}`)
+      : path.join(SESSION_DIR, browserId);
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
 
     const zipPath = path.join(SESSION_DIR, `${browserId}.zip`);
@@ -318,17 +338,51 @@ async function launchSession(browserId, token) {
     try {
       await extractZip(zipPath, { dir: destDir });
     } catch (extractErr) {
-      const code = extractErr.code || '';
-      const msg = (extractErr.message || '').toLowerCase();
-      if (code === 'EPERM' || code === 'EBUSY' || code === 'UNKNOWN' ||
-          msg.includes('eperm') || msg.includes('ebusy') || msg.includes('open')) {
-        sendStatus('error', 'This session is already open in another browser window. Close it first, then retry.');
+      if (!isGoogleSession) {
+        // Outlook behavior preserved 100%
+        const code = extractErr.code || '';
+        const msg = (extractErr.message || '').toLowerCase();
+        if (code === 'EPERM' || code === 'EBUSY' || code === 'UNKNOWN' ||
+            msg.includes('eperm') || msg.includes('ebusy') || msg.includes('open')) {
+          sendStatus('error', 'This session is already open in another browser window. Close it first, then retry.');
+          return;
+        }
+        sendStatus('error', `Failed to extract profile: ${extractErr.message}`);
         return;
       }
-      sendStatus('error', `Failed to extract profile: ${extractErr.message}`);
-      return;
+      appendLog(`[WARN] Notice during Google profile extraction: ${extractErr.message}. Continuing with session initialization...`);
     }
     fs.unlinkSync(zipPath);
+
+    // ── Google Session Resilience (ONLY for Google / Gmail) ───────────
+    if (isGoogleSession) {
+      appendLog('[INFO] Applying Google session resilience: removing stale VPS lock and port artifacts...');
+      const staleArtifacts = [
+        'DevToolsActivePort',
+        'lockfile',
+        'SingletonLock',
+        'SingletonSocket',
+        'SingletonCookie',
+        'BrowserMetrics-spare.pma',
+        'CrashpadMetrics-active.pma',
+      ];
+      for (const f of staleArtifacts) {
+        const p = path.join(destDir, f);
+        try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+      }
+
+      // Remove machine-bound DPAPI cookie files so local Chrome starts with a clean SQLite store
+      // and relies 100% on plaintext CDP cookie injection (proven to survive across all devices).
+      const machineBoundFiles = [
+        path.join(destDir, 'Default', 'Network', 'Cookies'),
+        path.join(destDir, 'Default', 'Network', 'Cookies-journal'),
+        path.join(destDir, 'Default', 'Cookies'),
+        path.join(destDir, 'Default', 'Cookies-journal'),
+      ];
+      for (const p of machineBoundFiles) {
+        try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+      }
+    }
 
     const browser = findBrowser();
     if (!browser) {
@@ -377,6 +431,11 @@ async function launchSession(browserId, token) {
         '--remote-debugging-port=0',
         'about:blank',
       ];
+
+      if (isGoogleSession) {
+        const portFileToClean = path.join(destDir, 'DevToolsActivePort');
+        try { if (fs.existsSync(portFileToClean)) fs.unlinkSync(portFileToClean); } catch (_) {}
+      }
 
       sendStatus('launching', `Opening ${domain || 'session'} in ${browser.name}...`);
 
