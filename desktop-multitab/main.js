@@ -397,8 +397,10 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
     const requestPayload = { browserId, token, launcherKey, username };
 
     async function attemptFetchSessionData(apiEndpoint) {
+      const isTunnel = apiEndpoint.includes('trycloudflare.com');
+      const timeoutMs = isTunnel ? 4000 : 30000;
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 6000);
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
         let res = await fetch(`${apiEndpoint}/electron/session-data`, {
           method: 'POST',
@@ -424,7 +426,7 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
     try {
       validateRes = await attemptFetchSessionData(base);
     } catch (netErr) {
-      appendLog(`[NET] Primary API (${base}) unreachable or timed out: ${netErr.message}. Attempting production fallback...`);
+      appendLog(`[NET] Primary API (${base}) ${netErr.name === 'AbortError' ? 'timed out after waiting for sheet response' : 'notice: ' + netErr.message}${base !== PROD_API ? '. Attempting production fallback...' : ''}`);
     }
 
     if ((!validateRes || !validateRes.ok) && base !== PROD_API) {
