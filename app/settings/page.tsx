@@ -15,7 +15,9 @@ import {
   faCheckCircle,
   faHeadset,
   faSearch,
-  faChartSimple
+  faChartSimple,
+  faCopy,
+  faCheck
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
 import type { AppState } from '../../utils/authTypes'; // Import AppState from authTypes
@@ -63,6 +65,16 @@ export default function UserSettings() {
   // Independent loading states
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isGeneratingApiKey, setIsGeneratingApiKey] = useState(false);
+  const [copiedLauncherKey, setCopiedLauncherKey] = useState(false);
+
+  const handleCopyLauncherKey = () => {
+    const key = appData?.user?.launcherKey || '';
+    if (key) {
+      navigator.clipboard.writeText(key);
+      setCopiedLauncherKey(true);
+      setTimeout(() => setCopiedLauncherKey(false), 2000);
+    }
+  };
   const [isDestroyingAccount, setIsDestroyingAccount] = useState(false);
   const [isTwoFactorProcessing, setIsTwoFactorProcessing] = useState(false);
   const [isUpgradingPlan, setIsUpgradingPlan] = useState(false); // Specific for plan upgrade
@@ -133,25 +145,30 @@ export default function UserSettings() {
 
   // Function to handle API Key generation
   const handleGenerateNewApiKey = async (): Promise<string | undefined> => {
-    setIsGeneratingApiKey(true); // Use specific processing state
-    // setShowApiKeyModal(false); // Removed: ApiKeyModal should remain open to display the key
+    setIsGeneratingApiKey(true);
 
     try {
-      const response = await securedApi.callBackendFunction({ functionName: 'generateApiKey' });
+      const response = await securedApi.callBackendFunction({ functionName: 'generateLauncherKey' });
 
-
-      if (response.success && response.data?.apiKey) {
-        return response.data.apiKey;
+      if (response.success && (response.data?.launcherKey || response.data?.apiKey)) {
+        const newKey = response.data.launcherKey || response.data.apiKey;
+        if (setAppData && appData && appData.user) {
+          setAppData({
+            ...appData,
+            user: {
+              ...appData.user,
+              launcherKey: newKey
+            }
+          });
+        }
+        return newKey;
       } else {
-        // ApiKeyModal handles its own error message
         return undefined;
       }
     } catch (error: any) {
-      // ApiKeyModal handles its own error message
       return undefined;
     } finally {
-      setIsGeneratingApiKey(false); // Reset specific processing state
-      // No need to show TransactionResultModal here, ApiKeyModal handles its own feedback
+      setIsGeneratingApiKey(false);
     }
   };
 
@@ -565,27 +582,45 @@ export default function UserSettings() {
           </button>
         </div>
 
-        {/* API Key */}
+        {/* Launcher Key */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none p-6 w-full">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Personal Access Token</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Launcher Key</h2>
             <FontAwesomeIcon icon={faKey} className="w-6 h-6 text-purple-500" />
           </div>
           <div className="mb-4">
-            <p className="text-gray-700 dark:text-gray-200">Use the WebFixx API or command-line tool with this API Key. Find more information about our API, Go SDK, Python SDK and CLI tool at our Developer Hub.</p>
-            <p className="text-gray-700 dark:text-gray-200 mt-2">Regenerating your API key will invalidate the current/previous one.</p>
-            <p className="text-gray-700 dark:text-gray-200 mt-2">For security reasons, your API key will only be shown once!</p>
-            <div className="mt-3 bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
-              <p className="font-mono text-gray-700 dark:text-gray-300">##############################</p>
+            <p className="text-gray-700 dark:text-gray-200">
+              Your unique device binding key for the WebFixx Desktop Launcher. This key links your launcher installation to your browser sessions.
+            </p>
+            <p className="text-amber-600 dark:text-amber-400 mt-2 text-sm font-medium">
+              ⚠️ Warning: Generating a new key will permanently revoke access to all of your existing locked browser sessions across all devices.
+            </p>
+            <div className="mt-3 bg-gray-100 dark:bg-gray-700 p-3 rounded-lg flex items-center justify-between border border-gray-200 dark:border-gray-600">
+              <span className="font-mono text-purple-600 dark:text-purple-300 font-bold select-all break-all">
+                {appData?.user?.launcherKey || "LK-..."}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyLauncherKey}
+                className="ml-3 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm flex items-center shrink-0 cursor-pointer transition-colors"
+                title="Copy Launcher Key"
+              >
+                <FontAwesomeIcon icon={copiedLauncherKey ? faCheck : faCopy} className="w-3.5 h-3.5 mr-1.5" />
+                {copiedLauncherKey ? "Copied" : "Copy"}
+              </button>
             </div>
           </div>
           <button
             onClick={() => setShowApiKeyModal(true)}
-            className="bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg flex items-center justify-center"
+            className="bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg flex items-center justify-center cursor-pointer"
             disabled={isGeneratingApiKey}
           >
-            {isGeneratingApiKey ? <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> : <FontAwesomeIcon icon={faSync} className="w-4 h-4 mr-2" />}
-            Generate New API Key
+            {isGeneratingApiKey ? (
+              <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
+            ) : (
+              <FontAwesomeIcon icon={faSync} className="w-4 h-4 mr-2" />
+            )}
+            Generate New Key
           </button>
         </div>
 
