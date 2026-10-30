@@ -540,7 +540,9 @@ export default function Dashboard() {
     const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
     if (!token) return;
     const item = hubData.find((row: any) => row.id === browserId || row.browserId === browserId || row.submissionId === browserId);
-    const apiUrl = item?.server || (appData as any)?.availableServer || process.env.NEXT_PUBLIC_API_BASE_URL || 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
+    const rawServer = String(item?.server || '').trim();
+    const isDeadTunnel = rawServer.includes('trycloudflare.com');
+    const apiUrl = (!isDeadTunnel && rawServer) || (appData as any)?.availableServer || process.env.NEXT_PUBLIC_API_BASE_URL || 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
     let appOpened = false;
     const onBlur = () => { appOpened = true; };
     const onVisibility = () => { if (document.hidden) appOpened = true; };
