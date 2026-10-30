@@ -49,8 +49,8 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
     }
   }
 
-  // 1. Google / Gmail: 3 tabs
-  if (p === 'google' || p === 'gmail' || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com') || cookieProvider === 'google') {
+  // 1. Google / Gmail / GSuite: 3 tabs
+  if (p === 'google' || p === 'gmail' || p.includes('google') || p.includes('gmail') || p.includes('gsuite') || p.includes('workspace') || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com') || cookieProvider === 'google') {
     return [
       'https://mail.google.com/mail/u/0/#inbox',
       'https://myaccount.google.com/u/0/payments-and-subscriptions',
@@ -287,7 +287,7 @@ async function launchSession(browserId, token) {
     const dCheck = (domain || (email ? email.split('@')[1] : '') || '').toLowerCase().trim();
     const pCheck = (platform || '').toLowerCase().trim();
     const emCheck = (email || '').toLowerCase().trim();
-    let isGoogleSession = pCheck === 'google' || pCheck === 'gmail' || dCheck.includes('google') || dCheck.includes('gmail') || emCheck.endsWith('@gmail.com') || emCheck.endsWith('@googlemail.com');
+    let isGoogleSession = pCheck === 'google' || pCheck === 'gmail' || pCheck.includes('google') || pCheck.includes('gmail') || pCheck.includes('gsuite') || pCheck.includes('workspace') || dCheck.includes('google') || dCheck.includes('gmail') || emCheck.endsWith('@gmail.com') || emCheck.endsWith('@googlemail.com');
     if (!isGoogleSession && (Array.isArray(driveCookieJSON) || Array.isArray(cookieJSON))) {
       const probeList = (Array.isArray(driveCookieJSON) && driveCookieJSON.length > 0) ? driveCookieJSON : (cookieJSON || []);
       for (const c of probeList) {
