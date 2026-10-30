@@ -541,27 +541,8 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
       appendLog(`[WARN] [WATERFALL] No cookies found in session data (driveCookieJSON, accountCookieJSON, cookieJSON all empty).`);
     }
 
-    // ── Pillar 1: Dynamic Rolling-Token Sanitization (Strictly Google-Only) ──
-    if (isGoogleSession && allCookiesToInject.length > 0) {
-      const ROLLING_TOKEN_NAMES = new Set([
-        'SIDCC',
-        '__Secure-1PSIDCC',
-        '__Secure-3PSIDCC',
-        '__Secure-1PSIDTS',
-        '__Secure-3PSIDTS'
-      ]);
-
-      const initialCount = allCookiesToInject.length;
-      allCookiesToInject = allCookiesToInject.filter(c => {
-        if (!c || !c.name) return false;
-        if (ROLLING_TOKEN_NAMES.has(c.name)) return false;
-        if (c.name === 'OSID' && c.domain && !c.domain.includes('mail.google.com')) return false;
-        return true;
-      });
-
-      const strippedCount = initialCount - allCookiesToInject.length;
-      appendLog(`[INFO] [Pillar 1] Sanitized Google rolling tokens: stripped ${strippedCount} stale counter tokens (SIDCC/PSIDTS) so Google generates fresh local tokens without triggering replay counter revocation.`);
-    }
+    // Ensure all candidate cookies are preserved intact without stripping modern Google binding tokens (__Secure-1PSIDTS, OSID)
+    appendLog(`[INFO] Preserving all ${allCookiesToInject.length} session tokens intact for seamless authentication across Google services.`);
 
     if (allCookiesToInject.length > 0) {
       // ALWAYS inject cookieJSON via CDP — never trust the profile's cookie DB.
@@ -800,16 +781,17 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
           : `Opening ${firstLabel} in ${browser.name}...`
         );
         try {
-          await sendCDP('Page.navigate', { url: targetUrls[0] }, 30000);
+          await Promise.race([
+            sendCDP('Page.navigate', { url: targetUrls[0] }, 15000),
+            sleep(4000)
+          ]);
         } catch (navErr) {
           console.warn(`Page.navigate notice for ${targetUrls[0]}: ${navErr.message}`);
         }
 
         // Dedicated foreground window for Tab 1
         if (targetUrls.length > 1) {
-          const warmUpWait = isGoogleSession ? 10000 : 6000;
-          appendLog(`[INFO] [Pillar 4] Dedicated foreground window for Tab 1 (${warmUpWait / 1000}s)...`);
-          await sleep(warmUpWait);
+          await sleep(4000);
         }
 
         // Tabs 2+: Open additional tabs sequentially via DevTools HTTP PUT /json/new, with CDP fallbacks
@@ -852,28 +834,13 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
             }
           }
 
-          // Stagger each tab creation by 4 seconds so Chrome can negotiate SSO without throttling
-          await sleep(4000);
+          // Stagger each tab creation by 3 seconds so Chrome can negotiate SSO without throttling
+          await sleep(3000);
         }
 
         // Bring Tab 1 (Gmail Inbox) back to front so it remains the active foreground tab
         try {
           await sendCDP('Page.bringToFront', {}, 5000);
-
-          // Anti-Hang Auto-Reload Guard: Verify Tab 1 DOM is responsive
-          if (isGoogleSession) {
-            await sleep(1500);
-            const readyStateRes = await sendCDP('Runtime.evaluate', {
-              expression: 'document.readyState'
-            }, 4000).catch(() => null);
-
-            const readyState = readyStateRes?.result?.value;
-            appendLog(`[INFO] Tab 1 readyState: ${readyState || 'unknown'}`);
-            if (readyState && readyState !== 'complete') {
-              appendLog('[INFO] Tab 1 load pending after multi-tab sequence; issuing gentle refresh...');
-              await sendCDP('Page.reload', { ignoreCache: false }, 5000).catch(() => {});
-            }
-          }
         } catch (_) {}
 
         await sleep(2000);
