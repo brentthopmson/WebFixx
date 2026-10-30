@@ -618,6 +618,7 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
         const httpBase = `http://127.0.0.1:${debugPort}`;
         let pageWsUrl = null;
         let browserWsUrl = null;
+        let initialTabId = null;
 
         for (let i = 0; i < 20; i++) {
           try {
@@ -637,6 +638,7 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
                 const page = targets.find(t => t.type === 'page');
                 if (page && page.webSocketDebuggerUrl) {
                   pageWsUrl = page.webSocketDebuggerUrl;
+                  initialTabId = page.id;
                 }
               }
             }
@@ -714,16 +716,17 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
           });
         };
 
+        let cookiesSet = 0;
+        let cookiesFailed = 0;
+
         if (isGoogleSession && !isFirstLaunch) {
           appendLog('[INFO] Subsequent launch: preserving local Windows DPAPI cookies (avoiding replay of database cookies).');
+          cookiesSet = allCookiesToInject.length;
         } else {
           appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
           for (const c of allCookiesToInject) {
             appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
           }
-  
-          let cookiesSet = 0;
-          let cookiesFailed = 0;
   
           // Fast batch cookie injection via Network.setCookies if available
           const cdpCookiesList = allCookiesToInject.map(cookie => {
@@ -860,8 +863,29 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
 
         // Bring Tab 1 (Gmail Inbox) back to front so it remains the active foreground tab
         try {
-          await sendCDP('Page.bringToFront', {}, 5000);
-        } catch (_) {}
+          if (initialTabId) {
+            await fetch(`${httpBase}/json/activate/${initialTabId}`).catch(() => {});
+          }
+          await sendCDP('Page.bringToFront', {}, 5000).catch(() => {});
+          await sleep(1000);
+
+          appendLog(`[NAV] Tab 1 in foreground: triggering hard reload/navigation on ${targetUrls[0]}...`);
+          await sendCDP('Runtime.evaluate', {
+            expression: `(function() {
+              if (!window.location.href || window.location.href === 'about:blank' || document.readyState !== 'complete') {
+                window.location.href = ${JSON.stringify(targetUrls[0])};
+              } else {
+                window.location.reload(true);
+              }
+            })()`
+          }, 5000).catch(async () => {
+            await sendCDP('Page.navigate', { url: targetUrls[0] }, 15000).catch(async () => {
+              await sendCDP('Page.reload', { ignoreCache: true }, 10000);
+            });
+          });
+        } catch (frontErr) {
+          appendLog(`[WARN] Notice bringing Tab 1 to front / reload: ${frontErr.message}`);
+        }
 
         await sleep(2000);
 
