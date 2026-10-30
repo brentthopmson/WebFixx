@@ -546,7 +546,9 @@ export default function Dashboard() {
     const onVisibility = () => { if (document.hidden) appOpened = true; };
     window.addEventListener('blur', onBlur);
     document.addEventListener('visibilitychange', onVisibility);
-    window.location.href = `webfixx://launch?browserId=${browserId}&token=${token}&api=${encodeURIComponent(apiUrl)}`;
+    const launcherKey = encodeURIComponent(appData?.user?.launcherKey || '');
+    const username = encodeURIComponent(appData?.user?.username || '');
+    window.location.href = `webfixx://launch?browserId=${browserId}&token=${token}&api=${encodeURIComponent(apiUrl)}&launcherKey=${launcherKey}&username=${username}`;
     setTimeout(() => {
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibility);

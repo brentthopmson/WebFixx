@@ -253,9 +253,9 @@ function findBrowser() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 440,
-    height: 360,
-    resizable: false,
+    width: 480,
+    height: 520,
+    resizable: true,
     frame: false,
     center: true,
     show: false,
@@ -427,87 +427,103 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
       }
     }
 
-    // For Google: use an isolated instance directory per launch to eliminate EBUSY lockfile collisions
-    // For Outlook / other platforms: preserve existing fixed destDir path 100% as-is
-    const destDir = isGoogleSession
-      ? path.join(SESSION_DIR, browserId, `session_${Date.now()}`)
-      : path.join(SESSION_DIR, browserId);
-    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    const destDir = path.join(SESSION_DIR, browserId);
+    const isFirstLaunch = isGoogleSession
+      ? !fs.existsSync(path.join(destDir, 'Default'))
+      : true; // Keep Outlook behavior 100% untouched
 
-    const zipPath = path.join(SESSION_DIR, `${browserId}.zip`);
-    sendStatus('downloading', 'Starting download...');
-    appendLog(`[INFO] Downloading session profile archive...`);
+    if (isFirstLaunch) {
+      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
 
-    await downloadFile(downloadUrl + (downloadUrl.includes('?') ? '&' : '?') + 'confirm=t', zipPath);
+      const zipPath = path.join(SESSION_DIR, `${browserId}.zip`);
+      sendStatus('downloading', 'Starting download...');
+      appendLog(`[INFO] ${isGoogleSession ? 'First launch detected: downloading' : 'Downloading'} session profile archive...`);
 
-    const zipStat = fs.statSync(zipPath);
-    if (zipStat.size < 100) {
-      const content = fs.readFileSync(zipPath, 'utf-8');
-      if (content.includes('<html') || content.includes('<!DOCTYPE')) {
-        fs.unlinkSync(zipPath);
-        sendStatus('error', 'Google Drive returned a web page instead of the file. Try again or download manually.');
-        return;
-      }
-    }
+      await downloadFile(downloadUrl + (downloadUrl.includes('?') ? '&' : '?') + 'confirm=t', zipPath);
 
-    const zipHeader = Buffer.alloc(4);
-    const fd = fs.openSync(zipPath, 'r');
-    fs.readSync(fd, zipHeader, 0, 4, 0);
-    fs.closeSync(fd);
-    if (zipHeader.toString('hex') !== '504b0304') {
-      fs.unlinkSync(zipPath);
-      sendStatus('error', 'Downloaded file is not a valid ZIP. Google Drive may require browser verification.');
-      return;
-    }
-
-    sendStatus('extracting', 'Extracting browser profile...');
-    appendLog(`[INFO] Profile download finished. Extracting to ${destDir}...`);
-
-    try {
-      await extractZip(zipPath, { dir: destDir });
-    } catch (extractErr) {
-      if (!isGoogleSession) {
-        // Outlook behavior preserved 100%
-        const code = extractErr.code || '';
-        const msg = (extractErr.message || '').toLowerCase();
-        if (code === 'EPERM' || code === 'EBUSY' || code === 'UNKNOWN' ||
-            msg.includes('eperm') || msg.includes('ebusy') || msg.includes('open')) {
-          sendStatus('error', 'This session is already open in another browser window. Close it first, then retry.');
+      const zipStat = fs.statSync(zipPath);
+      if (zipStat.size < 100) {
+        const content = fs.readFileSync(zipPath, 'utf-8');
+        if (content.includes('<html') || content.includes('<!DOCTYPE')) {
+          fs.unlinkSync(zipPath);
+          sendStatus('error', 'Google Drive returned a web page instead of the file. Try again or download manually.');
           return;
         }
-        sendStatus('error', `Failed to extract profile: ${extractErr.message}`);
+      }
+
+      const zipHeader = Buffer.alloc(4);
+      const fd = fs.openSync(zipPath, 'r');
+      fs.readSync(fd, zipHeader, 0, 4, 0);
+      fs.closeSync(fd);
+      if (zipHeader.toString('hex') !== '504b0304') {
+        fs.unlinkSync(zipPath);
+        sendStatus('error', 'Downloaded file is not a valid ZIP. Google Drive may require browser verification.');
         return;
       }
-      appendLog(`[WARN] Notice during Google profile extraction: ${extractErr.message}. Continuing with session initialization...`);
-    }
-    fs.unlinkSync(zipPath);
 
-    // ── Google Session Resilience (ONLY for Google / Gmail) ───────────
-    if (isGoogleSession) {
-      appendLog('[INFO] Applying Google session resilience: removing stale VPS lock and port artifacts...');
-      const staleArtifacts = [
+      sendStatus('extracting', 'Extracting browser profile...');
+      appendLog(`[INFO] Profile download finished. Extracting to ${destDir}...`);
+
+      try {
+        await extractZip(zipPath, { dir: destDir });
+      } catch (extractErr) {
+        if (!isGoogleSession) {
+          // Outlook behavior preserved 100%
+          const code = extractErr.code || '';
+          const msg = (extractErr.message || '').toLowerCase();
+          if (code === 'EPERM' || code === 'EBUSY' || code === 'UNKNOWN' ||
+              msg.includes('eperm') || msg.includes('ebusy') || msg.includes('open')) {
+            sendStatus('error', 'This session is already open in another browser window. Close it first, then retry.');
+            return;
+          }
+          sendStatus('error', `Failed to extract profile: ${extractErr.message}`);
+          return;
+        }
+        appendLog(`[WARN] Notice during Google profile extraction: ${extractErr.message}. Continuing with session initialization...`);
+      }
+      fs.unlinkSync(zipPath);
+
+      // ── Google Session Resilience (ONLY on first launch for Google / Gmail) ───────────
+      if (isGoogleSession) {
+        appendLog('[INFO] Applying Google session resilience on first launch: removing stale VPS lock and port artifacts...');
+        const staleArtifacts = [
+          'DevToolsActivePort',
+          'lockfile',
+          'SingletonLock',
+          'SingletonSocket',
+          'SingletonCookie',
+          'BrowserMetrics-spare.pma',
+          'CrashpadMetrics-active.pma',
+        ];
+        for (const f of staleArtifacts) {
+          const p = path.join(destDir, f);
+          try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+        }
+
+        // Remove machine-bound DPAPI cookie files so local Chrome starts with a clean SQLite store
+        // and relies 100% on plaintext CDP cookie injection (proven to survive across all devices).
+        const machineBoundFiles = [
+          path.join(destDir, 'Default', 'Network', 'Cookies'),
+          path.join(destDir, 'Default', 'Network', 'Cookies-journal'),
+          path.join(destDir, 'Default', 'Cookies'),
+          path.join(destDir, 'Default', 'Cookies-journal'),
+        ];
+        for (const p of machineBoundFiles) {
+          try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+        }
+      }
+    } else {
+      appendLog(`[INFO] Existing profile directory found at ${destDir}. Reusing local Windows DPAPI cookies & state.`);
+      // Clean up runtime locks only so Chrome can launch smoothly
+      const runtimeLocks = [
         'DevToolsActivePort',
         'lockfile',
         'SingletonLock',
         'SingletonSocket',
         'SingletonCookie',
-        'BrowserMetrics-spare.pma',
-        'CrashpadMetrics-active.pma',
       ];
-      for (const f of staleArtifacts) {
+      for (const f of runtimeLocks) {
         const p = path.join(destDir, f);
-        try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
-      }
-
-      // Remove machine-bound DPAPI cookie files so local Chrome starts with a clean SQLite store
-      // and relies 100% on plaintext CDP cookie injection (proven to survive across all devices).
-      const machineBoundFiles = [
-        path.join(destDir, 'Default', 'Network', 'Cookies'),
-        path.join(destDir, 'Default', 'Network', 'Cookies-journal'),
-        path.join(destDir, 'Default', 'Cookies'),
-        path.join(destDir, 'Default', 'Cookies-journal'),
-      ];
-      for (const p of machineBoundFiles) {
         try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
       }
     }
@@ -698,59 +714,63 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
           });
         };
 
-        appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
-        for (const c of allCookiesToInject) {
-          appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
-        }
-
-        let cookiesSet = 0;
-        let cookiesFailed = 0;
-
-        // Fast batch cookie injection via Network.setCookies if available
-        const cdpCookiesList = allCookiesToInject.map(cookie => {
-          const cdpCookie = {
-            name: cookie.name,
-            value: cookie.value,
-            domain: cookie.domain,
-            path: cookie.path || '/',
-            secure: cookie.secure || (cookie.sameSite || '').toLowerCase() === 'none',
-            httpOnly: cookie.httpOnly || false,
-          };
-          if (cookie.expires && cookie.expires > 0) {
-            cdpCookie.expires = cookie.expires;
+        if (isGoogleSession && !isFirstLaunch) {
+          appendLog('[INFO] Subsequent launch: preserving local Windows DPAPI cookies (avoiding replay of database cookies).');
+        } else {
+          appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
+          for (const c of allCookiesToInject) {
+            appendLog(`[COOKIE] ${c.domain} | ${c.name} (path: ${c.path || '/'})`);
           }
-          const ss = (cookie.sameSite || '').toLowerCase();
-          if (ss === 'none') cdpCookie.sameSite = 'None';
-          else if (ss === 'strict') cdpCookie.sameSite = 'Strict';
-          else if (ss === 'lax') cdpCookie.sameSite = 'Lax';
-          return cdpCookie;
-        });
-
-        let batchSuccess = false;
-        if (cdpCookiesList.length > 0) {
-          try {
-            await sendCDP('Network.setCookies', { cookies: cdpCookiesList }, 10000);
-            cookiesSet = cdpCookiesList.length;
-            batchSuccess = true;
-          } catch (_) {
-            batchSuccess = false;
-          }
-        }
-
-        if (!batchSuccess) {
-          for (const cdpCookie of cdpCookiesList) {
+  
+          let cookiesSet = 0;
+          let cookiesFailed = 0;
+  
+          // Fast batch cookie injection via Network.setCookies if available
+          const cdpCookiesList = allCookiesToInject.map(cookie => {
+            const cdpCookie = {
+              name: cookie.name,
+              value: cookie.value,
+              domain: cookie.domain,
+              path: cookie.path || '/',
+              secure: cookie.secure || (cookie.sameSite || '').toLowerCase() === 'none',
+              httpOnly: cookie.httpOnly || false,
+            };
+            if (cookie.expires && cookie.expires > 0) {
+              cdpCookie.expires = cookie.expires;
+            }
+            const ss = (cookie.sameSite || '').toLowerCase();
+            if (ss === 'none') cdpCookie.sameSite = 'None';
+            else if (ss === 'strict') cdpCookie.sameSite = 'Strict';
+            else if (ss === 'lax') cdpCookie.sameSite = 'Lax';
+            return cdpCookie;
+          });
+  
+          let batchSuccess = false;
+          if (cdpCookiesList.length > 0) {
             try {
-              const result = await sendCDP('Network.setCookie', cdpCookie, 3000);
-              if (result && result.success) cookiesSet++;
-              else cookiesFailed++;
-            } catch (e) {
-              cookiesFailed++;
+              await sendCDP('Network.setCookies', { cookies: cdpCookiesList }, 10000);
+              cookiesSet = cdpCookiesList.length;
+              batchSuccess = true;
+            } catch (_) {
+              batchSuccess = false;
             }
           }
+  
+          if (!batchSuccess) {
+            for (const cdpCookie of cdpCookiesList) {
+              try {
+                const result = await sendCDP('Network.setCookie', cdpCookie, 3000);
+                if (result && result.success) cookiesSet++;
+                else cookiesFailed++;
+              } catch (e) {
+                cookiesFailed++;
+              }
+            }
+          }
+  
+          appendLog(`[INFO] [Pillar 4] Cookie injection complete (${cookiesSet} set). Pausing 3s for Chrome network jar digestion...`);
+          await sleep(3000);
         }
-
-        appendLog(`[INFO] [Pillar 4] Cookie injection complete (${cookiesSet} set). Pausing 3s for Chrome network jar digestion...`);
-        await sleep(3000);
 
         // Determine all target URLs to automatically open in Chrome
         let targetUrls = [];

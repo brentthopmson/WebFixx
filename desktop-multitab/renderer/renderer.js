@@ -5,6 +5,42 @@ const actionButtons = document.getElementById('action-buttons');
 const closeBtn = document.getElementById('close-btn');
 const retryBtn = document.getElementById('retry-btn');
 const titlebarClose = document.getElementById('titlebar-close');
+const logConsole = document.getElementById('log-console');
+const toggleLogBtn = document.getElementById('toggle-log-btn');
+if (toggleLogBtn && logConsole) {
+  toggleLogBtn.addEventListener('click', () => {
+    if (logConsole.classList.contains('hidden')) {
+      logConsole.classList.remove('hidden');
+      toggleLogBtn.textContent = 'Hide';
+    } else {
+      logConsole.classList.add('hidden');
+      toggleLogBtn.textContent = 'Show';
+    }
+  });
+}
+
+function appendLogLine(text) {
+  if (!logConsole) return;
+  const lineEl = document.createElement('div');
+  lineEl.className = 'log-line';
+  if (text.includes('[COOKIE]')) lineEl.classList.add('cookie');
+  else if (text.includes('[NAV]') || text.includes('[TAB]')) lineEl.classList.add('nav');
+  else if (text.includes('[SUCCESS]') || text.includes('Success')) lineEl.classList.add('success');
+  else if (text.includes('[ERROR]') || text.includes('Error') || text.includes('failed')) lineEl.classList.add('error');
+  else if (text.includes('[WARN]')) lineEl.classList.add('warn');
+  else lineEl.classList.add('info');
+
+  lineEl.textContent = text;
+  logConsole.appendChild(lineEl);
+  logConsole.scrollTop = logConsole.scrollHeight;
+}
+
+if (window.electronAPI && window.electronAPI.onSessionLog) {
+  window.electronAPI.onSessionLog((data) => {
+    appendLogLine(data.text || data);
+  });
+}
+
 
 const ICONS = {
   connecting: '🔗',
