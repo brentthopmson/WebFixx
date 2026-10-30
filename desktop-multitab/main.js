@@ -398,7 +398,7 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
 
     async function attemptFetchSessionData(apiEndpoint) {
       const isTunnel = apiEndpoint.includes('trycloudflare.com');
-      const timeoutMs = isTunnel ? 4000 : 30000;
+      const timeoutMs = isTunnel ? 4000 : 45000;
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
@@ -443,14 +443,16 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
       }
     }
 
-    if (!validateRes.ok) {
-      const err = await validateRes.json().catch(() => ({}));
-      if (validateRes.status === 403) {
+    if (!validateRes || !validateRes.ok) {
+      const err = validateRes ? await validateRes.json().catch(() => ({})) : {};
+      if (validateRes && validateRes.status === 403) {
         sendStatus('error', err.error || 'Access Denied: This session is locked to a different launcher installation.');
         appendLog(`[SECURITY] 403 Forbidden: ${err.error}`);
         return;
       }
-      sendStatus('error', err.error || 'Failed to get session data');
+      const errMsg = err.error || (validateRes ? `Session validation failed (HTTP ${validateRes.status})` : 'Connection timed out while waiting for Google Sheets response. Please click Retry.');
+      sendStatus('error', errMsg);
+      appendLog(`[ERROR] Validation failed: ${errMsg}`);
       return;
     }
 
