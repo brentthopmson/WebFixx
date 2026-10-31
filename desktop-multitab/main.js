@@ -31,8 +31,9 @@ function sanitizeGoogleCookiesForFirstLaunch(cookies) {
     const name = cookie.name;
     const dom = (cookie.domain || '').toLowerCase();
     
-    // 1. Strip machine-bound device cryptographic timestamps and signatures
-    if (name === '__Secure-1PSIDTS' || name === '__Secure-3PSIDTS') return false;
+    // NOTE: __Secure-1PSIDTS and __Secure-3PSIDTS MUST BE PRESERVED.
+    // Modern Google requires PSIDTS paired with PSID; omitting it flags the session
+    // as 'Action required' and forces re-authentication.
     if (name === 'SIDCC' || name === '__Secure-1PSIDCC' || name === '__Secure-3PSIDCC') return false;
 
     /* =========================================================================
@@ -845,7 +846,7 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
           let cookiesToInject = allCookiesToInject;
           if (isGoogleSession) {
             cookiesToInject = sanitizeGoogleCookiesForFirstLaunch(allCookiesToInject);
-            appendLog(`[INFO] First launch sanitization: preserved ${cookiesToInject.length}/${allCookiesToInject.length} clean root tokens (stripped machine-bound PSIDTS/SIDCC and regional domains for cross-PC resilience).`);
+            appendLog(`[INFO] First launch sanitization: preserved ${cookiesToInject.length}/${allCookiesToInject.length} clean root tokens (preserved PSIDTS, stripped destructive anti-bot tokens and regional domains).`);
           } else {
             appendLog(`[INFO] Ingesting ${allCookiesToInject.length} cookies from ${cookieCandidateName} into browser jar...`);
           }
