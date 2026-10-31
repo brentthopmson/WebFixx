@@ -396,50 +396,37 @@ async function launchSession(browserId, token, launcherKeyParam, usernameParam) 
     const PROD_API = 'https://webfixx-hoo-oamupo-e98ced-157-173-204-24.sslip.io/api';
     const requestPayload = { browserId, token, launcherKey, username };
 
-    async function attemptFetchSessionData(apiEndpoint) {
-      const isTunnel = apiEndpoint.includes('trycloudflare.com');
-      const timeoutMs = isTunnel ? 4000 : 45000;
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    async function fetchSession(endpoint) {
       try {
-        let res = await fetch(`${apiEndpoint}/electron/session-data`, {
+        let res = await fetch(`${endpoint}/electron/session-data`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestPayload),
-          signal: ctrl.signal,
-        });
-        if (res.status === 404 && !apiEndpoint.endsWith('/api')) {
-          res = await fetch(`${apiEndpoint}/api/electron/session-data`, {
+        }).catch(() => null);
+
+        if (!res || (res.status === 404 && !endpoint.endsWith('/api'))) {
+          res = await fetch(`${endpoint}/api/electron/session-data`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestPayload),
-            signal: ctrl.signal,
-          });
+          }).catch(() => null);
         }
         return res;
-      } finally {
-        clearTimeout(timer);
+      } catch (_) {
+        return null;
       }
     }
 
-    let validateRes = null;
-    try {
-      validateRes = await attemptFetchSessionData(base);
-    } catch (netErr) {
-      appendLog(`[NET] Primary API (${base}) ${netErr.name === 'AbortError' ? 'timed out after waiting for sheet response' : 'notice: ' + netErr.message}${base !== PROD_API ? '. Attempting production fallback...' : ''}`);
-    }
+    let validateRes = await fetchSession(base);
 
+    // If the passed server fails and is different from PROD_API, try production as fallback
     if ((!validateRes || !validateRes.ok) && base !== PROD_API) {
-      try {
-        appendLog(`[NET] Retrying session validation via production API: ${PROD_API}`);
-        const fallbackRes = await attemptFetchSessionData(PROD_API);
-        if (fallbackRes && (fallbackRes.ok || fallbackRes.status === 403)) {
-          validateRes = fallbackRes;
-          base = PROD_API;
-          API_BASE = PROD_API;
-        }
-      } catch (fbErr) {
-        appendLog(`[NET] Fallback API notice: ${fbErr.message}`);
+      appendLog(`[NET] Primary server (${base}) did not respond. Trying fallback (${PROD_API})...`);
+      const fallbackRes = await fetchSession(PROD_API);
+      if (fallbackRes && (fallbackRes.ok || fallbackRes.status === 403)) {
+        validateRes = fallbackRes;
+        base = PROD_API;
+        API_BASE = PROD_API;
       }
     }
 
