@@ -30,9 +30,22 @@ function sanitizeGoogleCookiesForFirstLaunch(cookies) {
     if (!cookie || !cookie.name) return false;
     const name = cookie.name;
     const dom = (cookie.domain || '').toLowerCase();
+    
     // 1. Strip machine-bound device cryptographic timestamps and signatures
     if (name === '__Secure-1PSIDTS' || name === '__Secure-3PSIDTS') return false;
     if (name === 'SIDCC' || name === '__Secure-1PSIDCC' || name === '__Secure-3PSIDCC') return false;
+
+    /* =========================================================================
+     * [SESSION RESILIENCE - 2026-10-31] Strip destructive anti-bot & conflict tokens
+     * ACCOUNT_CHOOSER forces Google into account selection screen.
+     * GAPS / __Host-GAPS binds to initial IP/machine and triggers sign-out on second PC.
+     * LSID / *PLSID are single-use OAuth link tickets that cause revocation upon replay.
+     * ========================================================================= */
+    if (name === 'ACCOUNT_CHOOSER') return false;
+    if (name === 'GAPS' || name === '__Host-GAPS' || name === '__Host-GAPSTS') return false;
+    if (name === 'LSID' || name === '__Host-1PLSID' || name === '__Host-3PLSID') return false;
+    /* ========================================================================= */
+
     // 2. Strip country-specific ccTLDs (e.g. .google.com.ng) to prevent jar domain collisions
     if (dom.endsWith('.google.com.ng') || dom.includes('.google.co.')) return false;
     // 3. Keep all primary master identity tokens and service OSIDs intact
@@ -44,6 +57,27 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
   const d = (domain || (email ? email.split('@')[1] : '') || '').toLowerCase().trim();
   const p = (platform || '').toLowerCase().trim();
   const em = (email || '').toLowerCase().trim();
+
+  // 1. Social Platforms & Messaging (Checks platform column first, then domain fallback)
+  if (p === 'tiktok' || d.includes('tiktok.com')) return ['https://www.tiktok.com/'];
+  if (p === 'whatsapp' || p.includes('whatsapp') || d.includes('whatsapp.com')) return ['https://web.whatsapp.com/'];
+  if (p === 'comcast' || p === 'xfinity' || d.includes('comcast') || d.includes('xfinity')) return ['https://connect.xfinity.com/'];
+  if (p === 'instagram' || d.includes('instagram.com')) return ['https://www.instagram.com/'];
+  if (p === 'twitter' || p === 'x' || d.includes('twitter.com') || d === 'x.com') return ['https://x.com/'];
+  if (p === 'facebook' || d.includes('facebook.com')) return ['https://www.facebook.com/'];
+  if (p === 'linkedin' || d.includes('linkedin.com')) return ['https://www.linkedin.com/feed/'];
+  if (p === 'reddit' || d.includes('reddit.com')) return ['https://www.reddit.com/'];
+  if (p === 'pinterest' || d.includes('pinterest.com')) return ['https://www.pinterest.com/'];
+  if (p === 'discord' || d.includes('discord.com')) return ['https://discord.com/app'];
+  if (p === 'telegram' || d.includes('telegram.org')) return ['https://web.telegram.org/'];
+  if (p === 'snapchat' || d.includes('snapchat.com')) return ['https://web.snapchat.com/'];
+  if (p === 'youtube' || d.includes('youtube.com')) return ['https://www.youtube.com/'];
+
+  // 2. Specialized Webmail Providers
+  if (p === 'zoho' || d.includes('zoho.com')) return ['https://mail.zoho.com/'];
+  if (p === 'proton' || p === 'protonmail' || d.includes('proton.me') || d.includes('protonmail.com')) return ['https://mail.proton.me/'];
+  if (p === 'gmx' || d.includes('gmx.')) return ['https://www.gmx.com/'];
+  if (p === 'mail.com' || d.includes('mail.com')) return ['https://www.mail.com/'];
 
   // Check cookies for provider signatures if metadata is vague or missing
   let cookieProvider = null;
@@ -66,7 +100,7 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
     }
   }
 
-  // 1. Google / Gmail / GSuite: 3 tabs
+  // 3. Google / Gmail / GSuite: 3 tabs
   if (p === 'google' || p === 'gmail' || p.includes('google') || p.includes('gmail') || p.includes('gsuite') || p.includes('workspace') || d.includes('google') || d.includes('gmail') || em.endsWith('@gmail.com') || em.endsWith('@googlemail.com') || cookieProvider === 'google') {
     return [
       'https://mail.google.com/mail/u/0/#inbox',
@@ -74,6 +108,38 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
       'https://drive.google.com/drive/u/0/my-drive'
     ];
   }
+
+  // 4. Outlook / Microsoft / Office 365: 1 tab dynamically resolved
+  const isMsDomain = FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn') || d.includes('microsoft');
+  if (p === 'outlook' || p === 'microsoft' || p === 'office365' || isMsDomain || cookieProvider === 'microsoft') {
+    if (FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn')) {
+      return ['https://outlook.live.com/mail/'];
+    }
+    // Custom domain / Office 365 / corporate paid account
+    return ['https://outlook.office.com/mail/'];
+  }
+
+  // 5. Yahoo
+  if (p === 'yahoo' || d.includes('yahoo') || d.includes('ymail') || cookieProvider === 'yahoo') {
+    return ['https://mail.yahoo.com/'];
+  }
+
+  // 6. AOL
+  if (p === 'aol' || d.includes('aol') || cookieProvider === 'aol') {
+    return ['https://mail.aol.com/'];
+  }
+
+  // 7. Fallback for custom domain
+  if (d) {
+    return [`https://${d}`];
+  }
+
+  return [
+    'https://mail.google.com/mail/u/0/#inbox',
+    'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0',
+    'https://drive.google.com/drive/u/0/my-drive'
+  ];
+}
 
   // 2. Outlook / Microsoft / Office 365: 1 tab dynamically resolved
   const isMsDomain = FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn') || d.includes('microsoft');
@@ -109,6 +175,20 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
 
 function getTabLabel(url, index) {
   if (!url) return `Tab ${index + 1}`;
+  if (url.includes('tiktok.com')) return 'TikTok';
+  if (url.includes('whatsapp.com')) return 'WhatsApp Web';
+  if (url.includes('xfinity.com')) return 'Xfinity Mail';
+  if (url.includes('instagram.com')) return 'Instagram';
+  if (url.includes('twitter.com') || url.includes('x.com')) return 'X (Twitter)';
+  if (url.includes('facebook.com')) return 'Facebook';
+  if (url.includes('linkedin.com')) return 'LinkedIn';
+  if (url.includes('reddit.com')) return 'Reddit';
+  if (url.includes('discord.com')) return 'Discord';
+  if (url.includes('telegram.org')) return 'Telegram';
+  if (url.includes('snapchat.com')) return 'Snapchat';
+  if (url.includes('youtube.com')) return 'YouTube';
+  if (url.includes('zoho.com')) return 'Zoho Mail';
+  if (url.includes('proton.me') || url.includes('protonmail.com')) return 'Proton Mail';
   if (url.includes('mail.google.com')) return 'Gmail Inbox';
   if (url.includes('payments-and-subscriptions')) return 'Wallet & Subscriptions';
   if (url.includes('drive.google.com')) return 'Google Drive';
@@ -269,9 +349,9 @@ function findBrowser() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 520,
-    resizable: true,
+    width: 380,
+    height: 260,
+    resizable: false,
     frame: false,
     center: true,
     show: false,
