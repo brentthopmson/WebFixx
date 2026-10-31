@@ -142,37 +142,6 @@ function resolveSmartPlatformUrls(domain, platform, email, cookies = []) {
   ];
 }
 
-  // 2. Outlook / Microsoft / Office 365: 1 tab dynamically resolved
-  const isMsDomain = FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn') || d.includes('microsoft');
-  if (p === 'outlook' || p === 'microsoft' || p === 'office365' || isMsDomain || cookieProvider === 'microsoft') {
-    if (FREE_MS_DOMAINS.has(d) || d.includes('outlook') || d.includes('hotmail') || d.includes('live') || d.includes('msn')) {
-      return ['https://outlook.live.com/mail/'];
-    }
-    // Custom domain / Office 365 / corporate paid account
-    return ['https://outlook.office.com/mail/'];
-  }
-
-  // 3. Yahoo
-  if (p === 'yahoo' || d.includes('yahoo') || d.includes('ymail') || cookieProvider === 'yahoo') {
-    return ['https://mail.yahoo.com/'];
-  }
-
-  // 4. AOL
-  if (p === 'aol' || d.includes('aol') || cookieProvider === 'aol') {
-    return ['https://mail.aol.com/'];
-  }
-
-  // 5. Fallback for custom domain
-  if (d) {
-    return [`https://${d}`];
-  }
-
-  return [
-    'https://mail.google.com/mail/u/0/#inbox',
-    'https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0',
-      'https://drive.google.com/drive/u/0/my-drive'
-  ];
-}
 
 function getTabLabel(url, index) {
   if (!url) return `Tab ${index + 1}`;
