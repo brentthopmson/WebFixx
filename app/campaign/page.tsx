@@ -622,7 +622,6 @@ export default function Campaign() {
           };
           const sent = campaign.analytics?.sent || 0;
           const limit = userLimits?.shootCampaignLimit || 0;
-          const pct = limit > 0 ? Math.min(100, Math.round((sent / limit) * 100)) : 0;
           const durationDays = campaign.durationDays || 7;
           const createdDate = campaign.created_at ? new Date(campaign.created_at) : null;
           const created = createdDate ? createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -632,6 +631,9 @@ export default function Campaign() {
           const restRemainingMin = campaign.restUntil ? Math.max(0, Math.ceil((Number(campaign.restUntil) - now) / 60000)) : 0;
           const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now) / 86400000)) : 0;
           const isExpired = endDate ? now >= endDate.getTime() : false;
+          const elapsedMs = createdDate ? now - createdDate.getTime() : 0;
+          const totalMs = durationDays * 86400000;
+          const pct = totalMs > 0 ? Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100))) : 0;
           return (
           <div key={campaign.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-100 dark:border-gray-700 animate-fadeIn overflow-hidden">
             {/* Top row: name, ID, status */}
@@ -738,9 +740,9 @@ export default function Campaign() {
               </div>
               <div className="flex-1 flex items-center gap-2 min-w-0">
                 <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+                  <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 80 ? 'bg-amber-500' : pct >= 50 ? 'bg-blue-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
                 </div>
-                <span className="text-xxs text-gray-500 dark:text-gray-400 shrink-0">{sent.toLocaleString()} / {limit.toLocaleString()}</span>
+                <span className="text-xxs text-gray-500 dark:text-gray-400 shrink-0">{daysRemaining}d left</span>
               </div>
             </div>
 
