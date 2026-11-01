@@ -64,15 +64,15 @@ export interface Campaign {
   
   // Staged Preparation Workflow
   validationStaged?: boolean;
-  validationStatus?: 'idle' | 'processing' | 'completed' | 'failed';
+  validationStatus?: 'idle' | 'processing' | 'completed' | 'failed' | 'retry';
   enrichmentStaged?: boolean;
-  enrichmentStatus?: 'idle' | 'processing' | 'completed' | 'failed';
+  enrichmentStatus?: 'idle' | 'processing' | 'completed' | 'failed' | 'retry';
   aiPersonalizationStaged?: boolean; // AI personalization toggle
   aiPersonalizationPrompt?: string; // Prompt for dynamic row generation
-  personalizationStatus?: 'idle' | 'processing' | 'completed' | 'failed';
+  personalizationStatus?: 'idle' | 'processing' | 'completed' | 'failed' | 'retry';
   executeStaged?: boolean; // Whether to include execute stage
   interactionStaged?: boolean; // Whether to include interaction stage
-  interactionStatus?: 'idle' | 'processing' | 'monitoring' | 'completed' | 'failed';
+  interactionStatus?: 'idle' | 'processing' | 'monitoring' | 'completed' | 'failed' | 'retry';
   interactionStartedAt?: string;
   interactionStoppedReason?: 'time_limit_reached' | 'reply_limit_reached' | 'admin_stopped';
 
@@ -109,7 +109,12 @@ export interface Campaign {
   scheduleStartTime?: string; // ISO datetime for when to start scheduled sends
 
   created_at: string; // Added
-  status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached' | 'failed' | 'resting'; // Made required
+  status: 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'Limit Reached' | 'failed' | 'resting' | 'error'; // Made required
+  lastError?: { stage: string; reason: string; kind: string; at: string } | null;
+  retryAttempts?: number;
+  firstStartedAt?: string | null;
+  startedAt?: string | null;
+  expiresAt?: string | null;
   analytics?: {
       totalRows: number;
       sent: number;

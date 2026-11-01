@@ -217,6 +217,11 @@ export default function CampaignDetailPage() {
           for (const f of stageFields) {
             if (d[f] && prev[f] !== d[f]) (updated as any)[f] = d[f];
           }
+          if (d.lastError !== undefined) (updated as any).lastError = d.lastError;
+          if (d.retryAttempts !== undefined) (updated as any).retryAttempts = d.retryAttempts;
+          if (d.firstStartedAt !== undefined) (updated as any).firstStartedAt = d.firstStartedAt;
+          if (d.startedAt !== undefined) (updated as any).startedAt = d.startedAt;
+          if (d.expiresAt !== undefined) (updated as any).expiresAt = d.expiresAt;
           return updated;
         });
 
@@ -400,13 +405,13 @@ export default function CampaignDetailPage() {
   }, [findCampaign, fetchCSV, campaignId]);
 
   // Auto-poll for status + cleanup refresh timeout on unmount.
-  // 15s while running (so started→finished flips show fast), 60s otherwise.
-  // Stop on terminal states: completed / draft / failed.
+  // 15s while running, 30s while in error/retry, 60s otherwise.
+  // Stop only on terminal states: completed / draft.
   useEffect(() => {
     if (!campaign) return;
     const s = campaign.status;
-    if (s === 'completed' || s === 'draft' || s === 'failed') return;
-    const intervalMs = s === 'running' ? 15000 : 60000;
+    if (s === 'completed' || s === 'draft') return;
+    const intervalMs = s === 'running' ? 15000 : (s === 'error' ? 30000 : 60000);
     const interval = setInterval(pollCampaign, intervalMs);
     return () => {
       clearInterval(interval);
@@ -456,7 +461,9 @@ export default function CampaignDetailPage() {
       case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
       case 'running': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
       case 'paused': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300';
+      case 'resting': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300';
       case 'Limit Reached': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
+      case 'error': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
       case 'failed': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
@@ -471,8 +478,13 @@ export default function CampaignDetailPage() {
             <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4 text-gray-600 dark:text-gray-300" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold dark:text-white">{campaign.name || campaign.id}</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{campaign.id}</p>
+            <h1 className="text-xl font-bold dark:text-white flex items-center gap-2">
+              {campaign.name || campaign.id}
+              <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${campaign.channel === 'social' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
+                {campaign.channel === 'social' ? 'SOCIAL' : 'EMAIL'}
+              </span>
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{campaign.id} · {campaign.channel === 'social' ? 'Social campaign' : 'Email campaign'}</p>
           </div>
         </div>
         <div className="flex items-center space-x-3">
@@ -497,7 +509,7 @@ export default function CampaignDetailPage() {
             </button>
           )}
           {/* Draft + setup complete: Execute Pipeline */}
-          {campaign.status === 'draft' && campaign.isSetupComplete && (
+          {campaign.status === 'draft' && campaign.isSetupComplete && (campaign.status as any) !== 'error' && (campaign.status as any) !== 'failed' && (
             <button
               onClick={() => setShowExecuteConfirm(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -508,8 +520,26 @@ export default function CampaignDetailPage() {
               Execute Pipeline
             </button>
           )}
+          {/* Error/Failed: Retry */}
+          {(campaign.status === 'error' || campaign.status === 'failed') && (
+            <button
+              onClick={async () => {
+                try {
+                  await securedApi.callBackendFunction({ functionName: 'runCampaignPipeline', campaignId, retry: true });
+                  toast.success('Retry triggered');
+                  pollCampaign();
+                } catch (e:any) {
+                  toast.error(e?.message || 'Failed to retry');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+            >
+              <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
+              Retry
+            </button>
+          )}
           {/* Running or Limit Reached: Pause */}
-          {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (
+          {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (campaign.status as any) !== 'error' && (campaign.status as any) !== 'failed' && (
             <button
               onClick={handlePauseCampaign}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
@@ -519,7 +549,7 @@ export default function CampaignDetailPage() {
             </button>
           )}
           {/* Paused: Resume */}
-          {campaign.status === 'paused' && (
+          {campaign.status === 'paused' && (campaign.status as any) !== 'error' && (campaign.status as any) !== 'failed' && (
             <button
               onClick={handleResumeCampaign}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"

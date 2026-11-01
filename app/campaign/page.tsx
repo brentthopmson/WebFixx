@@ -640,6 +640,9 @@ export default function Campaign() {
                 <div className="flex items-center gap-2 mb-0.5">
                   <FontAwesomeIcon icon={campaign.channel === 'social' ? faRobot : faEnvelope} className={`w-4 h-4 ${campaign.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'}`} />
                   <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{campaign.name || campaign.id}</h3>
+                  <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded-full ${campaign.channel === 'social' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
+                    {(campaign.channel || 'email').toUpperCase()}
+                  </span>
                 </div>
                 <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">{campaign.id}</p>
                 <div className="flex items-center gap-3 mt-1.5 text-xxs text-gray-500 dark:text-gray-400">
@@ -672,6 +675,7 @@ export default function Campaign() {
                 campaign.status === 'running' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
                 campaign.status === 'paused' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
                 campaign.status === 'Limit Reached' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
+                campaign.status === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
                 campaign.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
                 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
               }`}>
