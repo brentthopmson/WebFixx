@@ -728,6 +728,7 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* CSV Data Table */}
+      {(campaign.fileUrl || (csvData && csvData.length > 0) || csvLoading) && (
       <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden">
         <div className="p-4 border-b dark:border-gray-700 flex items-center justify-between">
           <h3 className="text-sm font-bold dark:text-white">
@@ -823,6 +824,7 @@ export default function CampaignDetailPage() {
           </>
         )}
       </div>
+      )}
 
       <ConfirmationModal
         isOpen={showExecuteConfirm}
