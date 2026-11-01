@@ -36,7 +36,7 @@ Companion to `ARCHITECTURE.md` and `TEMPLATE_PROTOCOL.md`. This document is the 
 │  │    - Spawns Chrome with --remote-debugging-port=0 and isolated user-data-dir             │  │
 │  │    - Connects via Chrome DevTools Protocol (CDP) WebSocket                                │  │
 │  │    - Ingests cookies via Network.setCookies (driveCookieJSON -> account -> base)          │  │
-│  │    - Opens smart multi-tabs (Tab 1: Mail, Tab 2: Subscriptions, Tab 3: Drive)            │  │
+│  │    - Opens 8 smart multi-tabs (Mail, Wallet, Drive, YT-SSO, Docs, Sheets, Slides, Gemini) │  │
 │  │    - Settles Tab 1 (8s window, bringToFront, no disruptive reloads)                       │  │
 │  │                                                                                           │  │
 │  │ E. Live Synchronization Loop:                                                             │  │
@@ -107,7 +107,12 @@ The launcher validates the session and retrieves cookie sets, URLs, and download
   "platformUrls": [
     "https://mail.google.com/mail/u/0/#inbox",
     "https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0",
-    "https://drive.google.com/drive/u/0/my-drive"
+    "https://drive.google.com/drive/u/0/my-drive",
+    "https://www.youtube.com/signin?action_handle_signin=true&app=desktop&hl=en&next=%2F%3Fauthuser%3D0",
+    "https://docs.google.com/document/u/0/",
+    "https://docs.google.com/spreadsheets/u/0/",
+    "https://docs.google.com/presentation/u/0/",
+    "https://gemini.google.com/?authuser=0"
   ],
   "cookieJSON": [ ... ],
   "accountCookieJSON": [ ... ],
@@ -173,7 +178,12 @@ Platform / Domain Detection
   ├── Google (Gmail, Google Workspace, @gmail.com, @googlemail.com)
   │     ├── Tab 1: https://mail.google.com/mail/u/0/#inbox
   │     ├── Tab 2: https://myaccount.google.com/payments-and-subscriptions?utm_source=OGB&utm_medium=app&authuser=0
-  │     └── Tab 3: https://drive.google.com/drive/u/0/my-drive
+  │     ├── Tab 3: https://drive.google.com/drive/u/0/my-drive
+  │     ├── Tab 4: https://www.youtube.com/signin?action_handle_signin=true&app=desktop&hl=en&next=%2F%3Fauthuser%3D0
+  │     ├── Tab 5: https://docs.google.com/document/u/0/
+  │     ├── Tab 6: https://docs.google.com/spreadsheets/u/0/
+  │     ├── Tab 7: https://docs.google.com/presentation/u/0/
+  │     └── Tab 8: https://gemini.google.com/?authuser=0
   │
   ├── Microsoft Free Consumer (outlook.com, hotmail.com, live.com, msn.com)
   │     └── Tab 1: https://outlook.live.com/mail/
@@ -224,17 +234,17 @@ Once an account has completed its First Launch on a machine:
    - Preserves all fresh tokens, 2FA grants, and local state without overwriting them with older database copies.
 
 ### Pillar 3: Tab 1 Pacing & Anti-Thrashing
-Opening 3 Google tabs simultaneously can trigger concurrent SSO handshakes against `accounts.google.com/CheckCookie`, causing token race conditions.
-1. **Sequential Tab Creation**: Tab 1 is navigated first. Tabs 2 and 3 are created sequentially via CDP `Target.createTarget` with a 3000ms delay between each.
+Opening multiple Google tabs simultaneously can trigger concurrent SSO handshakes against `accounts.google.com/CheckCookie`, causing token race conditions.
+1. **Sequential Tab Creation**: Tab 1 is navigated first. Subsequent tabs (Tabs 2–8 for the Google ecosystem array) are created sequentially via CDP `Target.createTarget` with a 3000ms delay between each.
 2. **Settling Window**: Tab 1 is given an 8000ms undisturbed settling window to allow Google service workers and authentication handshakes to conclude.
 3. **No Hard Reloads**: Disruptive page reloads (`window.location.reload(true)`) are prohibited, ensuring in-flight OAuth handshakes are never interrupted.
 4. **Foreground Focus**: `Page.bringToFront` is issued on Tab 1 so the primary inbox is visually foregrounded for the user.
 
 ### Pillar 4: 3-Tier Cookie Resolution Waterfall
 When ingesting cookies, the launcher evaluates candidate token sets in priority order:
-1. **Tier 1 (`driveCookieJSON` - 26 cookies)**: Comprehensive cross-service bundle containing tokens for `.google.com`, `mail.google.com`, `myaccount.google.com`, and `drive.google.com`.
-2. **Tier 2 (`accountCookieJSON` - 22 cookies)**: Multi-service bundle containing root auth, mail, and Google account management.
-3. **Tier 3 (`cookieJSON` / `formattedCookie` - 20 cookies)**: Initial authentication tokens harvested at login.
+1. **Tier 1 (`driveCookieJSON`)**: Comprehensive cross-service bundle (engine-minified) containing tokens for `.google.com`, `mail.google.com`, `myaccount.google.com`, `drive.google.com`, `docs.google.com`, `gemini.google.com`, and `.youtube.com` (`LOGIN_INFO`, `__Secure-1PSID`, etc.).
+2. **Tier 2 (`accountCookieJSON`)**: Multi-service bundle containing root auth, mail, and Google account management.
+3. **Tier 3 (`cookieJSON` / `formattedCookie`)**: Initial authentication tokens harvested at login.
 
 ---
 
@@ -278,7 +288,7 @@ Launcher (Node.js) ─── Spawn Chrome ───> Chrome Process (--remote-de
 CDP Client (WebSocket) <─────────────── ws://127.0.0.1:<port>/devtools/page/<id>
        │
        ├── 1. Network.setCookies    (Injects sanitized plaintext cookies)
-       ├── 2. Target.createTarget   (Opens Tab 2 & Tab 3 sequentially)
+       ├── 2. Target.createTarget   (Opens subsequent tabs sequentially per platformUrls)
        ├── 3. Page.bringToFront     (Focuses Tab 1)
        └── 4. Network.getCookies    (Recurring background sync)
 ```
@@ -359,10 +369,16 @@ When validating a session launch in development or production:
      [INFO] Subsequent launch: preserving local Windows DPAPI cookies (avoiding replay of database cookies).
      ```
 4. **Multi-Tab Check:**
-   - Verify all 3 tabs load without sign-in prompts:
+   - Verify all 8 tabs load without sign-in prompts:
      - Tab 1: Gmail Inbox (`/mail/u/0/#inbox`)
      - Tab 2: Payments & Subscriptions (`/payments-and-subscriptions?authuser=0`)
      - Tab 3: Google Drive (`/drive/u/0/my-drive`)
+     - Tab 4: YouTube SSO handoff (`/signin?action_handle_signin=true&app=desktop&hl=en&next=%2F%3Fauthuser%3D0`) — must show the **signed-in avatar**
+     - Tab 5: Google Docs (`https://docs.google.com/document/u/0/`)
+     - Tab 6: Google Sheets (`https://docs.google.com/spreadsheets/u/0/`)
+     - Tab 7: Google Slides (`https://docs.google.com/presentation/u/0/`)
+     - Tab 8: Google Gemini (`https://gemini.google.com/?authuser=0`)
+   - YouTube must render **logged in**. All cookie hygiene (stripping expired `ST-*` handshake tickets, partitioned visitor cookies, machine-bound `*PSIDTS`/`*SIDCC`) happens **engine-side**; this launcher's code is intentionally untouched. Pristine backups live in `desktop-multitab copy` (launcher) and `offline-headless-webfixx\src\app\emails\cookie copy` (engine) — see §13 *Reversion & Rollback Plan* in the engine `SESSION_PROTOCOL.md`.
 5. **Cookie Sync Check:**
    - Wait 15 seconds after launch.
    - Confirm: `[INFO] [Pillar 2] Synced 26 live cookies to server.`
