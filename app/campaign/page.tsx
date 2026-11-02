@@ -20,10 +20,11 @@ import {
   faPause,
   faPlay,
   faComments,
-  faRocket
+  faRocket,
+  faExclamationTriangle
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../context/AppContext';
-import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign } from '../../utils/featureFlags';
+import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign, getConcurrentCampaignState } from '../../utils/featureFlags';
 import { CampaignModal } from '../components/admin/campaign/CampaignModal';
 import type { Campaign } from '../types';
 import { securedApi, authApi } from '../../utils/auth';
@@ -37,6 +38,9 @@ import UpgradePlanModal from '../components/admin/settings/UpgradePlanModal';
 
 export default function Campaign() {
   const { appData, setAppData } = useAppState();
+  // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
+  // mirrors engine/GAS). atLimit hides Execute/Resume until a slot frees.
+  const concurrentState = getConcurrentCampaignState(appData);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -608,6 +612,12 @@ export default function Campaign() {
         {(['shootCampaignUsage', 'validateUsage', 'enrichUsage', 'personalizeUsage', 'interactionUsage'] as const).map((k) => (
           <QuotaInfoBadge key={k} appData={appData} usageKey={k} compact />
         ))}
+        {concurrentState.atLimit && (
+          <span className="w-full inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg">
+            <FontAwesomeIcon icon={faExclamationTriangle} className="w-3.5 h-3.5 shrink-0" />
+            Concurrent campaign limit — {concurrentState.current} of {concurrentState.limit} slots in use. Execute/Resume are hidden until a slot frees up.
+          </span>
+        )}
       </div>
 
       {/* [DIAG] Debug panel — visible only with ?debug=1 */}
@@ -831,8 +841,8 @@ export default function Campaign() {
                         Continue Setup
                       </button>
                     )}
-                    {/* Draft + setup complete: Execute */}
-                    {effectiveStatus === 'draft' && campaign.isSetupComplete && (
+                    {/* Draft + setup complete: Execute (hidden at concurrent limit) */}
+                    {effectiveStatus === 'draft' && campaign.isSetupComplete && !concurrentState.atLimit && (
                       <button onClick={() => router.push(`/campaign/${campaign.id}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" title="Execute Campaign">
                         <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
                         Execute
@@ -844,8 +854,8 @@ export default function Campaign() {
                         <FontAwesomeIcon icon={faPause} className="w-4 h-4" />
                       </button>
                     )}
-                    {/* Paused: Resume */}
-                    {effectiveStatus === 'paused' && (
+                    {/* Paused: Resume (hidden at concurrent limit) */}
+                    {effectiveStatus === 'paused' && !concurrentState.atLimit && (
                       <button onClick={() => handleResumeCampaign(campaign.id)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Resume Campaign">
                         <FontAwesomeIcon icon={faPlay} className="w-4 h-4" />
                       </button>

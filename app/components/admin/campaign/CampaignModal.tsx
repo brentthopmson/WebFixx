@@ -28,7 +28,7 @@ import { validateCampaignCreation, getValidationErrorMessage } from '../../../ut
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
 import { getUserLimits, getQuotaInfo } from '../../../../utils/helpers';
 import { QuotaInfoBadge } from '../../../components/QuotaInfo';
-import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign, getMaxCampaignDurationDays } from '../../../../utils/featureFlags';
+import { isFeatureEnabled, featureDisabledMessage, getMaxAccountsPerCampaign, getMaxCampaignDurationDays, getConcurrentCampaignState } from '../../../../utils/featureFlags';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 
 interface CampaignModalProps {
@@ -45,6 +45,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const campaignFileSize = userLimits?.campaignFileSize;
   const maxCampaignAccounts = getMaxAccountsPerCampaign(appData);
   const maxCampaignDurationDays = getMaxCampaignDurationDays(appData);
+  // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
+  // mirrors engine/GAS). atLimit hides Execute Pipeline; draft-save stays.
+  const concurrentState = getConcurrentCampaignState(appData);
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
@@ -2040,20 +2043,29 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   {isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'}
                 </button>
                 {isEditing && (campaignToEdit?.status === 'draft' || formData.status === 'draft') && (campaignToEdit?.isSetupComplete || formData.isSetupComplete) && (
-                  <button
-                    onClick={() => {
-                      if (!isFeatureEnabled(appData, 'allowShooting')) {
-                        alert(featureDisabledMessage('allowShooting', 'campaign execution'));
-                        return;
-                      }
-                      setShowExecuteConfirm(true);
-                    }}
-                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                    disabled={loading || exhaustedStagedQuotas.length > 0}
-                    title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
-                  >
-                    Execute Pipeline
-                  </button>
+                  concurrentState.atLimit ? (
+                    <span
+                      className="px-6 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-xl font-bold text-xs"
+                      title="Concurrent campaign limit reached — pause or complete a running campaign to free a slot."
+                    >
+                      Execute hidden · {concurrentState.current}/{concurrentState.limit} slots in use
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (!isFeatureEnabled(appData, 'allowShooting')) {
+                          alert(featureDisabledMessage('allowShooting', 'campaign execution'));
+                          return;
+                        }
+                        setShowExecuteConfirm(true);
+                      }}
+                      className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
+                      disabled={loading || exhaustedStagedQuotas.length > 0}
+                      title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
+                    >
+                      Execute Pipeline
+                    </button>
+                  )
                 )}
                   <ConfirmationModal
                   isOpen={showExecuteConfirm}

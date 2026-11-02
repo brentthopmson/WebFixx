@@ -22,11 +22,12 @@ import {
   faShieldAlt,
   faMagic,
   faRocket,
-  faComments
+  faComments,
+  faExclamationTriangle
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../../context/AppContext';
 import { securedApi } from '../../../utils/auth';
-import { isFeatureEnabled, featureDisabledMessage } from '../../../utils/featureFlags';
+import { isFeatureEnabled, featureDisabledMessage, getConcurrentCampaignState } from '../../../utils/featureFlags';
 import { getQuotaInfo } from '../../../utils/helpers';
 import { QuotaInfoBadge } from '../../components/QuotaInfo';
 import { toast } from 'sonner';
@@ -166,6 +167,9 @@ export default function CampaignDetailPage() {
   const router = useRouter();
   const campaignId = params?.campaignId as string;
   const { appData } = useAppState();
+  // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
+  // mirrors engine/GAS). atLimit hides Execute Pipeline/Retry/Resume.
+  const concurrentState = getConcurrentCampaignState(appData);
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
@@ -670,8 +674,8 @@ export default function CampaignDetailPage() {
                   Edit Settings
                 </button>
               )}
-              {/* Draft + setup complete: Execute Pipeline */}
-              {effectiveStatus === 'draft' && campaign.isSetupComplete && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+              {/* Draft + setup complete: Execute Pipeline (hidden at concurrent limit) */}
+              {effectiveStatus === 'draft' && campaign.isSetupComplete && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
                 <button
                   onClick={() => setShowExecuteConfirm(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -682,8 +686,8 @@ export default function CampaignDetailPage() {
                   Execute Pipeline
                 </button>
               )}
-              {/* Error/Failed: Retry */}
-              {(effectiveStatus === 'error' || effectiveStatus === 'failed') && (
+              {/* Error/Failed: Retry (hidden at concurrent limit) */}
+              {(effectiveStatus === 'error' || effectiveStatus === 'failed') && !concurrentState.atLimit && (
                 <button
                   onClick={async () => {
                     try {
@@ -710,8 +714,8 @@ export default function CampaignDetailPage() {
                   Pause
                 </button>
               )}
-              {/* Paused: Resume */}
-              {effectiveStatus === 'paused' && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+              {/* Paused: Resume (hidden at concurrent limit) */}
+              {effectiveStatus === 'paused' && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
                 <button
                   onClick={handleResumeCampaign}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -743,6 +747,13 @@ export default function CampaignDetailPage() {
           </button>
         </div>
       </div>
+
+      {concurrentState.atLimit && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-400">
+          <FontAwesomeIcon icon={faExclamationTriangle} className="w-3.5 h-3.5 shrink-0" />
+          Concurrent campaign limit — {concurrentState.current} of {concurrentState.limit} slots in use. Execute/Retry/Resume are hidden until a slot frees up.
+        </div>
+      )}
 
       {/* Info Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
