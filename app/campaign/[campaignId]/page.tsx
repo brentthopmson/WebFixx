@@ -537,6 +537,43 @@ export default function CampaignDetailPage() {
   // campaign row's stats column (campaign-scoped). Never read the hub's
   // interactionUsage: that is the account-wide quota shared across every
   // campaign and must not appear here.
+  //
+  // Identity (display name ONLY) falls back to the hub when the stored
+  // identifier is missing or is the raw account key itself (legacy rows
+  // seeded before handle resolution existed): socials[0].username →
+  // email → username, matched by submissionId OR browserId. Usage numbers
+  // never come from the hub.
+  const hubIdentityById = (() => {
+    const rawHub = (appData as any)?.data?.hub;
+    if (!rawHub?.headers || !Array.isArray(rawHub?.data)) {
+      return new Map<string, { identifier: string }>();
+    }
+    const h: string[] = rawHub.headers;
+    const subIdx = h.indexOf('submissionId');
+    const bidIdx = h.indexOf('browserId');
+    const emailIdx = h.indexOf('email');
+    const usernameIdx = h.indexOf('username');
+    const socialsIdx = h.indexOf('socials');
+    const map = new Map<string, { identifier: string }>();
+    for (const row of rawHub.data as any[]) {
+      let handle = '';
+      if (socialsIdx !== -1 && row[socialsIdx]) {
+        try {
+          const parsed = typeof row[socialsIdx] === 'string' ? JSON.parse(row[socialsIdx]) : row[socialsIdx];
+          if (Array.isArray(parsed) && parsed[0]?.username) handle = String(parsed[0].username).trim();
+        } catch { /* malformed socials JSON — skip handle */ }
+      }
+      const identifier = handle
+        || (emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '')
+        || (usernameIdx !== -1 ? String(row[usernameIdx] || '').trim() : '');
+      if (!identifier) continue;
+      const entry = { identifier };
+      if (subIdx !== -1) { const k = String(row[subIdx] || '').trim(); if (k) map.set(k, entry); }
+      if (bidIdx !== -1) { const k = String(row[bidIdx] || '').trim(); if (k) map.set(k, entry); }
+    }
+    return map;
+  })();
+
   const connectedAccountsUsage = (() => {
     const statsAccounts = campaign.stats?.accounts || {};
     const allIds = Array.from(
@@ -567,9 +604,13 @@ export default function CampaignDetailPage() {
       const engagedPosts = Object.keys((campaign.postStatus || {})[accountId] || {}).length;
       const total = Number(statEntry.total) || computedTotal || engagedPosts || 0;
 
+      const storedIdentifier =
+        statEntry.identifier && statEntry.identifier !== accountId ? String(statEntry.identifier) : '';
+      const identifier = storedIdentifier || hubIdentityById.get(accountId)?.identifier || accountId;
+
       return {
         accountId,
-        identifier: statEntry.identifier && statEntry.identifier !== accountId ? statEntry.identifier : accountId,
+        identifier,
         platform: statEntry.platform || campaign.platform || campaign.channel || 'account',
         total,
         engagedPosts,
@@ -941,15 +982,10 @@ export default function CampaignDetailPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <FontAwesomeIcon icon={campaign.channel === 'social' ? faRobot : faEnvelope} className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span className="text-xs font-bold text-gray-900 dark:text-white truncate">{acc.identifier}</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white truncate" title={acc.accountId}>{acc.identifier}</span>
                       <span className="px-2 py-0.5 text-[10px] font-semibold uppercase rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
                         {acc.platform}
                       </span>
-                      {acc.identifier !== acc.accountId && (
-                        <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 truncate">
-                          ({acc.accountId})
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {acc.engagedPosts > 0 && (
