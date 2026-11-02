@@ -183,6 +183,7 @@ export default function CampaignDetailPage() {
   const [viewMode, setViewMode] = useState<'progress' | 'table'>('progress');
   const rowsPerPage = 50;
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const seededCampaignIdRef = useRef<string | null>(null);
 
   // CSV data refresh runs via /api/drive-csv (Next.js -> Drive API, no AppScript),
   // so it can poll fast during an active run without touching the AppScript quota.
@@ -268,9 +269,14 @@ export default function CampaignDetailPage() {
         campaignId
       });
       if (res.success && res.data) {
-        const d = res.data;
+        const d = res.data as any;
         const mapped = campaignFromRowObject(d, campaignId);
         setCampaign(mapped);
+        if (d.engineStopped) {
+          toast.error('Engine Stopped Responding', {
+            description: d.engineError || 'The engine server stopped responding — this campaign was automatically paused.'
+          });
+        }
 
         const createdTime = mapped.created_at ? new Date(mapped.created_at).getTime() : 0;
         const isExpiredNow = createdTime > 0 && Date.now() >= createdTime + (mapped.durationDays || 7) * 86400000;
@@ -322,16 +328,29 @@ export default function CampaignDetailPage() {
 
   const handlePauseCampaign = async () => {
     try {
-      const res = await securedApi.callBackendFunction({
+      const res: any = await securedApi.callBackendFunction({
         functionName: 'pauseCampaign',
         campaignId
       });
       if (res.success) {
-        setCampaign(prev => prev ? { ...prev, status: 'paused' } : prev);
+        toast.success('Campaign Paused', {
+          description: res.message || 'Campaign paused. Resume anytime to continue.'
+        });
+        setCampaign(prev => prev ? {
+          ...prev,
+          status: 'paused',
+          validationStatus: prev.validationStatus === 'processing' ? 'idle' : prev.validationStatus,
+          enrichmentStatus: prev.enrichmentStatus === 'processing' ? 'idle' : prev.enrichmentStatus,
+          personalizationStatus: prev.personalizationStatus === 'processing' ? 'idle' : prev.personalizationStatus,
+          interactionStatus: prev.interactionStatus === 'processing' ? 'idle' : prev.interactionStatus,
+        } : prev);
+        pollCampaign();
         router.refresh();
+      } else {
+        toast.error(res.error || 'Failed to pause campaign');
       }
-    } catch {
-      // silent
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to pause campaign');
     }
   };
 
@@ -341,16 +360,22 @@ export default function CampaignDetailPage() {
       return;
     }
     try {
-      const res = await securedApi.callBackendFunction({
+      const res: any = await securedApi.callBackendFunction({
         functionName: 'resumeCampaign',
         campaignId
       });
       if (res.success) {
+        toast.success('Campaign Resumed', {
+          description: res.message || 'Campaign resumed and is running again.'
+        });
         setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
+        pollCampaign();
         router.refresh();
+      } else {
+        toast.error(res.error || 'Failed to resume campaign');
       }
-    } catch {
-      // silent
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to resume campaign');
     }
   };
 
@@ -425,12 +450,18 @@ export default function CampaignDetailPage() {
   };
 
   useEffect(() => {
+    // Only seed from appData once per campaignId so subsequent setAppData
+    // updates from fast-path backend calls never overwrite live polled state.
+    if (seededCampaignIdRef.current === campaignId) return;
     let cancelled = false;
     const camp = findCampaign();
     if (camp) {
+      seededCampaignIdRef.current = campaignId;
       setCampaign(camp);
       if (camp.fileUrl) fetchCSV(camp.fileUrl, false, getRefreshInterval(camp.status));
       setLoading(false);
+      // Immediately verify live status + engine liveness via GAS getCampaign
+      pollCampaign();
       return;
     }
     // appData bundle is stale or missing this campaign — fetch the row directly
@@ -442,6 +473,7 @@ export default function CampaignDetailPage() {
           campaignId
         });
         if (!cancelled && res.success && res.data) {
+          seededCampaignIdRef.current = campaignId;
           const direct = campaignFromRowObject(res.data, campaignId);
           setCampaign(direct);
           if (direct.fileUrl) fetchCSV(direct.fileUrl, false, getRefreshInterval(direct.status));
@@ -453,7 +485,7 @@ export default function CampaignDetailPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [findCampaign, fetchCSV, campaignId]);
+  }, [findCampaign, fetchCSV, pollCampaign, campaignId]);
 
   // Auto-poll for status + cleanup refresh timeout on unmount.
   // 15s while running, 30s while in error/retry, 60s otherwise.

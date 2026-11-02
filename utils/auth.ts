@@ -696,6 +696,50 @@ export const securedApi = {
           const mergedUser = baseUser && freshUserUsage !== undefined
             ? { ...baseUser, usage: freshUserUsage }
             : baseUser;
+
+          let mergedCampaigns = result.appData?.campaigns || appState.appData?.data?.campaigns || [];
+          const targetCampaignId = String((data as any)?.campaignId || (result as any)?.campaignId || (result as any)?.data?.campaignId || '').trim();
+          if (
+            !result.appData?.campaigns &&
+            targetCampaignId &&
+            mergedCampaigns &&
+            !Array.isArray(mergedCampaigns) &&
+            Array.isArray((mergedCampaigns as any).headers) &&
+            Array.isArray((mergedCampaigns as any).data)
+          ) {
+            const cHeaders: string[] = (mergedCampaigns as any).headers;
+            const idIdx = cHeaders.indexOf('campaignId');
+            if (idIdx !== -1) {
+              const statusIdx = cHeaders.indexOf('status');
+              const settingsIdx = cHeaders.indexOf('settings');
+              const statsIdx = cHeaders.indexOf('stats');
+              const updatedOnIdx = cHeaders.indexOf('updatedOn');
+              const rowDataObj = (fnName === 'getCampaign' && result.data && typeof result.data === 'object') ? (result.data as any) : null;
+              const nextStatus = rowDataObj?.status
+                || (result as any)?.status
+                || (fnName === 'pauseCampaign' ? 'paused' : (fnName === 'runCampaignPipeline' || fnName === 'resumeCampaign' ? 'running' : undefined));
+
+              const patchedRows = (mergedCampaigns as any).data.map((row: any[]) => {
+                if (!Array.isArray(row) || String(row[idIdx] ?? '').trim() !== targetCampaignId) return row;
+                const copy = [...row];
+                if (statusIdx !== -1 && nextStatus) copy[statusIdx] = nextStatus;
+                if (rowDataObj) {
+                  if (settingsIdx !== -1 && rowDataObj.settings !== undefined) {
+                    copy[settingsIdx] = typeof rowDataObj.settings === 'string' ? rowDataObj.settings : JSON.stringify(rowDataObj.settings);
+                  }
+                  if (statsIdx !== -1 && rowDataObj.stats !== undefined) {
+                    copy[statsIdx] = typeof rowDataObj.stats === 'string' ? rowDataObj.stats : JSON.stringify(rowDataObj.stats);
+                  }
+                  if (updatedOnIdx !== -1 && rowDataObj.updatedOn !== undefined) {
+                    copy[updatedOnIdx] = rowDataObj.updatedOn;
+                  }
+                }
+                return copy;
+              });
+              mergedCampaigns = { ...(mergedCampaigns as any), data: patchedRows };
+            }
+          }
+
           const updatedAppState = {
             user: mergedUser,
             isOffline: false, // Added isOffline
@@ -711,7 +755,7 @@ export const securedApi = {
               users: result.appData?.users || appState.appData?.data?.users || [],
               apis: result.appData?.apis || appState.appData?.data?.apis || [],
               settings: result.appData?.settings || appState.appData?.data?.settings || [],
-              campaigns: result.appData?.campaigns || appState.appData?.data?.campaigns || []
+              campaigns: mergedCampaigns
             },
             isAuthenticated: true
           };
