@@ -157,19 +157,29 @@ export default function Campaign() {
         parseErrors.push(msg);
       }
 
-      const totalSent = statsObj.interactions || 0;
+      const totalSent = Number((statsObj as any).totalActions) || statsObj.interactions || Number(settingsObj.analytics?.sent) || 0;
       const limitVal = userLimits?.shootCampaignLimit || 0;
+      const durationDaysVal = settingsObj.durationDays || 7;
+      const createdRaw = row[columnIndices.createdOn] || '';
+      const createdTime = createdRaw ? new Date(createdRaw).getTime() : 0;
+      const isRowExpired = createdTime > 0 && (Date.now() >= createdTime + durationDaysVal * 86400000);
 
-      // Dynamically pause/flag if limit reached
+      // Dynamically pause/flag if limit reached, or complete if timeframe elapsed
       let resolvedStatus = row[columnIndices.status] || 'draft';
-      if (limitVal > 0 && totalSent >= limitVal && resolvedStatus !== 'completed' && resolvedStatus !== 'draft') {
+      if (isRowExpired && resolvedStatus !== 'draft') {
+        resolvedStatus = 'completed';
+      } else if (limitVal > 0 && totalSent >= limitVal && resolvedStatus !== 'completed' && resolvedStatus !== 'draft') {
         resolvedStatus = 'Limit Reached';
       }
+
+      const resolvedFileUrl = (columnIndices.fileUrl !== -1 ? row[columnIndices.fileUrl] : '') || settingsObj.fileUrl || '';
+      const resolvedChannel = settingsObj.channel || 'email';
+      const resolvedMode = settingsObj.campaignMode || (resolvedFileUrl ? 'file' : 'interactions-only');
 
       return {
         id: row[columnIndices.campaignId] || '',
         name: settingsObj.name || row[columnIndices.campaignId] || '',
-        channel: settingsObj.channel || 'email',
+        channel: resolvedChannel,
         platform: settingsObj.platform || '',
         type: row[columnIndices.type] || settingsObj.type || 'general',
         subject: settingsObj.subject || '',
@@ -177,7 +187,7 @@ export default function Campaign() {
         replyFolder: settingsObj.replyFolder || '',
         accounts: settingsObj.accounts || [],
         smtpSettings: settingsObj.smtpSettings || [],
-        fileUrl: (columnIndices.fileUrl !== -1 ? row[columnIndices.fileUrl] : '') || settingsObj.fileUrl || '',
+        fileUrl: resolvedFileUrl,
 
         template: settingsObj.template || '',
         templateId: settingsObj.templateId || '',
@@ -190,8 +200,13 @@ export default function Campaign() {
         aiPersonalizationStaged: settingsObj.aiPersonalizationStaged || false,
         aiPersonalizationPrompt: settingsObj.aiPersonalizationPrompt || '',
         personalizationStatus: settingsObj.personalizationStatus || 'idle',
-        executeStaged: settingsObj.executeStaged ?? true,
-        interactionStaged: settingsObj.interactionStaged || false,
+        executeStaged: resolvedChannel === 'social'
+          ? !!(settingsObj.shouldSendMessage && resolvedFileUrl)
+          : (resolvedMode === 'interactions-only' ? false : (settingsObj.executeStaged ?? true)),
+        executionStatus: settingsObj.executionStatus || '',
+        interactionStaged: resolvedChannel === 'social'
+          ? true
+          : (settingsObj.interactionStaged || resolvedMode === 'interactions-only' || false),
         interactionStatus: settingsObj.interactionStatus || 'idle',
         interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
         interactionAccounts: settingsObj.interactionAccounts || [],
@@ -204,8 +219,11 @@ export default function Campaign() {
         socialInteractionTypes: settingsObj.socialInteractionTypes || [],
         socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
         socialKeywords: settingsObj.socialKeywords || [],
+        tagStatus: settingsObj.tagStatus || {},
+        postStatus: settingsObj.postStatus || {},
         shouldSendMessage: settingsObj.shouldSendMessage || false,
-        durationDays: settingsObj.durationDays || 7,
+        campaignMode: resolvedMode,
+        durationDays: durationDaysVal,
         restUntil: settingsObj.restUntil || null,
         isSetupComplete: settingsObj.isSetupComplete ||
           !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
@@ -213,13 +231,14 @@ export default function Campaign() {
         
         context: contextObj,
         status: resolvedStatus,
+        stats: statsObj as any,
         analytics: {
-          totalRows: statsObj.interactions || 0,
+          totalRows: Number(settingsObj.analytics?.totalRows) || totalSent,
           sent: totalSent,
-          delivered: statsObj.inbox || 0,
-          failed: (statsObj.interactions || 0) - (statsObj.inbox || 0)
+          delivered: statsObj.inbox || Number(settingsObj.analytics?.delivered) || 0,
+          failed: Number(settingsObj.analytics?.failed) || 0
         },
-        created_at: row[columnIndices.createdOn] || '',
+        created_at: createdRaw,
         updated_at: row[columnIndices.updatedOn] || ''
       } as Campaign;
     });
@@ -627,15 +646,48 @@ export default function Campaign() {
           const created = createdDate ? createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
           const endDate = createdDate ? new Date(createdDate.getTime() + durationDays * 86400000) : null;
           const now = Date.now();
-          const isResting = campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil));
           const restRemainingMin = campaign.restUntil ? Math.max(0, Math.ceil((Number(campaign.restUntil) - now) / 60000)) : 0;
           const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now) / 86400000)) : 0;
           const isExpired = endDate ? now >= endDate.getTime() : false;
           const elapsedMs = createdDate ? now - createdDate.getTime() : 0;
           const totalMs = durationDays * 86400000;
           const pct = totalMs > 0 ? Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100))) : 0;
+          const isResting = !isExpired && (campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil)));
+          const effectiveStatus = isExpired && campaign.status !== 'draft' ? 'completed' : campaign.status;
+          const socialInteractStageStatus =
+            (isExpired && campaign.status !== 'draft') || effectiveStatus === 'completed'
+              ? 'completed'
+              : (effectiveStatus === 'running' || isResting)
+                ? 'processing'
+                : (effectiveStatus === 'failed' || effectiveStatus === 'error')
+                  ? 'failed'
+                  : (sent > 0 ? 'completed' : 'idle');
+          const emailExecuteStageStatus =
+            campaign.executionStatus === 'completed' || effectiveStatus === 'completed' || (isExpired && campaign.status !== 'draft')
+              ? 'completed'
+              : effectiveStatus === 'running'
+                ? 'processing'
+                : (effectiveStatus === 'failed' || effectiveStatus === 'error')
+                  ? 'failed'
+                  : 'idle';
+          const emailInteractStageStatus =
+            (isExpired && campaign.status !== 'draft') || effectiveStatus === 'completed'
+              ? 'completed'
+              : ((campaign as any).interactionStatus === 'monitoring' || (effectiveStatus === 'running' && !campaign.executeStaged))
+                ? 'processing'
+                : ((campaign as any).interactionStatus || 'idle');
           return (
-          <div key={campaign.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-100 dark:border-gray-700 animate-fadeIn overflow-hidden">
+          <div key={campaign.id} className="relative bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-100 dark:border-gray-700 animate-fadeIn overflow-hidden">
+            {/* Progressive light-green background fill based on campaign lifespan */}
+            <div
+              className={`pointer-events-none absolute inset-y-0 left-0 transition-all duration-500 ${
+                pct >= 100
+                  ? 'bg-emerald-500/15 dark:bg-emerald-500/20'
+                  : 'bg-emerald-500/10 dark:bg-emerald-500/15'
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+            <div className="relative z-10">
             {/* Top row: name, ID, status */}
             <div className="p-4 pb-3 flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
@@ -672,21 +724,21 @@ export default function Campaign() {
                 </div>
               </div>
               <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${
-                campaign.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                effectiveStatus === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
                 isResting ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border border-purple-300 dark:border-purple-700 animate-pulse' :
-                campaign.status === 'running' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
-                campaign.status === 'paused' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
-                campaign.status === 'Limit Reached' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
-                campaign.status === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
-                campaign.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                effectiveStatus === 'running' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
+                effectiveStatus === 'paused' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
+                effectiveStatus === 'Limit Reached' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
+                effectiveStatus === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                effectiveStatus === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
                 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
               }`}>
-                {isResting ? `Resting (${restRemainingMin}m left)` : campaign.status === 'running' ? (isExpired ? 'Running · Expired' : `Running · ${daysRemaining}d left`) : campaign.status}
+                {isResting ? `Resting (${restRemainingMin}m left)` : effectiveStatus === 'running' ? `Running · ${daysRemaining}d left` : (isExpired && effectiveStatus === 'draft' ? 'Expired' : effectiveStatus)}
               </span>
             </div>
 
             {/* Limit reached banner */}
-            {campaign.status === 'Limit Reached' && (
+            {effectiveStatus === 'Limit Reached' && (
               <div className="mx-4 mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
                   <FontAwesomeIcon icon={faClock} className="w-3.5 h-3.5 animate-pulse shrink-0" />
@@ -696,58 +748,54 @@ export default function Campaign() {
             )}
 
             {/* Failed banner */}
-            {campaign.status === 'failed' && (
+            {effectiveStatus === 'failed' && (
               <div className="mx-4 mb-3 p-2.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg flex items-center gap-2">
                 <FontAwesomeIcon icon={faTimesCircle} className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
                 <span className="text-xs text-red-800 dark:text-red-300 font-semibold">Pipeline failed — check the debug sheet / Telegram alerts, then re-trigger from the campaign page.</span>
               </div>
             )}
 
-            {/* Staging pipeline badges + progress bar */}
-            <div className="px-4 pb-3 flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex items-center gap-2.5 text-xxs">
+            {/* Staging pipeline badges + schedule status (inline bar replaced by progressive green card background) */}
+            <div className="px-4 pb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-xxs">
                 {(campaign.channel === 'social'
                   ? [
-                      { label: 'Execute', staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
-                      { label: 'Interact', staged: campaign.interactionStaged, status: (campaign as any).interactionStatus || 'idle' },
-                      ...(campaign.socialInteractionTypes || []).map(t => ({
-                        label: t === 'other' ? 'Page' : t.charAt(0).toUpperCase() + t.slice(1),
-                        staged: true,
-                        status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle',
-                      })),
-                      ...(campaign.shouldSendMessage ? [{
-                        label: 'DM',
-                        staged: true,
-                        status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle',
-                      }] : []),
+                      ...(campaign.shouldSendMessage && campaign.fileUrl
+                        ? [{ label: 'Execute', staged: true, status: socialInteractStageStatus }]
+                        : []),
+                      { label: 'Interact', staged: true, status: socialInteractStageStatus },
                     ]
                   : [
                       { label: 'Validate', staged: campaign.validationStaged, status: campaign.validationStatus },
                       { label: 'Enrich', staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
                       { label: 'AI', staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
-                      { label: 'Execute', staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
-                      { label: 'Interact', staged: campaign.interactionStaged, status: (campaign as any).interactionStatus || 'idle' },
+                      { label: 'Execute', staged: campaign.executeStaged ?? true, status: emailExecuteStageStatus },
+                      { label: 'Interact', staged: campaign.interactionStaged, status: emailInteractStageStatus },
                     ]
                 ).map(s => {
                   const si = stageIcon(s.staged, s.status);
                   return (
-                    <span key={s.label} className={`flex items-center gap-1 ${si.color}`}>
+                    <span key={s.label} className={`flex items-center gap-1 font-medium ${si.color}`}>
                       <FontAwesomeIcon icon={si.icon} className={`w-3 h-3 ${si.icon === faSpinner ? 'animate-spin' : ''}`} />
-                      <span className="hidden sm:inline">{s.label}</span>
+                      <span>{s.label}</span>
                     </span>
                   );
                 })}
               </div>
-              <div className="flex-1 flex items-center gap-2 min-w-0">
-                <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 80 ? 'bg-amber-500' : pct >= 50 ? 'bg-blue-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
-                </div>
-                <span className="text-xxs text-gray-500 dark:text-gray-400 shrink-0">{daysRemaining}d left</span>
+              <div className="flex items-center gap-2 text-xxs">
+                {sent > 0 && (
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {sent.toLocaleString()} {campaign.channel === 'social' ? 'actions' : 'sent'} ·
+                  </span>
+                )}
+                <span className={`font-semibold shrink-0 ${isExpired ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {isExpired ? `Completed (${durationDays}d elapsed)` : `${daysRemaining}d left (${pct}%)`}
+                </span>
               </div>
             </div>
 
             {/* Interaction stats */}
-            {campaign.interactionStaged && (campaign as any).interactionStatus && (
+            {campaign.interactionStaged && (campaign as any).interactionStatus && campaign.channel !== 'social' && (
               <div className="px-4 pb-3">
                 <div className="flex items-center gap-3 text-xxs text-purple-600 dark:text-purple-400">
                   <span className="flex items-center gap-1">
@@ -764,7 +812,7 @@ export default function Campaign() {
             )}
 
             {/* Actions row */}
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border-t dark:border-gray-700">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/70 dark:bg-gray-900/40 border-t dark:border-gray-700/80">
               <Link
                 href={`/campaign/${campaign.id}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -773,37 +821,43 @@ export default function Campaign() {
                 <FontAwesomeIcon icon={faArrowRight} className="w-3 h-3" />
               </Link>
               <div className="flex items-center gap-1">
-                {/* Draft + setup incomplete: Continue Setup */}
-                {campaign.status === 'draft' && !campaign.isSetupComplete && (
-                  <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors" title="Continue Setup">
-                    <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
-                    Continue Setup
-                  </button>
-                )}
-                {/* Draft + setup complete: Execute */}
-                {campaign.status === 'draft' && campaign.isSetupComplete && (
-                  <button onClick={() => router.push(`/campaign/${campaign.id}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" title="Execute Campaign">
-                    <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
-                    Execute
-                  </button>
-                )}
-                {/* Running or Limit Reached: Pause */}
-                {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (
-                  <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors" title="Pause Campaign">
-                    <FontAwesomeIcon icon={faPause} className="w-4 h-4" />
-                  </button>
-                )}
-                {/* Paused: Resume */}
-                {campaign.status === 'paused' && (
-                  <button onClick={() => handleResumeCampaign(campaign.id)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Resume Campaign">
-                    <FontAwesomeIcon icon={faPlay} className="w-4 h-4" />
-                  </button>
+                {/* Only show start/execute/resume/pause buttons when campaign duration has NOT elapsed */}
+                {!isExpired && effectiveStatus !== 'completed' && (
+                  <>
+                    {/* Draft + setup incomplete: Continue Setup */}
+                    {effectiveStatus === 'draft' && !campaign.isSetupComplete && (
+                      <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors" title="Continue Setup">
+                        <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+                        Continue Setup
+                      </button>
+                    )}
+                    {/* Draft + setup complete: Execute */}
+                    {effectiveStatus === 'draft' && campaign.isSetupComplete && (
+                      <button onClick={() => router.push(`/campaign/${campaign.id}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" title="Execute Campaign">
+                        <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+                        Execute
+                      </button>
+                    )}
+                    {/* Running or Limit Reached: Pause */}
+                    {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached') && (
+                      <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors" title="Pause Campaign">
+                        <FontAwesomeIcon icon={faPause} className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* Paused: Resume */}
+                    {effectiveStatus === 'paused' && (
+                      <button onClick={() => handleResumeCampaign(campaign.id)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Resume Campaign">
+                        <FontAwesomeIcon icon={faPlay} className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
                 )}
                 {/* Delete always shown */}
                 <button onClick={() => { setCampaignToDelete(campaign.id); setShowDeleteConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Delete Campaign">
                   <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
                 </button>
               </div>
+            </div>
             </div>
           </div>
           );

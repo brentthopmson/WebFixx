@@ -39,23 +39,72 @@ interface CSVRow {
   [key: string]: string;
 }
 
+const PLATFORM_ACTION_LABELS: Array<{ key: string; label: string }> = [
+  { key: 'likesOnPost', label: 'Post Likes' },
+  { key: 'commentOnPost', label: 'Post Comments' },
+  { key: 'likesOnComment', label: 'Comment Likes' },
+  { key: 'commentOnComment', label: 'Comment Replies' },
+  { key: 'follow', label: 'Follows' },
+  { key: 'unfollow', label: 'Unfollows' },
+  { key: 'repostOnPost', label: 'Post Reposts' },
+  { key: 'repostOnComment', label: 'Comment Reposts' },
+  { key: 'likeOnStory', label: 'Story Likes' },
+  { key: 'commentOnStory', label: 'Story Comments' },
+  { key: 'repostOnStory', label: 'Story Reposts' },
+  { key: 'coldMessage', label: 'Direct Messages' },
+  { key: 'inboxReply', label: 'Inbox Replies' },
+  { key: 'emailSent', label: 'Emails Sent' },
+];
+
 // Map a campaigns-sheet row (object keyed by header name) to the Campaign UI
 // shape. Shared by the appData lookup (findCampaign) and the direct
 // getCampaign fallback used when the appData bundle is stale.
 function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Campaign {
   let settingsObj: any = {};
-  try { if (row.settings) settingsObj = JSON.parse(row.settings); } catch {}
+  try {
+    if (typeof row.settings === 'string' && row.settings.trim()) settingsObj = JSON.parse(row.settings);
+    else if (row.settings && typeof row.settings === 'object') settingsObj = row.settings;
+  } catch {}
 
   let contextObj: any = {};
-  try { if (row.context) contextObj = JSON.parse(row.context); } catch {}
+  try {
+    if (typeof row.context === 'string' && row.context.trim()) contextObj = JSON.parse(row.context);
+    else if (row.context && typeof row.context === 'object') contextObj = row.context;
+  } catch {}
 
   let statsObj: any = {};
-  try { if (row.stats) statsObj = JSON.parse(row.stats); } catch {}
+  try {
+    if (typeof row.stats === 'string' && row.stats.trim()) statsObj = JSON.parse(row.stats);
+    else if (row.stats && typeof row.stats === 'object') statsObj = row.stats;
+  } catch {}
+
+  const durationDays = settingsObj.durationDays || 7;
+  const createdRaw = row.createdOn || row.created_at || '';
+  const createdTime = createdRaw ? new Date(createdRaw).getTime() : 0;
+  const isRowExpired = createdTime > 0 && Date.now() >= createdTime + durationDays * 86400000;
+  const rawStatus = row.status || 'draft';
+  const resolvedStatus = isRowExpired && rawStatus !== 'draft' ? 'completed' : rawStatus;
+
+  const resolvedFileUrl = row.fileUrl || settingsObj.fileUrl || '';
+  const resolvedChannel = settingsObj.channel || 'email';
+  const resolvedMode = settingsObj.campaignMode || (resolvedFileUrl ? 'file' : 'interactions-only');
+
+  const postStatusObj = settingsObj.postStatus || {};
+  const engagedPostCount = Object.values(postStatusObj).reduce(
+    (sum: number, acctMap: any) => sum + (acctMap && typeof acctMap === 'object' ? Object.keys(acctMap).length : 0),
+    0
+  );
+  const totalActions =
+    Number(statsObj.totalActions) ||
+    Number(statsObj.interactions) ||
+    engagedPostCount ||
+    Number(settingsObj.analytics?.sent) ||
+    0;
 
   return {
     id: row.campaignId || fallbackId,
     name: settingsObj.name || row.campaignId || '',
-    channel: settingsObj.channel || 'email',
+    channel: resolvedChannel,
     platform: settingsObj.platform || '',
     type: row.type || settingsObj.type || 'general',
     subject: settingsObj.subject || '',
@@ -63,7 +112,7 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     projectId: settingsObj.projectId || '',
     accounts: settingsObj.accounts || [],
     smtpSettings: settingsObj.smtpSettings || [],
-    fileUrl: row.fileUrl || settingsObj.fileUrl || '',
+    fileUrl: resolvedFileUrl,
     deliveryMethod: settingsObj.deliveryMethod || 'smtp',
     validationStaged: settingsObj.validationStaged || false,
     validationStatus: settingsObj.validationStatus || 'idle',
@@ -72,8 +121,13 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     aiPersonalizationStaged: settingsObj.aiPersonalizationStaged || false,
     aiPersonalizationPrompt: settingsObj.aiPersonalizationPrompt || '',
     personalizationStatus: settingsObj.personalizationStatus || 'idle',
-    executeStaged: settingsObj.executeStaged ?? true,
-    interactionStaged: settingsObj.interactionStaged || false,
+    executeStaged: resolvedChannel === 'social'
+      ? !!(settingsObj.shouldSendMessage && resolvedFileUrl)
+      : (resolvedMode === 'interactions-only' ? false : (settingsObj.executeStaged ?? true)),
+    executionStatus: settingsObj.executionStatus || '',
+    interactionStaged: resolvedChannel === 'social'
+      ? true
+      : (settingsObj.interactionStaged || resolvedMode === 'interactions-only' || false),
     interactionStatus: settingsObj.interactionStatus || 'idle',
     interactionStopAfterHours: settingsObj.interactionStopAfterHours || 72,
     interactionAccounts: settingsObj.interactionAccounts || [],
@@ -83,22 +137,26 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     socialInteractionTypes: settingsObj.socialInteractionTypes || [],
     socialStrategyPrompt: settingsObj.socialStrategyPrompt || '',
     socialKeywords: settingsObj.socialKeywords || [],
+    tagStatus: settingsObj.tagStatus || {},
+    postStatus: postStatusObj,
     shouldSendMessage: settingsObj.shouldSendMessage || false,
+    campaignMode: resolvedMode,
     template: settingsObj.template || '',
     templateId: settingsObj.templateId || '',
     templateContent: settingsObj.templateContent || '',
-    durationDays: settingsObj.durationDays || 7,
+    durationDays,
     restUntil: settingsObj.restUntil || null,
     isSetupComplete: settingsObj.isSetupComplete ||
       !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
          settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
-    created_at: row.createdOn || '',
-    status: row.status || 'draft',
+    created_at: createdRaw,
+    status: resolvedStatus,
+    stats: statsObj,
     analytics: {
-      totalRows: statsObj.interactions || 0,
-      sent: statsObj.interactions || 0,
-      delivered: statsObj.inbox || 0,
-      failed: (statsObj.interactions || 0) - (statsObj.inbox || 0)
+      totalRows: Number(settingsObj.analytics?.totalRows) || totalActions,
+      sent: totalActions,
+      delivered: statsObj.inbox || Number(settingsObj.analytics?.delivered) || 0,
+      failed: Number(settingsObj.analytics?.failed) || 0
     }
   } as Campaign;
 }
@@ -198,7 +256,7 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId]);
 
-  // Poll campaign status every 60s — updates all pipeline stage fields and auto-advances
+  // Poll campaign status — updates all pipeline stage fields, stats, and auto-advances
   const pollCampaign = useCallback(async () => {
     try {
       const res = await securedApi.callBackendFunction({
@@ -207,51 +265,40 @@ export default function CampaignDetailPage() {
       });
       if (res.success && res.data) {
         const d = res.data;
-        setCampaign(prev => {
-          if (!prev) return prev;
-          const updated = { ...prev };
-          // Update main status
-          if (d.status && prev.status !== d.status) updated.status = d.status;
-          // Update pipeline stage statuses
-          const stageFields = ['validationStatus', 'enrichmentStatus', 'personalizationStatus', 'interactionStatus'] as const;
-          for (const f of stageFields) {
-            if (d[f] && prev[f] !== d[f]) (updated as any)[f] = d[f];
-          }
-          if (d.lastError !== undefined) (updated as any).lastError = d.lastError;
-          if (d.retryAttempts !== undefined) (updated as any).retryAttempts = d.retryAttempts;
-          if (d.firstStartedAt !== undefined) (updated as any).firstStartedAt = d.firstStartedAt;
-          if (d.startedAt !== undefined) (updated as any).startedAt = d.startedAt;
-          if (d.expiresAt !== undefined) (updated as any).expiresAt = d.expiresAt;
-          return updated;
-        });
+        const mapped = campaignFromRowObject(d, campaignId);
+        setCampaign(mapped);
 
-        // Auto-trigger next pipeline stage when current stage completes
-        const stageOrder = ['validation', 'enrichment', 'personalization', 'execute', 'interact'] as const;
-        const statusMap: Record<string, string> = {
-          validation: d.validationStatus || 'idle',
-          enrichment: d.enrichmentStatus || 'idle',
-          personalization: d.personalizationStatus || 'idle',
-          execute: d.status || 'idle',
-          interact: d.interactionStatus || 'idle',
-        };
-        const stagedMap: Record<string, boolean> = {
-          validation: d.validationStaged || false,
-          enrichment: d.enrichmentStaged || false,
-          personalization: d.aiPersonalizationStaged || false,
-          execute: d.executeStaged ?? true,
-          interact: d.interactionStaged || false,
-        };
+        const createdTime = mapped.created_at ? new Date(mapped.created_at).getTime() : 0;
+        const isExpiredNow = createdTime > 0 && Date.now() >= createdTime + (mapped.durationDays || 7) * 86400000;
+        if (isExpiredNow) {
+          return;
+        }
 
-        if (d.status === 'running') {
+        // Auto-trigger next pipeline stage when current stage completes (email multi-stage pipelines only)
+        if (mapped.channel !== 'social' && mapped.status === 'running') {
+          const stageOrder = ['validation', 'enrichment', 'personalization', 'execute', 'interact'] as const;
+          const statusMap: Record<string, string> = {
+            validation: mapped.validationStatus || 'idle',
+            enrichment: mapped.enrichmentStatus || 'idle',
+            personalization: mapped.personalizationStatus || 'idle',
+            execute: mapped.executionStatus === 'completed' ? 'completed' : (mapped.status || 'idle'),
+            interact: mapped.interactionStatus || 'idle',
+          };
+          const stagedMap: Record<string, boolean> = {
+            validation: mapped.validationStaged || false,
+            enrichment: mapped.enrichmentStaged || false,
+            personalization: mapped.aiPersonalizationStaged || false,
+            execute: mapped.executeStaged ?? true,
+            interact: mapped.interactionStaged || false,
+          };
+
           for (const stage of stageOrder) {
             if (!stagedMap[stage]) continue;
             if (statusMap[stage] === 'completed') {
-              // Find next staged stage that isn't completed yet
               const idx = stageOrder.indexOf(stage);
               for (let i = idx + 1; i < stageOrder.length; i++) {
                 const next = stageOrder[i];
                 if (stagedMap[next] && statusMap[next] !== 'completed' && statusMap[next] !== 'processing') {
-                  // Trigger next stage
                   securedApi.callBackendFunction({
                     functionName: 'runCampaignPipeline',
                     campaignId
@@ -406,10 +453,19 @@ export default function CampaignDetailPage() {
 
   // Auto-poll for status + cleanup refresh timeout on unmount.
   // 15s while running, 30s while in error/retry, 60s otherwise.
-  // Stop only on terminal states: completed / draft.
+  // Stop on terminal states (completed / draft) or once durationDays has elapsed.
   useEffect(() => {
     if (!campaign) return;
     const s = campaign.status;
+    const createdMs = campaign.created_at ? new Date(campaign.created_at).getTime() : 0;
+    const expired = createdMs > 0 && Date.now() >= createdMs + (campaign.durationDays || 7) * 86400000;
+    if (expired) {
+      // One-time call to getCampaign ensures GAS checkAndCompleteExpiredCampaign marks the sheet row 'completed'
+      if (s !== 'completed' && s !== 'draft') {
+        securedApi.callBackendFunction({ functionName: 'getCampaign', campaignId }).catch(() => {});
+      }
+      return;
+    }
     if (s === 'completed' || s === 'draft') return;
     const intervalMs = s === 'running' ? 15000 : (s === 'error' ? 30000 : 60000);
     const interval = setInterval(pollCampaign, intervalMs);
@@ -417,7 +473,7 @@ export default function CampaignDetailPage() {
       clearInterval(interval);
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     };
-  }, [campaign, pollCampaign]);
+  }, [campaign, pollCampaign, campaignId]);
 
   // Filter and paginate CSV data
   const filteredData = searchQuery
@@ -469,6 +525,84 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const durationDays = campaign.durationDays || 7;
+  const createdDate = campaign.created_at ? new Date(campaign.created_at) : null;
+  const endDate = createdDate ? new Date(createdDate.getTime() + durationDays * 86400000) : null;
+  const nowMs = Date.now();
+  const isCampaignExpired = endDate ? nowMs >= endDate.getTime() : false;
+  const effectiveStatus = isCampaignExpired && campaign.status !== 'draft' ? 'completed' : campaign.status;
+  const isResting = !isCampaignExpired && (effectiveStatus === 'resting' || (campaign.restUntil && nowMs < Number(campaign.restUntil)));
+
+  // Resolve connected accounts and their platform usage (from campaign.stats.accounts + hub metadata fallback)
+  const connectedAccountsUsage = (() => {
+    const statsAccounts = campaign.stats?.accounts || {};
+    const allIds = Array.from(
+      new Set([
+        ...(campaign.accounts || []),
+        ...(campaign.interactionAccounts || []),
+        ...Object.keys(statsAccounts),
+        ...Object.keys(campaign.postStatus || {}),
+      ].map(id => String(id || '').trim()).filter(Boolean))
+    );
+
+    const hubRaw = appData?.data?.campaigns ? appData?.data?.hub : null;
+    const hubHeaders: string[] = hubRaw?.headers || [];
+    const hubRows: any[] = hubRaw?.data || [];
+    const subIdx = hubHeaders.indexOf('submissionId');
+    const bidIdx = hubHeaders.indexOf('browserId');
+    const emailIdx = hubHeaders.indexOf('email');
+    const platIdx = hubHeaders.indexOf('platform');
+    const typeIdx = hubHeaders.indexOf('type');
+    const usageIdx = hubHeaders.indexOf('interactionUsage');
+
+    return allIds.map(accountId => {
+      const statEntry = statsAccounts[accountId] || {};
+      const hubRow = hubRows.find(
+        (r: any) =>
+          (subIdx !== -1 && String(r[subIdx] || '').trim() === accountId) ||
+          (bidIdx !== -1 && String(r[bidIdx] || '').trim() === accountId)
+      );
+      const hubIdentifier = hubRow && emailIdx !== -1 ? String(hubRow[emailIdx] || '').trim() : '';
+      const hubPlatform = hubRow
+        ? String((platIdx !== -1 && hubRow[platIdx]) || (typeIdx !== -1 && hubRow[typeIdx]) || '').trim().toLowerCase()
+        : '';
+      let hubUsage: Record<string, any> = {};
+      if (hubRow && usageIdx !== -1 && hubRow[usageIdx]) {
+        try {
+          hubUsage = typeof hubRow[usageIdx] === 'string' ? JSON.parse(hubRow[usageIdx]) : hubRow[usageIdx];
+        } catch {}
+      }
+
+      const rawUsage = statEntry.usage && Object.keys(statEntry.usage).length > 0 ? statEntry.usage : hubUsage;
+      const usageMap: Record<string, { hourly: number; daily: number; monthly: number; total: number }> = {};
+      let computedTotal = 0;
+      for (const [k, v] of Object.entries(rawUsage || {})) {
+        if (k.startsWith('_') || !v || typeof v !== 'object') continue;
+        const t = Number((v as any).total) || 0;
+        const d = Number((v as any).daily) || 0;
+        const h = Number((v as any).hourly) || 0;
+        const m = Number((v as any).monthly) || 0;
+        usageMap[k] = { hourly: h, daily: d, monthly: m, total: t };
+        computedTotal += t;
+      }
+
+      const engagedPosts = Object.keys((campaign.postStatus || {})[accountId] || {}).length;
+      const total = Number(statEntry.total) || computedTotal || engagedPosts || 0;
+
+      return {
+        accountId,
+        identifier: statEntry.identifier && statEntry.identifier !== accountId ? statEntry.identifier : (hubIdentifier || accountId),
+        platform: statEntry.platform || hubPlatform || campaign.platform || campaign.channel || 'account',
+        total,
+        engagedPosts,
+        usage: usageMap,
+      };
+    });
+  })();
+
+  const totalActionsAcrossAccounts = connectedAccountsUsage.reduce((sum, a) => sum + a.total, 0);
+  const displayTotalActions = Math.max(campaign.analytics?.sent || 0, totalActionsAcrossAccounts);
+
   return (
     <div className="p-6 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       {/* Header */}
@@ -488,78 +622,83 @@ export default function CampaignDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-3">
-          {/* Draft + setup incomplete: Continue Setup */}
-          {campaign.status === 'draft' && !campaign.isSetupComplete && (
-            <button
-              onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
-            >
-              <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
-              Continue Setup
-            </button>
+          {/* Action buttons are strictly hidden once the campaign duration has elapsed or status is completed */}
+          {!isCampaignExpired && effectiveStatus !== 'completed' && (
+            <>
+              {/* Draft + setup incomplete: Continue Setup */}
+              {effectiveStatus === 'draft' && !campaign.isSetupComplete && (
+                <button
+                  onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                >
+                  <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+                  Continue Setup
+                </button>
+              )}
+              {/* Draft + setup complete: Edit Settings */}
+              {effectiveStatus === 'draft' && campaign.isSetupComplete && (
+                <button
+                  onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+                  Edit Settings
+                </button>
+              )}
+              {/* Draft + setup complete: Execute Pipeline */}
+              {effectiveStatus === 'draft' && campaign.isSetupComplete && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+                <button
+                  onClick={() => setShowExecuteConfirm(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={exhaustedStagedQuotas.length > 0}
+                  title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
+                >
+                  <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
+                  Execute Pipeline
+                </button>
+              )}
+              {/* Error/Failed: Retry */}
+              {(effectiveStatus === 'error' || effectiveStatus === 'failed') && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await securedApi.callBackendFunction({ functionName: 'runCampaignPipeline', campaignId, retry: true });
+                      toast.success('Retry triggered');
+                      pollCampaign();
+                    } catch (e:any) {
+                      toast.error(e?.message || 'Failed to retry');
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
+                  Retry
+                </button>
+              )}
+              {/* Running or Limit Reached: Pause */}
+              {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached') && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+                <button
+                  onClick={handlePauseCampaign}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                >
+                  <FontAwesomeIcon icon={faPause} className="w-3 h-3" />
+                  Pause
+                </button>
+              )}
+              {/* Paused: Resume */}
+              {effectiveStatus === 'paused' && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+                <button
+                  onClick={handleResumeCampaign}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                >
+                  <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
+                  Resume
+                </button>
+              )}
+            </>
           )}
-          {/* Draft + setup complete: Edit Settings */}
-          {campaign.status === 'draft' && campaign.isSetupComplete && (
-            <button
-              onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
-              Edit Settings
-            </button>
-          )}
-          {/* Draft + setup complete: Execute Pipeline */}
-          {campaign.status === 'draft' && campaign.isSetupComplete && (campaign.status as any) !== 'error' && (campaign.status as any) !== 'failed' && (
-            <button
-              onClick={() => setShowExecuteConfirm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={exhaustedStagedQuotas.length > 0}
-              title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
-            >
-              <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
-              Execute Pipeline
-            </button>
-          )}
-          {/* Error/Failed: Retry */}
-          {(campaign.status === 'error' || campaign.status === 'failed') && (
-            <button
-              onClick={async () => {
-                try {
-                  await securedApi.callBackendFunction({ functionName: 'runCampaignPipeline', campaignId, retry: true });
-                  toast.success('Retry triggered');
-                  pollCampaign();
-                } catch (e:any) {
-                  toast.error(e?.message || 'Failed to retry');
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-            >
-              <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
-              Retry
-            </button>
-          )}
-          {/* Running or Limit Reached: Pause */}
-          {(campaign.status === 'running' || campaign.status === 'Limit Reached') && (campaign.status as any) !== 'error' && (campaign.status as any) !== 'failed' && (
-            <button
-              onClick={handlePauseCampaign}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
-            >
-              <FontAwesomeIcon icon={faPause} className="w-3 h-3" />
-              Pause
-            </button>
-          )}
-          {/* Paused: Resume */}
-          {campaign.status === 'paused' && (campaign.status as any) !== 'error' && (campaign.status as any) !== 'failed' && (
-            <button
-              onClick={handleResumeCampaign}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
-              Resume
-            </button>
-          )}
-          <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColor(campaign.status)}`}>
-            {campaign.status}
+          <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColor(isCampaignExpired && effectiveStatus === 'draft' ? 'completed' : effectiveStatus)}`}>
+            {isCampaignExpired && effectiveStatus === 'draft' ? 'Expired' : effectiveStatus}
           </span>
           {/* Monthly quota for the stages this campaign will run */}
           <span className="hidden md:flex items-center gap-1.5">
@@ -568,7 +707,10 @@ export default function CampaignDetailPage() {
             ))}
           </span>
           <button
-            onClick={() => { if (campaign.fileUrl) fetchCSV(campaign.fileUrl, true, getRefreshInterval(campaign.status)); }}
+            onClick={() => {
+              pollCampaign();
+              if (campaign.fileUrl) fetchCSV(campaign.fileUrl, true, getRefreshInterval(effectiveStatus));
+            }}
             className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             title="Refresh Data"
           >
@@ -595,70 +737,92 @@ export default function CampaignDetailPage() {
           </p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700">
-          <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">{campaign.channel === 'social' ? 'Profile List' : 'CSV Contacts'}</p>
-          <p className="text-sm font-semibold mt-1 dark:text-white">{csvData.length.toLocaleString()}</p>
+          <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">
+            {campaign.channel === 'social'
+              ? (campaign.fileUrl || csvData.length > 0 ? 'Profile List' : 'Target Keywords')
+              : 'CSV Contacts'}
+          </p>
+          <p className="text-sm font-semibold mt-1 dark:text-white">
+            {campaign.channel === 'social' && !campaign.fileUrl && csvData.length === 0
+              ? `${(campaign.socialKeywords || []).length} keyword${(campaign.socialKeywords || []).length === 1 ? '' : 's'}`
+              : csvData.length.toLocaleString()}
+          </p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700">
           <p className="text-xxs font-bold text-gray-400 uppercase tracking-wider">Progress</p>
           <p className="text-sm font-semibold mt-1 dark:text-white">
             {campaign.channel === 'social'
-              ? `${campaign.analytics?.sent || 0} executed / ${(csvData.length || campaign.analytics?.totalRows || 0).toLocaleString()} targets`
-              : `${campaign.analytics?.sent || 0} sent / ${campaign.analytics?.delivered || 0} delivered`}
+              ? `${displayTotalActions.toLocaleString()} actions performed`
+              : `${displayTotalActions.toLocaleString()} sent / ${(campaign.analytics?.delivered || 0).toLocaleString()} delivered`}
           </p>
         </div>
       </div>
 
       {/* Campaign Duration & Lifecycle Card */}
       {(() => {
-        const durationDays = campaign.durationDays || 7;
-        const createdDate = campaign.created_at ? new Date(campaign.created_at) : null;
-        const endDate = createdDate ? new Date(createdDate.getTime() + durationDays * 86400000) : null;
         const now = Date.now();
         const elapsedMs = createdDate ? Math.max(0, now - createdDate.getTime()) : 0;
         const totalMs = durationDays * 86400000;
         const elapsedPct = Math.min(100, Math.round((elapsedMs / totalMs) * 100));
         const remainingMs = endDate ? endDate.getTime() - now : 0;
         const daysLeft = Math.max(0, Math.ceil(remainingMs / 86400000));
-        const isResting = campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil));
         const restMins = campaign.restUntil ? Math.max(0, Math.ceil((Number(campaign.restUntil) - now) / 60000)) : 0;
 
         return (
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2.5">
-              <div className="flex items-center gap-2">
-                <FontAwesomeIcon icon={faClock} className="w-4 h-4 text-purple-500" />
-                <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider">
-                  Campaign Lifecycle & Schedule ({durationDays} Days)
-                </h3>
-                {isResting && (
-                  <span className="px-2 py-0.5 text-xxs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full animate-pulse border border-purple-300 dark:border-purple-700">
-                    Cooldown Rest · Resumes in {restMins}m
-                  </span>
-                )}
+          <div className="relative bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6 overflow-hidden">
+            <div
+              className={`pointer-events-none absolute inset-y-0 left-0 transition-all duration-500 ${
+                elapsedPct >= 100
+                  ? 'bg-emerald-500/15 dark:bg-emerald-500/20'
+                  : 'bg-emerald-500/10 dark:bg-emerald-500/15'
+              }`}
+              style={{ width: `${elapsedPct}%` }}
+            />
+            <div className="relative z-10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2.5">
+                <div className="flex items-center gap-2">
+                  <FontAwesomeIcon icon={faClock} className={`w-4 h-4 ${elapsedPct >= 100 ? 'text-emerald-500' : 'text-purple-500'}`} />
+                  <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider">
+                    Campaign Lifecycle & Schedule ({durationDays} Days)
+                  </h3>
+                  {isResting && (
+                    <span className="px-2 py-0.5 text-xxs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full animate-pulse border border-purple-300 dark:border-purple-700">
+                      Cooldown Rest · Resumes in {restMins}m
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {createdDate && (
+                    <span>
+                      Started: <strong className="text-gray-700 dark:text-gray-200">{createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+                    </span>
+                  )}
+                  {endDate && (
+                    <span className="ml-3">
+                      Scheduled End: <strong className="text-gray-700 dark:text-gray-200">{endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                {createdDate && (
-                  <span>
-                    Started: <strong className="text-gray-700 dark:text-gray-200">{createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+              <div className="space-y-1.5">
+                <div className="w-full bg-gray-100 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      elapsedPct >= 100
+                        ? 'bg-emerald-500'
+                        : elapsedPct >= 80
+                          ? 'bg-emerald-500'
+                          : 'bg-gradient-to-r from-emerald-500 to-green-500'
+                    }`}
+                    style={{ width: `${elapsedPct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xxs">
+                  <span className={elapsedPct >= 100 ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}>{elapsedPct}% elapsed</span>
+                  <span className={remainingMs <= 0 ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}>
+                    {remainingMs > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining` : 'Duration reached (completed)'}
                   </span>
-                )}
-                {endDate && (
-                  <span className="ml-3">
-                    Scheduled End: <strong className="text-gray-700 dark:text-gray-200">{endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-500 ${elapsedPct >= 100 ? 'bg-gray-400' : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500'}`}
-                  style={{ width: `${elapsedPct}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-xxs text-gray-400">
-                <span>{elapsedPct}% elapsed</span>
-                <span>{remainingMs > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining` : 'Duration reached (completed)'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -670,51 +834,88 @@ export default function CampaignDetailPage() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pipeline Stages</h3>
         </div>
-        <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${campaign.channel === 'social' ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
-          {(campaign.channel === 'social'
+        {(() => {
+          const socialInteractStatus =
+            (isCampaignExpired && campaign.status !== 'draft') || effectiveStatus === 'completed'
+              ? 'completed'
+              : (effectiveStatus === 'running' || isResting)
+                ? 'processing'
+                : (effectiveStatus === 'failed' || effectiveStatus === 'error')
+                  ? 'failed'
+                  : (displayTotalActions > 0 ? 'completed' : 'idle');
+          const socialHooksLabel = (() => {
+            const hooks = campaign.socialInteractionTypes || [];
+            const parts: string[] = [];
+            if (hooks.includes('search')) parts.push('Search');
+            if (hooks.includes('inbox')) parts.push('Inbox');
+            if (hooks.includes('other')) parts.push('Profile Page');
+            parts.push('Activities');
+            return parts.join(' & ');
+          })();
+          const emailExecuteStatus =
+            campaign.executionStatus === 'completed' || effectiveStatus === 'completed' || (isCampaignExpired && campaign.status !== 'draft')
+              ? 'completed'
+              : effectiveStatus === 'running'
+                ? 'processing'
+                : (effectiveStatus === 'failed' || effectiveStatus === 'error')
+                  ? 'failed'
+                  : 'idle';
+          const emailInteractStatus =
+            (isCampaignExpired && campaign.status !== 'draft') || effectiveStatus === 'completed'
+              ? 'completed'
+              : (campaign.interactionStatus === 'monitoring' || (effectiveStatus === 'running' && !campaign.executeStaged))
+                ? 'processing'
+                : (campaign.interactionStatus || 'idle');
+
+          const stageItems = campaign.channel === 'social'
             ? [
-                { label: 'Execute', icon: faRocket, staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
-                { label: 'Interaction', icon: faComments, staged: campaign.interactionStaged, status: campaign.interactionStatus || 'idle' },
-                ...(campaign.socialInteractionTypes || []).includes('inbox') ? [{ label: 'Inbox Hook', icon: faEnvelope, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : [],
-                ...(campaign.socialInteractionTypes || []).includes('search') ? [{ label: 'Search Hook', icon: faSearch, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : [],
-                ...(campaign.socialInteractionTypes || []).includes('other') ? [{ label: 'Page Hook', icon: faRobot, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : [],
-                ...(campaign.shouldSendMessage ? [{ label: 'Direct Message', icon: faEnvelope, staged: true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' }] : []),
+                ...(campaign.shouldSendMessage && campaign.fileUrl
+                  ? [{ label: 'Execute (Direct Message)', subtitle: 'CSV Profile DMs', icon: faRocket, staged: true, status: socialInteractStatus }]
+                  : []),
+                { label: 'Interaction', subtitle: socialHooksLabel, icon: faComments, staged: true, status: socialInteractStatus },
               ]
             : [
-                { label: 'Validation', icon: faShieldAlt, staged: campaign.validationStaged, status: campaign.validationStatus },
-                { label: 'Enrichment', icon: faSearch, staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
-                { label: 'AI Personalization', icon: faMagic, staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
-                { label: 'Execute', icon: faRocket, staged: campaign.executeStaged ?? true, status: campaign.status === 'running' ? 'processing' : campaign.status === 'completed' ? 'completed' : 'idle' },
-                { label: 'Interaction', icon: faComments, staged: campaign.interactionStaged, status: campaign.interactionStatus || 'idle' },
-              ]
-          ).map(item => {
-            const statusIcon = item.status === 'completed' ? faCheckCircle
-              : item.status === 'processing' ? faSpinner
-              : item.status === 'failed' ? faTimesCircle
-              : faClock;
-            const statusColor = item.status === 'completed' ? 'text-green-500'
-              : item.status === 'processing' ? 'text-blue-500'
-              : item.status === 'failed' ? 'text-red-500'
-              : 'text-gray-400';
-            return (
-              <div key={item.label} className={`p-3 rounded-lg border dark:border-gray-700 ${item.staged ? 'bg-gray-50 dark:bg-gray-900/40' : 'opacity-50'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <FontAwesomeIcon icon={item.icon} className="w-3.5 h-3.5 text-gray-400" />
-                    <p className="text-xs font-semibold dark:text-gray-300">{item.label}</p>
+                { label: 'Validation', subtitle: '', icon: faShieldAlt, staged: campaign.validationStaged, status: campaign.validationStatus },
+                { label: 'Enrichment', subtitle: '', icon: faSearch, staged: campaign.enrichmentStaged, status: campaign.enrichmentStatus },
+                { label: 'AI Personalization', subtitle: '', icon: faMagic, staged: campaign.aiPersonalizationStaged, status: campaign.personalizationStatus },
+                { label: 'Execute', subtitle: '', icon: faRocket, staged: campaign.executeStaged ?? true, status: emailExecuteStatus },
+                { label: 'Interaction', subtitle: '', icon: faComments, staged: campaign.interactionStaged, status: emailInteractStatus },
+              ];
+
+          return (
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${campaign.channel === 'social' ? 'lg:grid-cols-3' : 'lg:grid-cols-5'}`}>
+              {stageItems.map(item => {
+                const statusIcon = item.status === 'completed' ? faCheckCircle
+                  : item.status === 'processing' ? faSpinner
+                  : item.status === 'failed' ? faTimesCircle
+                  : faClock;
+                const sColor = item.status === 'completed' ? 'text-green-500'
+                  : item.status === 'processing' ? 'text-blue-500'
+                  : item.status === 'failed' ? 'text-red-500'
+                  : 'text-gray-400';
+                return (
+                  <div key={item.label} className={`p-3 rounded-lg border dark:border-gray-700 ${item.staged ? 'bg-gray-50 dark:bg-gray-900/40' : 'opacity-50'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <FontAwesomeIcon icon={item.icon} className="w-3.5 h-3.5 text-emerald-500" />
+                        <p className="text-xs font-semibold dark:text-gray-200">{item.label}</p>
+                      </div>
+                      <FontAwesomeIcon icon={statusIcon} className={`w-3.5 h-3.5 ${sColor} ${item.status === 'processing' ? 'animate-spin' : ''}`} />
+                    </div>
+                    <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1 capitalize">
+                      {item.staged
+                        ? `${item.subtitle ? `${item.subtitle} · ` : ''}${item.status || 'pending'}`
+                        : 'Not staged'}
+                    </p>
                   </div>
-                  <FontAwesomeIcon icon={statusIcon} className={`w-3.5 h-3.5 ${statusColor} ${item.status === 'processing' ? 'animate-spin' : ''}`} />
-                </div>
-                <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1 capitalize">
-                  {item.staged ? (item.status || 'pending') : 'Not staged'}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          );
+        })()}
         {campaign.interactionStaged && (
           <div className="mt-3 text-xxs text-purple-500 dark:text-purple-400">
-            Interaction limits: {campaign.interactionStopAfterHours || 72}h
+            Interaction window: {campaign.channel === 'social' ? `${durationDays}d campaign schedule` : `${campaign.interactionStopAfterHours || 72}h`}
             {' · '}
             <span className="font-semibold">
               Monthly quota: {(() => {
@@ -726,6 +927,91 @@ export default function CampaignDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Connected Accounts & Platform Usage (from campaigns.stats + platform holder) */}
+      {connectedAccountsUsage.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                Connected Accounts & Platform Usage ({connectedAccountsUsage.length})
+              </h3>
+              <p className="text-xxs text-gray-500 dark:text-gray-400 mt-0.5">
+                Live per-account action tally recorded in campaign stats across likes, comments, follows, replies, and messages
+              </p>
+            </div>
+            <span className="px-2.5 py-1 text-xxs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+              Total Actions: {displayTotalActions.toLocaleString()}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {connectedAccountsUsage.map(acc => {
+              const activeActions = PLATFORM_ACTION_LABELS.filter(a => (acc.usage[a.key]?.total || 0) > 0);
+              const displayActions = activeActions.length > 0
+                ? activeActions
+                : (campaign.channel === 'social'
+                    ? PLATFORM_ACTION_LABELS.filter(a => ['likesOnPost', 'commentOnPost', 'likesOnComment', 'commentOnComment', 'follow', 'inboxReply', 'coldMessage'].includes(a.key))
+                    : PLATFORM_ACTION_LABELS.filter(a => ['emailSent', 'inboxReply'].includes(a.key)));
+              return (
+                <div key={acc.accountId} className="p-3.5 rounded-xl border dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FontAwesomeIcon icon={campaign.channel === 'social' ? faRobot : faEnvelope} className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-bold text-gray-900 dark:text-white truncate">{acc.identifier}</span>
+                      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                        {acc.platform}
+                      </span>
+                      {acc.identifier !== acc.accountId && (
+                        <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 truncate">
+                          ({acc.accountId})
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {acc.engagedPosts > 0 && (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                          {acc.engagedPosts} post{acc.engagedPosts === 1 ? '' : 's'} engaged
+                        </span>
+                      )}
+                      <span className="px-2.5 py-0.5 text-xxs font-bold rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+                        {acc.total.toLocaleString()} action{acc.total === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {displayActions.map(({ key, label }) => {
+                      const entry = acc.usage[key] || { hourly: 0, daily: 0, monthly: 0, total: 0 };
+                      const hasCount = entry.total > 0;
+                      return (
+                        <div
+                          key={key}
+                          className={`p-2 rounded-lg border text-left transition-colors ${
+                            hasCount
+                              ? 'bg-emerald-50/70 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/60'
+                              : 'bg-white/60 border-gray-200/70 dark:bg-gray-800/50 dark:border-gray-700/60 opacity-60'
+                          }`}
+                        >
+                          <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 truncate" title={label}>
+                            {label}
+                          </p>
+                          <p className={`text-sm font-bold mt-0.5 ${hasCount ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                            {entry.total.toLocaleString()}
+                          </p>
+                          {hasCount && (entry.daily > 0 || entry.hourly > 0) && (
+                            <p className="text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
+                              1h: {entry.hourly} · 24h: {entry.daily}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* CSV Data Table */}
       {(campaign.fileUrl || (csvData && csvData.length > 0) || csvLoading) && (

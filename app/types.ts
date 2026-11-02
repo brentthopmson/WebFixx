@@ -94,6 +94,8 @@ export interface Campaign {
   // Per-account per-tag resume state: tagStatus[profileId][tag] = 'done'.
   // Engine-managed; keys absent = pending. Removed tags are pruned from all accounts.
   tagStatus?: Record<string, Record<string, string>>;
+  postStatus?: Record<string, Record<string, string>>;
+  executionStatus?: string;
   shouldSendMessage?: boolean; // Send DM to all social profiles in CSV
   platform?: string; // Social target platform (tiktok/twitter/instagram/…)
   engagementMode?: boolean; // true = perform write actions (like/comment/follow), false = read/scrape only
@@ -120,6 +122,24 @@ export interface Campaign {
       sent: number;
       delivered: number;
       failed: number;
+  };
+  stats?: {
+      totalActions?: number;
+      interactions?: number;
+      conversions?: number;
+      inbox?: number;
+      accounts?: Record<string, {
+          identifier?: string;
+          platform?: string;
+          total?: number;
+          usage?: Record<string, {
+              hourly?: number;
+              daily?: number;
+              monthly?: number;
+              total?: number;
+              lastAction?: string;
+          }>;
+      }>;
   };
 }
 
