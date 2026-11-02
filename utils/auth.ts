@@ -691,8 +691,13 @@ export const securedApi = {
       if (result && result.success && fnName !== 'getAppDataLite') {
         const appState = getAppState();
         if (appState && appState.setAppData) {
+          const baseUser = result.user || appState.appData?.user;
+          const freshUserUsage = (result as any).userUsage;
+          const mergedUser = baseUser && freshUserUsage !== undefined
+            ? { ...baseUser, usage: freshUserUsage }
+            : baseUser;
           const updatedAppState = {
-            user: result.user || appState.appData?.user,
+            user: mergedUser,
             isOffline: false, // Added isOffline
             data: {
               transactions: result.appData?.transactions || appState.appData?.data?.transactions || [],
