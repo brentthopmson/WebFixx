@@ -178,7 +178,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         interactionStaged: campaignToEdit.interactionStaged || false,
         interactionStatus: campaignToEdit.interactionStatus || 'idle',
         interactionStopAfterHours: campaignToEdit.interactionStopAfterHours || 72,
-        durationDays: campaignToEdit.durationDays || 7,
+        durationDays: campaignToEdit.durationDays || maxCampaignDurationDays,
         deliveryMethod: campaignToEdit.deliveryMethod || 'smtp',
         firestickEnabled: campaignToEdit.firestickEnabled || false,
         linkType: campaignToEdit.linkType || 'project',
@@ -226,7 +226,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       interactionStaged: false,
       interactionStatus: 'idle',
       interactionStopAfterHours: 72,
-      durationDays: 7,
+      durationDays: maxCampaignDurationDays,
       deliveryMethod: 'smtp',
       firestickEnabled: false,
       linkType: 'project',
@@ -390,6 +390,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [templateSource, setTemplateSource] = useState<'existing' | 'custom'>(campaignToEdit?.templateId ? 'existing' : 'custom');
   const [templatePreview, setTemplatePreview] = useState<string>('');
   const [previewMode, setPreviewMode] = useState<'html' | 'code'>('html');
+  const [showAllPreviewKeywords, setShowAllPreviewKeywords] = useState(false);
+  const [showFullStrategyPrompt, setShowFullStrategyPrompt] = useState(false);
 
   // Parse templates list from appData (EMAIL category only)
   const templatesList = useMemo(() => {
@@ -742,6 +744,60 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const exhaustedQuotaMessage = exhaustedStagedQuotas.length
     ? `Monthly limit reached for: ${exhaustedStagedQuotas.map(q => q.label).join(', ')}. Upgrade your plan to continue.`
     : '';
+
+  // ==================== Step 3 preview derivations ====================
+  // Schedule window: start = now (or the chosen schedule time for scheduled
+  // email), end = start + durationDays (defaults to the admin ceiling).
+  const schedulePreview = (() => {
+    const days = Math.max(1, Number(formData.durationDays) || maxCampaignDurationDays);
+    let start = new Date();
+    if (formData.channel === 'email' && (formData.sendMode || 'now') === 'schedule' && formData.scheduleStartTime) {
+      const chosen = new Date(formData.scheduleStartTime);
+      if (!isNaN(chosen.getTime())) start = chosen;
+    }
+    const end = new Date(start.getTime() + days * 86400000);
+    const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return { days, startLabel: fmt(start), endLabel: fmt(end) };
+  })();
+
+  // Social platform policy — read the same Limits-sheet platform rows the
+  // engine reads (appData.data.limits): per-action {hourly, daily} JSON cells.
+  const platformPolicyRows = (() => {
+    if (formData.channel !== 'social') return [];
+    const limits = (appData as any)?.data?.limits;
+    const headers: string[] = limits?.headers || [];
+    const rows: any[] = Array.isArray(limits?.data) ? limits.data : [];
+    const platformIdx = headers.indexOf('platform');
+    if (platformIdx === -1) return [];
+    const wanted = normalizeSocialPlatformName(formData.platform);
+    if (!wanted) return [];
+    const row = rows.find((r: any) => normalizeSocialPlatformName(r[platformIdx]) === wanted);
+    if (!row) return [];
+    const labels: Array<[string, string]> = [
+      ['likesOnPost', 'Post Likes'],
+      ['commentOnPost', 'Post Comments'],
+      ['follow', 'Follows'],
+      ['unfollow', 'Unfollows'],
+      ['coldMessage', 'Direct Messages'],
+      ['inboxReply', 'Inbox Replies'],
+    ];
+    return labels.map(([key, label]) => {
+      const idx = headers.indexOf(key);
+      if (idx === -1) return null;
+      let policy: any = null;
+      try { policy = typeof row[idx] === 'string' ? JSON.parse(row[idx]) : row[idx]; } catch {}
+      const hourly = Number(policy?.hourly) || 0;
+      const daily = Number(policy?.daily) || 0;
+      if (!hourly && !daily) return null;
+      return { key, label, hourly, daily };
+    }).filter(Boolean) as Array<{ key: string; label: string; hourly: number; daily: number }>;
+  })();
+
+  // Selected outreach accounts resolved to identifier + platform for chips.
+  const selectedOutreachAccounts = accountsList
+    .filter((a: any) => (formData.accounts || []).includes(a.accountId))
+    .map((a: any) => ({ accountId: a.accountId, identifier: a.identifier || a.accountId, platform: a.platform || '', type: a.type || '' }));
+  const previewPlatformSlug = normalizeSocialPlatformName(formData.platform);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 dark:bg-opacity-80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -1161,17 +1217,17 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         <FontAwesomeIcon icon={faClock} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
                         <span>Campaign Run Duration (Days)</span>
                       </label>
-                      <span className="text-xxs text-gray-400">Default: 7 days · Admin ceiling: {maxCampaignDurationDays} days</span>
+                      <span className="text-xxs text-gray-400">Default: {maxCampaignDurationDays} days (admin ceiling)</span>
                     </div>
                     <input
                       type="number"
                       min="1"
                       max={maxCampaignDurationDays}
                       className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
-                      value={formData.durationDays || 7}
+                      value={formData.durationDays || maxCampaignDurationDays}
                       onChange={e => {
                         const val = parseInt(e.target.value, 10);
-                        const clamped = isNaN(val) ? 7 : Math.min(Math.max(1, val), maxCampaignDurationDays);
+                        const clamped = isNaN(val) ? maxCampaignDurationDays : Math.min(Math.max(1, val), maxCampaignDurationDays);
                         setFormData(prev => ({ ...prev, durationDays: clamped }));
                       }}
                     />
@@ -1429,7 +1485,14 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 </div>
                 <div>
                   <p className="text-gray-400 font-medium">Channel Type</p>
-                  <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5 capitalize">{formData.channel} campaign</p>
+                  <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5 capitalize flex items-center gap-2">
+                    {formData.channel} campaign
+                    {formData.channel === 'social' && previewPlatformSlug && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                        {previewPlatformSlug}
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-400 font-medium">Project Source</p>
@@ -1438,8 +1501,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-400 font-medium">Outreach Accounts</p>
-                  <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{(formData.accounts || []).length} logged-in profiles</p>
+                  <p className="text-gray-400 font-medium">Campaign Mode</p>
+                  <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
+                    {formData.campaignMode === 'interactions-only' ? 'Interactions only (no CSV)' : 'CSV-driven'}
+                  </p>
                 </div>
 
                 {formData.channel === 'email' ? (
@@ -1460,13 +1525,30 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         {formData.aiPersonalizationStaged ? '✓ AI Personalization ' : ''}
                         {(formData.executeStaged ?? true) ? '✓ Execute ' : ''}
                         {formData.interactionStaged ? `✓ Interaction (${formData.interactionStopAfterHours || 72}h) ` : ''}
-                        · Duration: {formData.durationDays || 7}d
                         {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged ? 'No stages selected' : ''}
                       </p>
                     </div>
                     <div className="col-span-1 sm:col-span-2">
                       <p className="text-gray-400 font-medium">Base Subject Line</p>
-                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{formData.subject}</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{formData.subject || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 font-medium">Template</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
+                        {formData.templateId
+                          ? (templatesList.find((t: any) => t.templateId === formData.templateId)?.name || formData.templateId)
+                          : 'Custom (inline body)'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 font-medium">Firestick Warm-up</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
+                        {formData.firestickEnabled ? '✓ Enabled (send capacity halved)' : 'Disabled'}
+                      </p>
+                    </div>
+                    <div className="col-span-1 sm:col-span-2">
+                      <p className="text-gray-400 font-medium">Reply Folder</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{formData.replyFolder || 'None'}</p>
                     </div>
                   </>
                 ) : (
@@ -1477,17 +1559,57 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         {(formData.socialInteractionTypes || []).join(', ') || 'No interaction hooks selected'}
                       </p>
                     </div>
-                    <div className="col-span-1 sm:col-span-2">
-                      <p className="text-gray-400 font-medium">Discovery Keywords / Handles</p>
-                      <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-0.5 leading-relaxed">
-                        {(formData.socialKeywords || []).join(', ') || 'None specified'}
-                      </p>
-                    </div>
                     <div>
                       <p className="text-gray-400 font-medium">Send DM to CSV Profiles</p>
                       <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
                         {formData.shouldSendMessage ? '✓ Enabled' : 'Disabled'}
                       </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 font-medium">Target CSV</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
+                        {formData.fileUrl ? '✓ Uploaded' : 'None (keyword-driven)'}
+                      </p>
+                    </div>
+                    <div className="col-span-1 sm:col-span-2">
+                      <p className="text-gray-400 font-medium">Discovery Keywords / Handles ({(formData.socialKeywords || []).length})</p>
+                      {(formData.socialKeywords || []).length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {((showAllPreviewKeywords ? (formData.socialKeywords || []) : (formData.socialKeywords || []).slice(0, 8))).map((k: string) => (
+                            <span key={k} className="text-xxs font-mono bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 px-2 py-0.5 rounded-full">{k}</span>
+                          ))}
+                          {(formData.socialKeywords || []).length > 8 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllPreviewKeywords(v => !v)}
+                              className="text-xxs font-bold text-emerald-600 dark:text-emerald-400 hover:underline px-1"
+                            >
+                              {showAllPreviewKeywords ? 'Show less' : `+${(formData.socialKeywords || []).length - 8} more`}
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">None specified</p>
+                      )}
+                    </div>
+                    <div className="col-span-1 sm:col-span-2">
+                      <p className="text-gray-400 font-medium">AI Strategy Prompt</p>
+                      {formData.socialStrategyPrompt ? (
+                        <>
+                          <p className={`text-xs text-gray-700 dark:text-gray-200 mt-0.5 leading-relaxed whitespace-pre-wrap ${showFullStrategyPrompt ? '' : 'line-clamp-3'}`}>
+                            {formData.socialStrategyPrompt}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowFullStrategyPrompt(v => !v)}
+                            className="text-xxs font-bold text-blue-600 dark:text-blue-400 hover:underline mt-1"
+                          >
+                            {showFullStrategyPrompt ? 'Collapse' : 'Show full prompt'}
+                          </button>
+                        </>
+                      ) : (
+                        <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">None — engine default strategy</p>
+                      )}
                     </div>
                   </>
                 )}
@@ -1503,6 +1625,23 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                             : redirectsList.find((r: any) => r.redirectId === formData.linkId)?.title || formData.linkId
                         }` : 'No redirect tracking injected'}
                   </p>
+                </div>
+
+                {/* Outreach account chips — identifier + platform/type */}
+                <div className="col-span-1 sm:col-span-2">
+                  <p className="text-gray-400 font-medium">Outreach Accounts ({selectedOutreachAccounts.length})</p>
+                  {selectedOutreachAccounts.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {selectedOutreachAccounts.map((acc: any) => (
+                        <span key={acc.accountId} className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-1 rounded-full">
+                          <span className="font-mono">{acc.identifier}</span>
+                          <span className="text-[10px] bg-blue-100 dark:bg-blue-800/50 px-1 rounded uppercase">{acc.platform || acc.type || 'account'}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">No accounts selected</p>
+                  )}
                 </div>
 
                 {/* Send Mode Toggle */}
@@ -1565,7 +1704,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                           return (
                             <span key={accId} className="inline-flex items-center gap-1.5 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-1 rounded-full">
                               <span className="font-mono">{acc?.email || accId}</span>
-                              <span className="text-[10px] bg-purple-200 dark:bg-purple-800/50 px-1 rounded">{acc?.type || 'unknown'}</span>
+                              <span className="text-[10px] bg-purple-200 dark:bg-purple-800/50 px-1 rounded uppercase">{acc?.platform || acc?.type || 'unknown'}</span>
                             </span>
                           );
                         })}
@@ -1576,9 +1715,121 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Schedule & Lifecycle — timeframe the campaign will actually run */}
+            <div className="bg-gray-50 dark:bg-gray-700 border dark:border-gray-600 p-5 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b pb-2 dark:border-gray-600">
+                <h3 className="font-bold text-gray-950 dark:text-white flex items-center gap-2">
+                  <FontAwesomeIcon icon={faClock} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
+                  Schedule &amp; Lifecycle
+                </h3>
+                <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                  {schedulePreview.days} days
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <p className="text-gray-400 font-medium">Starts</p>
+                  <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{schedulePreview.startLabel}</p>
+                  {formData.channel === 'email' && formData.sendMode === 'schedule' && formData.scheduleStartTime && (
+                    <p className="text-xxs text-purple-600 dark:text-purple-400 mt-0.5">
+                      Scheduled {new Date(formData.scheduleStartTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">Auto-completes</p>
+                  <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{schedulePreview.endLabel}</p>
+                  <p className="text-xxs text-gray-400 mt-0.5">No buttons or triggers after this point</p>
+                </div>
+              </div>
+
+              {/* Day 0 of N lifecycle track */}
+              <div>
+                <div className="flex justify-between text-xxs mb-1">
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Day 0 of {schedulePreview.days}</span>
+                  <span className="text-gray-400">Track fills green until expiry</span>
+                </div>
+                <div className="h-2 w-full bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: '0%', background: 'linear-gradient(90deg, #34d399, #22c55e)' }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                  <span>{schedulePreview.startLabel}</span>
+                  <span>{schedulePreview.endLabel}</span>
+                </div>
+              </div>
+
+              <p className="text-xxs text-gray-500 dark:text-gray-400">
+                {formData.channel === 'social'
+                  ? 'Runs the full duration — daily waves with automatic rate-limit rest until expiry.'
+                  : formData.interactionStaged
+                    ? `Reply interaction runs ${formData.interactionStopAfterHours || 72}h after sends finish; campaign expires ${schedulePreview.endLabel}.`
+                    : 'Sends run per plan limits until complete or the duration expires.'}
+              </p>
+            </div>
+
+            {/* Expected Limits — the real gates this campaign will hit */}
+            <div className="bg-gray-50 dark:bg-gray-700 border dark:border-gray-600 p-5 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b pb-2 dark:border-gray-600">
+                <h3 className="font-bold text-gray-950 dark:text-white flex items-center gap-2">
+                  <FontAwesomeIcon icon={faCheckSquare} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
+                  Expected Limits
+                </h3>
+              </div>
+
+              {formData.channel === 'social' ? (
+                platformPolicyRows.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {platformPolicyRows.map((p) => (
+                      <div key={p.key} className="flex items-center justify-between text-xs bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg px-3 py-1.5">
+                        <span className="font-semibold text-gray-700 dark:text-gray-200">{p.label}</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                          {p.hourly > 0 ? `${p.hourly}/hour` : ''}
+                          {p.hourly > 0 && p.daily > 0 ? ' · ' : ''}
+                          {p.daily > 0 ? `${p.daily}/day` : ''}
+                        </span>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                      Per-account policy for {previewPlatformSlug} — the engine auto-rests at these ceilings.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+                    No platform policy configured{previewPlatformSlug ? ` for ${previewPlatformSlug}` : ''} — actions are treated as unlimited.
+                  </p>
+                )
+              ) : (
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-gray-400 font-medium">SMTP Pool</p>
+                    <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
+                      {(formData.smtpSettings || []).length} servers ({formData.deliveryMethod || 'smtp'} rotation)
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 font-medium">Firestick Warm-up</p>
+                    <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
+                      {formData.firestickEnabled ? '✓ Enabled — daily send capacity halved' : 'Disabled'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Hard caps */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xxs text-gray-500 dark:text-gray-400 border-t dark:border-gray-600 pt-2">
+                <span>Accounts: <strong className="text-gray-700 dark:text-gray-200">{(formData.accounts || []).length} of max {maxCampaignAccounts}</strong></span>
+                {csvAnalytics && (
+                  <span>CSV: <strong className="text-gray-700 dark:text-gray-200">{csvAnalytics.totalRows} rows</strong></span>
+                )}
+                <span>File ceiling: <strong className="text-gray-700 dark:text-gray-200">{campaignFileSize ? `${campaignFileSize}KB` : 'plan default'}</strong></span>
+                <span>Duration: <strong className="text-gray-700 dark:text-gray-200">{schedulePreview.days}d (max {maxCampaignDurationDays}d)</strong></span>
+              </div>
 
               {/* Plan usage — the monthly quotas this campaign will spend */}
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700 space-y-2">
+              <div className="p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700 space-y-2">
                 <p className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Plan usage (monthly quota)</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {stagedQuotaKeys.map(k => (

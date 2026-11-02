@@ -78,7 +78,7 @@ export interface Campaign {
 
   // Per-campaign interaction limits
   interactionStopAfterHours?: number; // Default: 72
-  durationDays?: number; // Default: 7, bounded by SETTINGS.campaignMaxDurationDays at creation
+  durationDays?: number; // Default: admin ceiling (SETTINGS.campaignMaxDurationDays) at creation
   restUntil?: number | string | null;
 
   // Setup completion tracking
