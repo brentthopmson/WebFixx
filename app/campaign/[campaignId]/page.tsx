@@ -533,7 +533,10 @@ export default function CampaignDetailPage() {
   const effectiveStatus = isCampaignExpired && campaign.status !== 'draft' ? 'completed' : campaign.status;
   const isResting = !isCampaignExpired && (effectiveStatus === 'resting' || (campaign.restUntil && nowMs < Number(campaign.restUntil)));
 
-  // Resolve connected accounts and their platform usage (from campaign.stats.accounts + hub metadata fallback)
+  // Resolve connected accounts and their platform usage — STRICTLY from this
+  // campaign row's stats column (campaign-scoped). Never read the hub's
+  // interactionUsage: that is the account-wide quota shared across every
+  // campaign and must not appear here.
   const connectedAccountsUsage = (() => {
     const statsAccounts = campaign.stats?.accounts || {};
     const allIds = Array.from(
@@ -545,35 +548,10 @@ export default function CampaignDetailPage() {
       ].map(id => String(id || '').trim()).filter(Boolean))
     );
 
-    const hubRaw = appData?.data?.campaigns ? appData?.data?.hub : null;
-    const hubHeaders: string[] = hubRaw?.headers || [];
-    const hubRows: any[] = hubRaw?.data || [];
-    const subIdx = hubHeaders.indexOf('submissionId');
-    const bidIdx = hubHeaders.indexOf('browserId');
-    const emailIdx = hubHeaders.indexOf('email');
-    const platIdx = hubHeaders.indexOf('platform');
-    const typeIdx = hubHeaders.indexOf('type');
-    const usageIdx = hubHeaders.indexOf('interactionUsage');
-
     return allIds.map(accountId => {
       const statEntry = statsAccounts[accountId] || {};
-      const hubRow = hubRows.find(
-        (r: any) =>
-          (subIdx !== -1 && String(r[subIdx] || '').trim() === accountId) ||
-          (bidIdx !== -1 && String(r[bidIdx] || '').trim() === accountId)
-      );
-      const hubIdentifier = hubRow && emailIdx !== -1 ? String(hubRow[emailIdx] || '').trim() : '';
-      const hubPlatform = hubRow
-        ? String((platIdx !== -1 && hubRow[platIdx]) || (typeIdx !== -1 && hubRow[typeIdx]) || '').trim().toLowerCase()
-        : '';
-      let hubUsage: Record<string, any> = {};
-      if (hubRow && usageIdx !== -1 && hubRow[usageIdx]) {
-        try {
-          hubUsage = typeof hubRow[usageIdx] === 'string' ? JSON.parse(hubRow[usageIdx]) : hubRow[usageIdx];
-        } catch {}
-      }
 
-      const rawUsage = statEntry.usage && Object.keys(statEntry.usage).length > 0 ? statEntry.usage : hubUsage;
+      const rawUsage = statEntry.usage || {};
       const usageMap: Record<string, { hourly: number; daily: number; monthly: number; total: number }> = {};
       let computedTotal = 0;
       for (const [k, v] of Object.entries(rawUsage || {})) {
@@ -591,8 +569,8 @@ export default function CampaignDetailPage() {
 
       return {
         accountId,
-        identifier: statEntry.identifier && statEntry.identifier !== accountId ? statEntry.identifier : (hubIdentifier || accountId),
-        platform: statEntry.platform || hubPlatform || campaign.platform || campaign.channel || 'account',
+        identifier: statEntry.identifier && statEntry.identifier !== accountId ? statEntry.identifier : accountId,
+        platform: statEntry.platform || campaign.platform || campaign.channel || 'account',
         total,
         engagedPosts,
         usage: usageMap,
@@ -601,7 +579,13 @@ export default function CampaignDetailPage() {
   })();
 
   const totalActionsAcrossAccounts = connectedAccountsUsage.reduce((sum, a) => sum + a.total, 0);
-  const displayTotalActions = Math.max(campaign.analytics?.sent || 0, totalActionsAcrossAccounts);
+  const engagedPostsTotal = connectedAccountsUsage.reduce((sum, a) => sum + a.engagedPosts, 0);
+  const displayTotalActions =
+    Number((campaign.stats as any)?.totalActions) ||
+    totalActionsAcrossAccounts ||
+    engagedPostsTotal ||
+    Number(campaign.analytics?.sent) ||
+    0;
 
   return (
     <div className="p-6 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
