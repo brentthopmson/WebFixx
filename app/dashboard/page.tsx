@@ -430,6 +430,25 @@ export default function Dashboard() {
       const category = (item?.category || 'WIRE') as 'WIRE' | 'BANK' | 'SOCIAL';
       const browserId = item?.browserId || item?.submissionId || id;
 
+      // Optimistically mark extraction as started in local hub data so ItemDetailsModal
+      // immediately renders the spinning progress banner
+      if (item) {
+        const nowIso = new Date().toISOString();
+        item.extractStatus = 'started';
+        item.extractStatusAt = nowIso;
+        if (setAppData) {
+          setAppData((prev: any) => {
+            if (!prev?.data?.hub) return prev;
+            const updatedHub = prev.data.hub.map((r: any) =>
+              (r.id === id || r.browserId === id || r.submissionId === id)
+                ? { ...r, extractStatus: 'started', extractStatusAt: nowIso }
+                : r
+            );
+            return { ...prev, data: { ...prev.data, hub: updatedHub } };
+          });
+        }
+      }
+
       const result = await securedApi.callBackendFunction({
         functionName: 'runSmartExtract',
         browserId,

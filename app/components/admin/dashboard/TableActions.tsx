@@ -125,19 +125,21 @@ export const TableActions = ({
       return;
     }
 
-    switch (currentAction.type) {
-      case 'verify':
-        await onVerify(currentAction.id);
-        break;
-      case 'cookie':
-        await onGetCookie(currentAction.id);
-        break;
-      case 'extract':
-        await onExtract(currentAction.id);
-        break;
-    }
+    const action = currentAction;
     setShowConfirmModal(false);
     setCurrentAction(null);
+
+    switch (action.type) {
+      case 'verify':
+        await onVerify(action.id);
+        break;
+      case 'cookie':
+        await onGetCookie(action.id);
+        break;
+      case 'extract':
+        await onExtract(action.id);
+        break;
+    }
   };
 
   const confirmMessageFor = (type?: string) => {
