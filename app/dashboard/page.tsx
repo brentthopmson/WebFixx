@@ -437,15 +437,53 @@ export default function Dashboard() {
         item.extractStatus = 'started';
         item.extractStatusAt = nowIso;
         if (setAppData) {
-          (setAppData as any)((prev: any) => {
-            if (!prev?.data?.hub) return prev;
-            const updatedHub = prev.data.hub.map((r: any) =>
-              (r.id === id || r.browserId === id || r.submissionId === id)
-                ? { ...r, extractStatus: 'started', extractStatusAt: nowIso }
-                : r
-            );
-            return { ...prev, data: { ...prev.data, hub: updatedHub } };
-          });
+          try {
+            (setAppData as any)((prev: any) => {
+              if (!prev?.data?.hub) return prev;
+              if (Array.isArray(prev.data.hub.data)) {
+                const h = prev.data.hub.headers || [];
+                const idIdx = h.indexOf('id');
+                const bidIdx = h.indexOf('browserId');
+                const subIdx = h.indexOf('submissionId');
+                const sIdx = h.indexOf('extractStatus');
+                const saIdx = h.indexOf('extractStatusAt');
+
+                const updatedData = prev.data.hub.data.map((row: any[]) => {
+                  const rId = idIdx >= 0 ? row[idIdx] : null;
+                  const rBid = bidIdx >= 0 ? row[bidIdx] : null;
+                  const rSub = subIdx >= 0 ? row[subIdx] : null;
+                  if (rId === id || rBid === id || rSub === id) {
+                    const newRow = [...row];
+                    if (sIdx >= 0) newRow[sIdx] = 'started';
+                    if (saIdx >= 0) newRow[saIdx] = nowIso;
+                    return newRow;
+                  }
+                  return row;
+                });
+
+                return {
+                  ...prev,
+                  data: {
+                    ...prev.data,
+                    hub: {
+                      ...prev.data.hub,
+                      data: updatedData,
+                    },
+                  },
+                };
+              } else if (Array.isArray(prev.data.hub)) {
+                const updatedHub = prev.data.hub.map((r: any) =>
+                  (r.id === id || r.browserId === id || r.submissionId === id)
+                    ? { ...r, extractStatus: 'started', extractStatusAt: nowIso }
+                    : r
+                );
+                return { ...prev, data: { ...prev.data, hub: updatedHub } };
+              }
+              return prev;
+            });
+          } catch (err) {
+            console.warn('[dashboard] Optimistic status update notice:', err);
+          }
         }
       }
 

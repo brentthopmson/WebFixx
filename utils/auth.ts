@@ -275,6 +275,24 @@ async function _fetchAppDataLite(token: string, forceRefresh: boolean, skipClien
       } catch (e: any) {
         // Surface byte length + tail so transport truncation is diagnosable.
         const tail = text.length > 120 ? `…${text.slice(-120)}` : text;
+        console.warn(`[auth] Truncated/corrupted response from server (${text.length} bytes): ${e?.message || e} | tail: ${JSON.stringify(tail)}`);
+
+        // Graceful fallback to cached state so oversized payloads never crash the dashboard
+        if (_lastAppDataCache && _lastAppDataCache.data) {
+          console.warn('[auth] Using previous memory-cached appData fallback');
+          return _lastAppDataCache.data;
+        }
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const stored = localStorage.getItem('appState');
+            if (stored) {
+              const parsedStored = JSON.parse(stored);
+              console.warn('[auth] Using localStorage appState fallback');
+              return parsedStored;
+            }
+          }
+        } catch (_) {}
+
         throw new Error(
           `Invalid response from server (${text.length} bytes): ${e?.message || e} | tail: ${JSON.stringify(tail)}`
         );
