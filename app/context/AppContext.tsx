@@ -74,8 +74,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [appData]);
 
   // Function to handle setting app data, ensuring isOffline is managed
-  const handleSetAppData = useCallback((data: AppState) => {
-    setAppData(prev => ({ ...data, isOffline: prev?.isOffline || false })); // Preserve isOffline status
+  const handleSetAppData = useCallback((data: any) => {
+    setAppData(prev => {
+      const next = typeof data === 'function' ? data(prev) : data;
+      return next ? { ...next, isOffline: prev?.isOffline || false } : null;
+    });
   }, []);
 
   // Function to attempt reconnection

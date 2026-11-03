@@ -437,7 +437,7 @@ export default function Dashboard() {
         item.extractStatus = 'started';
         item.extractStatusAt = nowIso;
         if (setAppData) {
-          setAppData((prev: any) => {
+          (setAppData as any)((prev: any) => {
             if (!prev?.data?.hub) return prev;
             const updatedHub = prev.data.hub.map((r: any) =>
               (r.id === id || r.browserId === id || r.submissionId === id)

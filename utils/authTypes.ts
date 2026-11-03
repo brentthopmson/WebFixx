@@ -62,7 +62,7 @@ export interface AppState {
 
 export interface GlobalAppStateContext {
   appData: AppState | null;
-  setAppData: (state: AppState) => void;
+  setAppData: (state: AppState | ((prev: AppState | null) => AppState) | any) => void;
   clearAppData: () => void; // Added clearAppData function
   isOffline: boolean; // Added isOffline state
   setIsOffline: (isOffline: boolean) => void; // Added setIsOffline function
