@@ -68,4 +68,5 @@ export interface GlobalAppStateContext {
   setIsOffline: (isOffline: boolean) => void; // Added setIsOffline function
   attemptReconnect: () => Promise<boolean>; // Added attemptReconnect function
   isReconnecting: boolean; // Added isReconnecting state
+  isRestoringSession?: boolean; // True while validating loggedInAdmin cookie and hydrating session on mount
 }

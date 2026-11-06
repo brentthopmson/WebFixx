@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -33,7 +33,7 @@ export default function Home() {
   const [ipData, setIpData] = useState<IpData | null>(null); // State for IP data
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null); // State for device info
   const router = useRouter();
-  const { appData, setAppData } = useAppState();
+  const { appData, setAppData, isRestoringSession } = useAppState();
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       // Prioritize appData for authenticated users, otherwise local storage
@@ -165,18 +165,18 @@ export default function Home() {
     }
   };
 
-  // Modified auth check
+  // Modified auth check (wait for mount-time session restore from cookie)
   useEffect(() => {
     const checkAuth = async () => {
       if (appData?.user && appData.isAuthenticated) {
         handleRedirect(appData.user);
-      } else {
+      } else if (!isRestoringSession) {
         setIsCheckingAuth(false);
       }
     };
 
     checkAuth();
-  }, [appData, router, handleRedirect]);
+  }, [appData, router, handleRedirect, isRestoringSession]);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -202,7 +202,7 @@ export default function Home() {
         if (response.success && response.token) {
           // Store token in cookies
           document.cookie = `loggedInAdmin=${response.token}; path=/; max-age=2592000`;
-          document.cookie = `verifyStatus=${response.user.verifyStatus}; path=/; max-age=2592000`;
+          document.cookie = `verifyStatus=${response.user?.verifyStatus || ''}; path=/; max-age=2592000`;
 
           // Update global app state immediately after successful login
           setAppData({
@@ -211,6 +211,15 @@ export default function Home() {
             isAuthenticated: true,
             isOffline: false, // Ensure isOffline is explicitly set to false
           });
+
+          // Deterministic navigation (don't rely solely on the appData effect)
+          if (response.needsVerification || response.user?.verifyStatus === 'FALSE' || !response.user?.verifyStatus) {
+            router.replace("/verify");
+          } else {
+            handleRedirect(response.user);
+          }
+        } else {
+          setError(response.error || 'Login failed. Please try again.');
         }
       } else {
         // Automatically extract username from email
@@ -264,8 +273,8 @@ export default function Home() {
     }
   };
 
-  // Show loading state while checking auth
-  if (isCheckingAuth || !ipData || !deviceInfo) { // Added ipData and deviceInfo to loading condition
+  // Show loading state while checking auth / restoring session
+  if (isCheckingAuth || isRestoringSession || !ipData || !deviceInfo) { // Added ipData and deviceInfo to loading condition
     return (
       <div className="min-h-screen">
         <LoadingSpinner 

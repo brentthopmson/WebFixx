@@ -212,6 +212,18 @@ async function safeJsonParse(response: Response): Promise<any> {
   try {
     return JSON.parse(text);
   } catch {
+    const ct = (response.headers.get('content-type') || '').toLowerCase();
+    const snippet = text.slice(0, 500).toLowerCase();
+    const looksLikeTimeoutHtml =
+      ct.includes('text/html') ||
+      snippet.includes('<!doctype') || snippet.includes('<html') ||
+      snippet.includes('cloudflare') || snippet.includes('gateway time-out') ||
+      snippet.includes('bad gateway') || snippet.includes('error 502') ||
+      snippet.includes('error 504') || snippet.includes('error 524') ||
+      response.status === 502 || response.status === 504 || response.status === 524;
+    if (looksLikeTimeoutHtml) {
+      throw new Error('The server took too long to respond (timeout). Your request may still be processing - please wait a moment and try again.');
+    }
     throw new Error('Server returned an invalid response. Please try again.');
   }
 }
@@ -373,16 +385,24 @@ export const authApi = {
   },
 
   login: async (data: LoginData): Promise<LoginResponse> => {
-    const response = await fetch(`${API_BASE_URL}/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: objectToFormData({ 
-        action: 'login',
-        ...data 
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: objectToFormData({ 
+          action: 'login',
+          ...data 
+        }),
+      });
+    } catch (e: any) {
+      if (e?.name === 'TypeError' || String(e?.message || '').toLowerCase().includes('failed to fetch')) {
+        throw new Error('Network error while logging in. Please check your connection and try again.');
+      }
+      throw e;
+    }
 
     const responseData = await safeJsonParse(response);
 
@@ -391,7 +411,8 @@ export const authApi = {
     }
 
     if (!responseData.token || !responseData.user) {
-      throw new Error('Invalid response format');
+      // Preserve server message if present (e.g., pending verification/approval states)
+      throw new Error(responseData.message || responseData.error || 'Invalid response format');
     }
 
     return {

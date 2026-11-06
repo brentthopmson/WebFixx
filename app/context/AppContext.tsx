@@ -81,6 +81,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Restore session from loggedInAdmin cookie on mount (covers hard reloads when
+  // localStorage is missing/stale/quota-trimmed). This prevents "reload -> back to login".
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        if (typeof document === 'undefined') {
+          if (!cancelled) setIsRestoringSession(false);
+          return;
+        }
+        const token = document.cookie.match('(^|;)\\s*loggedInAdmin\\s*=\\s*([^;]+)')?.pop();
+        if (!token) {
+          if (!cancelled) setIsRestoringSession(false);
+          return;
+        }
+        // If localStorage already hydrated an authenticated session, no blocking restore needed.
+        try {
+          const stored = localStorage.getItem('appState');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed?.isAuthenticated && parsed?.user) {
+              if (!cancelled) setIsRestoringSession(false);
+              return;
+            }
+          }
+        } catch {
+          // ignore localStorage parse issues and fall through to backend restore
+        }
+        // Rehydrate from backend using the cookie token. updateAppData handles
+        // definitive auth failures; transient/network/invalid-response errors are caught
+        // here so we don't clear a potentially valid cookie on a temporary outage.
+        await authApi.updateAppData(handleSetAppData, false);
+      } catch (err) {
+        // Keep cookie on transient failures (network/invalid response/timeout).
+        // Definitive auth errors are handled inside updateAppData/secured flows.
+        console.warn('Session restore failed (will keep cookie for retry):', err);
+      } finally {
+        if (!cancelled) setIsRestoringSession(false);
+      }
+    };
+    restore();
+    return () => { cancelled = true; };
+  }, [handleSetAppData]);
+
   // Function to attempt reconnection
   const attemptReconnect = useCallback(async () => {
     if (isReconnecting) return false; // Prevent multiple reconnection attempts
@@ -151,7 +196,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isOffline, // Provide isOffline
       setIsOffline, // Provide setIsOffline
       attemptReconnect, // Provide attemptReconnect
-      isReconnecting // Provide isReconnecting
+      isReconnecting, // Provide isReconnecting
+      isRestoringSession // Provide session restore status
     }}>
       {children}
     </AppContext.Provider>
