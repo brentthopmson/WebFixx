@@ -119,9 +119,11 @@ export default function DomainManagementSettings({ project, onSave }: DomainMana
                 }
               } else {
                 setError(response.error || 'Failed to enable domain management');
+                setShowDomainConfirmation(false);
               }
             } catch (err) {
               setError('Failed to enable domain management');
+              setShowDomainConfirmation(false);
             } finally {
               setLoading(false);
             }

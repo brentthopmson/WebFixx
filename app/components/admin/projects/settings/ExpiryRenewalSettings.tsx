@@ -83,10 +83,12 @@ export default function ExpiryRenewalSettings({
         setShowRenewConfirmation(false);
       } else {
         setError(response.error || 'Failed to renew project');
+        setShowRenewConfirmation(false);
       }
     } catch (error) {
       console.error('Error renewing project:', error);
       setError('Failed to renew project');
+      setShowRenewConfirmation(false);
     } finally {
       setLoading(false);
     }

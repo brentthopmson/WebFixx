@@ -55,6 +55,9 @@ export default function Campaign() {
   const [refreshing, setRefreshing] = useState(false);
   const refreshAttemptedRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Per-row acting state for resume/pause/delete — spinner lives INSIDE the
+  // clicked button only (no full-page overlay, no success modal).
+  const [actingId, setActingId] = useState<string | null>(null);
 
   // Result Modal State
   const [showResultModal, setShowResultModal] = useState(false);
@@ -445,94 +448,54 @@ export default function Campaign() {
   };
 
   const handlePauseCampaign = async (campaignId: string) => {
-    setIsProcessing(true);
+    setActingId(campaignId);
     try {
       const response = await securedApi.callBackendFunction({
         functionName: 'pauseCampaign',
         campaignId
       });
       if (response.success) {
-        setResultModalProps({
-          type: 'success',
-          title: 'Campaign Paused',
-          message: 'Campaign paused. Resume anytime to continue from where it left off.',
-          details: {}
-        });
-        setShowResultModal(true);
+        // No modal — the card badge flips to paused on the next refresh.
         await authApi.updateAppData(setAppData);
       } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Pause Error',
-          message: response.error || 'Failed to pause campaign.',
-          details: {}
-        });
-        setShowResultModal(true);
+        toast.error('Pause failed', { description: response.error || 'Failed to pause campaign.' });
       }
     } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
+      toast.error('Error', { description: error.message || 'An unexpected error occurred.' });
     } finally {
-      setIsProcessing(false);
+      setActingId(null);
     }
   };
 
   const handleResumeCampaign = async (campaignId: string) => {
     if (!isFeatureEnabled(appData, 'allowShooting')) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Feature Disabled',
-        message: featureDisabledMessage('allowShooting', 'campaign resumption'),
-        details: {}
-      });
-      setShowResultModal(true);
+      toast.error('Feature Disabled', { description: featureDisabledMessage('allowShooting', 'campaign resumption') });
       return;
     }
-    setIsProcessing(true);
+    setActingId(campaignId);
     try {
       const response = await securedApi.callBackendFunction({
         functionName: 'resumeCampaign',
         campaignId
       });
       if (response.success) {
-        setResultModalProps({
-          type: 'success',
-          title: 'Campaign Resumed',
-          message: 'Campaign resumed and is running again.',
-          details: {}
-        });
-        setShowResultModal(true);
+        // No "Campaign Resumed" modal and no page overlay — the status badge
+        // flipping to Running is the feedback.
         await authApi.updateAppData(setAppData);
       } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Resume Error',
-          message: response.error || 'Failed to resume campaign.',
-          details: {}
-        });
-        setShowResultModal(true);
+        toast.error('Resume failed', { description: response.error || 'Failed to resume campaign.' });
       }
     } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'An unexpected error occurred.',
-        details: {}
-      });
-      setShowResultModal(true);
+      toast.error('Error', { description: error.message || 'An unexpected error occurred.' });
     } finally {
-      setIsProcessing(false);
+      setActingId(null);
     }
   };
 
   const handleDeleteCampaign = async () => {
     if (!campaignToDelete) return;
-    setIsProcessing(true);
+    const targetId = campaignToDelete;
+    setActingId(targetId);
     try {
       const response = await securedApi.callBackendFunction({
         functionName: 'deleteCampaign',
@@ -540,33 +503,15 @@ export default function Campaign() {
       });
 
       if (response.success) {
-        setResultModalProps({
-          type: 'success',
-          title: 'Campaign Deleted',
-          message: 'The campaign has been successfully deleted.',
-          details: {}
-        });
-        setShowResultModal(true);
+        toast.success('Campaign Deleted', { description: 'The campaign has been successfully deleted.' });
         await authApi.updateAppData(setAppData);
       } else {
-        setResultModalProps({
-          type: 'error',
-          title: 'Error Deleting Campaign',
-          message: response.error || 'An unexpected error occurred.',
-          details: {}
-        });
-        setShowResultModal(true);
+        toast.error('Error Deleting Campaign', { description: response.error || 'An unexpected error occurred.' });
       }
     } catch (error: any) {
-      setResultModalProps({
-        type: 'error',
-        title: 'Error',
-        message: error.message || 'Failed to delete campaign.',
-        details: {}
-      });
-      setShowResultModal(true);
+      toast.error('Error', { description: error.message || 'Failed to delete campaign.' });
     } finally {
-      setIsProcessing(false);
+      setActingId(null);
       setShowDeleteConfirmation(false);
       setCampaignToDelete(null);
     }
@@ -850,21 +795,21 @@ export default function Campaign() {
                     )}
                     {/* Running or Limit Reached: Pause */}
                     {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached') && (
-                      <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors" title="Pause Campaign">
-                        <FontAwesomeIcon icon={faPause} className="w-4 h-4" />
+                      <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} disabled={actingId === campaign.id} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Pause Campaign">
+                        <FontAwesomeIcon icon={actingId === campaign.id ? faSpinner : faPause} spin={actingId === campaign.id} className="w-4 h-4" />
                       </button>
                     )}
                     {/* Paused: Resume (hidden at concurrent limit) */}
                     {effectiveStatus === 'paused' && !concurrentState.atLimit && (
-                      <button onClick={() => handleResumeCampaign(campaign.id)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Resume Campaign">
-                        <FontAwesomeIcon icon={faPlay} className="w-4 h-4" />
+                      <button onClick={() => handleResumeCampaign(campaign.id)} disabled={actingId === campaign.id} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Resume Campaign">
+                        <FontAwesomeIcon icon={actingId === campaign.id ? faSpinner : faPlay} spin={actingId === campaign.id} className="w-4 h-4" />
                       </button>
                     )}
                   </>
                 )}
                 {/* Delete always shown */}
-                <button onClick={() => { setCampaignToDelete(campaign.id); setShowDeleteConfirmation(true); }} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Delete Campaign">
-                  <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
+                <button onClick={() => { setCampaignToDelete(campaign.id); setShowDeleteConfirmation(true); }} disabled={actingId === campaign.id} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Delete Campaign">
+                  <FontAwesomeIcon icon={actingId === campaign.id ? faSpinner : faTrash} spin={actingId === campaign.id} className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -891,28 +836,32 @@ export default function Campaign() {
       {showDeleteConfirmation && (
         <ConfirmationModal
           isOpen={true}
-          onClose={() => setShowDeleteConfirmation(false)}
+          onClose={() => { if (actingId) return; setShowDeleteConfirmation(false); setCampaignToDelete(null); }}
           onConfirm={handleDeleteCampaign}
           title="Delete Campaign"
           message="Are you sure you want to permanently delete this campaign? This action cannot be undone."
-          confirmText={isProcessing ? 'Deleting...' : 'Delete'}
+          confirmText={actingId ? 'Deleting...' : 'Delete'}
           cancelText="Cancel"
           // @ts-ignore
-          confirmDisabled={isProcessing}
+          confirmDisabled={!!actingId}
+          // @ts-ignore
+          confirmLoading={!!actingId}
         />
       )}
 
       {showPauseConfirmation && (
         <ConfirmationModal
           isOpen={true}
-          onClose={() => { setShowPauseConfirmation(false); setCampaignToPause(null); }}
+          onClose={() => { if (actingId) return; setShowPauseConfirmation(false); setCampaignToPause(null); }}
           onConfirm={handleConfirmPause}
           title="Pause Campaign"
           message="Are you sure you want to pause this campaign? You can resume it anytime to continue from where it left off."
-          confirmText={isProcessing ? 'Pausing...' : 'Pause'}
+          confirmText={actingId ? 'Pausing...' : 'Pause'}
           cancelText="Cancel"
           // @ts-ignore
-          confirmDisabled={isProcessing}
+          confirmDisabled={!!actingId}
+          // @ts-ignore
+          confirmLoading={!!actingId}
         />
       )}
 
@@ -939,8 +888,9 @@ export default function Campaign() {
         details={resultModalProps.details}
       />
 
-      {/* Loading States */}
-      {(loading || refreshing || isProcessing) && (
+      {/* Loading States — page-level only. Resume/pause/delete use the row
+          button spinner (actingId), never this overlay. */}
+      {(loading || refreshing) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <LoadingSpinner size="large" />
         </div>

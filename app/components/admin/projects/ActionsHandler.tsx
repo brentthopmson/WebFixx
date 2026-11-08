@@ -82,37 +82,49 @@ export default function ActionsHandler({
     }
   };
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [renewError, setRenewError] = useState<string | null>(null);
   const handleDeleteProject = async () => {
+    setDeleteError(null);
     try {
       setDeleteLoading(true);
       const response = await securedApi.callBackendFunction({
         functionName: 'deleteProject',
         projectId: project.projectId
       });
-      onDelete(project.projectId);
+      if (response?.success) {
+        onDelete(project.projectId);
+      } else {
+        setDeleteError(response?.error || 'Failed to delete project');
+      }
       setShowDeleteConfirmation(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting project:', error);
-      // You might want to add error handling here, 
-      // perhaps using a result modal or toast notification
+      setDeleteError(error?.message || 'Failed to delete project');
+      setShowDeleteConfirmation(false);
     } finally {
       setDeleteLoading(false);
     }
   };
 
   const handleRenewProject = async () => {
+    setRenewError(null);
     try {
       setRenewLoading(true);
       const response = await securedApi.callBackendFunction({
         functionName: 'renewProject',
         projectId: project.projectId
       });
-      onRefresh(project.projectId);
+      if (response?.success) {
+        onRefresh(project.projectId);
+      } else {
+        setRenewError(response?.error || 'Failed to renew project');
+      }
       setShowRenewConfirmation(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error renewing project:', error);
-      // You might want to add error handling here, 
-      // perhaps using a result modal or toast notification
+      setRenewError(error?.message || 'Failed to renew project');
+      setShowRenewConfirmation(false);
     } finally {
       setRenewLoading(false);
     }
@@ -172,32 +184,52 @@ export default function ActionsHandler({
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirmation && (
-        <ConfirmationModal 
-          isOpen={true}
-          onClose={() => setShowDeleteConfirmation(false)}
-          onConfirm={handleDeleteProject}
-          title="Delete Project"
-          message="Are you sure you want to delete this project? This action cannot be undone."
-          confirmText={deleteLoading ? 'Deleting...' : 'Delete'}
-          cancelText="Cancel"
-          // @ts-ignore
-          confirmDisabled={deleteLoading}
-        />
+        <>
+          <ConfirmationModal 
+            isOpen={true}
+            onClose={() => setShowDeleteConfirmation(false)}
+            onConfirm={handleDeleteProject}
+            title="Delete Project"
+            message="Are you sure you want to delete this project? This action cannot be undone."
+            confirmText={deleteLoading ? 'Deleting...' : 'Delete'}
+            cancelText="Cancel"
+            // @ts-ignore
+            confirmDisabled={deleteLoading}
+            // @ts-ignore
+            confirmLoading={deleteLoading}
+          />
+          {deleteError && !deleteLoading && (
+            <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-950/60 dark:text-red-200 shadow-lg">
+              <span className="font-semibold">Delete failed: </span>{deleteError}
+              <button className="ml-2 underline" onClick={() => setDeleteError(null)}>Dismiss</button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Renew Confirmation Modal */}
       {showRenewConfirmation && (
-        <ConfirmationModal 
-          isOpen={true}
-          onClose={() => setShowRenewConfirmation(false)}
-          onConfirm={handleRenewProject}
-          title="Renew Project"
-          message={`Are you sure you want to renew this project? Renewal price: $${getRenewalPrice(project.templateId)?.toFixed(2) || 'N/A'}`}
-          confirmText={renewLoading ? 'Renewing...' : 'Renew'}
-          cancelText="Cancel"
-          // @ts-ignore
-          confirmDisabled={renewLoading}
-        />
+        <>
+          <ConfirmationModal 
+            isOpen={true}
+            onClose={() => setShowRenewConfirmation(false)}
+            onConfirm={handleRenewProject}
+            title="Renew Project"
+            message={`Are you sure you want to renew this project? Renewal price: $${getRenewalPrice(project.templateId)?.toFixed(2) || 'N/A'}`}
+            confirmText={renewLoading ? 'Renewing...' : 'Renew'}
+            cancelText="Cancel"
+            // @ts-ignore
+            confirmDisabled={renewLoading}
+            // @ts-ignore
+            confirmLoading={renewLoading}
+          />
+          {renewError && !renewLoading && (
+            <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-950/60 dark:text-red-200 shadow-lg">
+              <span className="font-semibold">Renewal failed: </span>{renewError}
+              <button className="ml-2 underline" onClick={() => setRenewError(null)}>Dismiss</button>
+            </div>
+          )}
+        </>
       )}
     </>
   );
