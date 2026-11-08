@@ -325,12 +325,13 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     return data;
   };
 
-  // CSV-gated hooks: 'other' (profile-page activities) and Send-DM only make
-  // sense with an uploaded list. Strip them whenever no file is attached.
+  // CSV-gated hooks: only Send-DM (per-row enhancedSocialMessage) needs an
+  // uploaded list. 'other' (profile-page activities) now ALSO works without a
+  // CSV — it runs People Search discovery from targeting tags, then falls back
+  // to activities. Strip only shouldSendMessage when no file is attached.
   const applyCsvGating = (data: Partial<Campaign>): Partial<Campaign> => {
     if (data.channel !== 'social' || data.fileUrl) return data;
-    const hooks = (data.socialInteractionTypes || []).filter(h => h !== 'other');
-    const gated = { ...data, socialInteractionTypes: hooks };
+    const gated = { ...data };
     if (data.shouldSendMessage) gated.shouldSendMessage = false;
     return gated;
   };
@@ -1097,8 +1098,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                             ['search', 'Search interact hook'],
                             ['other', 'Profile page activities'],
                           ] as const).map(([val, label]) => {
-                            // 'other' (profile-page activities) requires an uploaded list
-                            const gatedOff = val === 'other' && !formData.fileUrl;
+                            // 'other' works with OR without a CSV: with a list it
+                            // iterates handles, without one it runs People Search
+                            // discovery from targeting tags (then activities).
+                            const gatedOff = false;
                             return (
                               <label key={val} className={`flex items-center space-x-2.5 p-1 rounded transition-colors ${gatedOff ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
                                 <input type="checkbox" className="form-checkbox text-emerald-600 rounded focus:ring-emerald-500 w-4 h-4" disabled={gatedOff} checked={(formData.socialInteractionTypes || []).includes(val)} onChange={e => { const checked = e.target.checked; setFormData(prev => { const list = prev.socialInteractionTypes || []; const next = checked ? [...list, val] : list.filter(i => i !== val); return { ...prev, socialInteractionTypes: next as any }; }); }} />
