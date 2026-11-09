@@ -1172,31 +1172,37 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     </>
                   )}
 
-                  {/* Campaign Run Duration (Universal for both Social and Email) */}
-                  <div className="pt-3 mt-3 border-t dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <FontAwesomeIcon icon={faClock} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
-                        <span>Campaign Run Duration (Days)</span>
-                      </label>
-                      <span className="text-xxs text-gray-400">Default: {maxCampaignDurationDays} days (admin ceiling)</span>
+                  {/* Campaign Run Duration — INTERACTIONS ONLY. List shooting
+                      (CSV) is never stopped by duration: it runs the list to
+                      completion. This field only exists when Interaction is on
+                      (email checkbox / social interaction hooks). */}
+                  {((formData.channel === 'email' && formData.interactionStaged) ||
+                    (formData.channel === 'social' && (formData.socialInteractionTypes || []).length > 0)) && (
+                    <div className="pt-3 mt-3 border-t dark:border-gray-700">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <FontAwesomeIcon icon={faClock} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
+                          <span>Campaign Run Duration (Days)</span>
+                        </label>
+                        <span className="text-xxs text-gray-400">Default: {maxCampaignDurationDays} days (admin ceiling)</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        max={maxCampaignDurationDays}
+                        className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
+                        value={formData.durationDays || maxCampaignDurationDays}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10);
+                          const clamped = isNaN(val) ? maxCampaignDurationDays : Math.min(Math.max(1, val), maxCampaignDurationDays);
+                          setFormData(prev => ({ ...prev, durationDays: clamped }));
+                        }}
+                      />
+                      <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
+                        Interactions only: the interaction flow rests and resumes until this duration expires. Your list shoot is unaffected.
+                      </p>
                     </div>
-                    <input
-                      type="number"
-                      min="1"
-                      max={maxCampaignDurationDays}
-                      className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
-                      value={formData.durationDays || maxCampaignDurationDays}
-                      onChange={e => {
-                        const val = parseInt(e.target.value, 10);
-                        const clamped = isNaN(val) ? maxCampaignDurationDays : Math.min(Math.max(1, val), maxCampaignDurationDays);
-                        setFormData(prev => ({ ...prev, durationDays: clamped }));
-                      }}
-                    />
-                    <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
-                      Continuous multi-day lifecycle. Executes daily waves and automatically rests during rate limit cooldowns until this duration expires.
-                    </p>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
