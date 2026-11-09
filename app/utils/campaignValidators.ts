@@ -246,6 +246,21 @@ export function validateSMTPSettings(
           message: `SMTP configuration ${i + 1}: Password or app password or OAuth token is required`
         };
       }
+
+      // Per-server send limits are MANDATORY (no fallbacks to provider/platform defaults).
+      const checkLimit = (val: any, label: string): ValidationError | null => {
+        const n = Number(val);
+        if (val === undefined || val === null || val === '' || !Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+          return { field: 'smtpSettings', message: `SMTP configuration ${i + 1}: ${label} is required (whole number ≥ 1)` };
+        }
+        return null;
+      };
+      const hourlyErr = checkLimit((smtp as any).hourlyLimit, 'Hourly send limit');
+      if (hourlyErr) return hourlyErr;
+      const dailyErr = checkLimit((smtp as any).dailyLimit, 'Daily send limit');
+      if (dailyErr) return dailyErr;
+      const monthlyErr = checkLimit((smtp as any).monthlyLimit, 'Monthly send limit');
+      if (monthlyErr) return monthlyErr;
     }
   }
 
@@ -306,18 +321,11 @@ export function validateCampaignCreation(campaign: Partial<Campaign>, maxAccount
     if (tl && !/^https?:\/\/.+/i.test(tl)) {
       return { field: 'targetLink', message: 'Target link must be a valid URL starting with http:// or https://' };
     }
-    if (!campaign.interactionStopAfterHours || campaign.interactionStopAfterHours <= 0) {
-      return { field: 'interactionStopAfterHours', message: 'Stop after hours is required when interaction stage is enabled' };
-    }
+    // (interactionStopAfterHours retired: durationDays is the interaction guard)
     return null;
   }
 
-  // Project/link required for wire/mixed delivery
-  if (campaign.deliveryMethod !== 'smtp') {
-    if (!campaign.projectId || typeof campaign.projectId !== 'string' || campaign.projectId.trim().length === 0) {
-      return { field: 'projectId', message: 'Project or redirect link is required for WIRE/Mixed delivery' };
-    }
-  }
+  // (projectId/redirect-link guard removed: project-select/link-injection is no longer used)
 
   // Channel-specific validations
   const subjectError = validateCampaignSubject(campaign.subject || '', campaign.channel || '');
@@ -370,12 +378,7 @@ export function validateCampaignCreation(campaign: Partial<Campaign>, maxAccount
     }
   }
 
-  // Interaction stage requires limits
-  if (campaign.interactionStaged) {
-    if (!campaign.interactionStopAfterHours || campaign.interactionStopAfterHours <= 0) {
-      return { field: 'interactionStopAfterHours', message: 'Stop after hours is required when interaction stage is enabled' };
-    }
-  }
+  // (interactionStopAfterHours retired: durationDays is the interaction guard)
 
   return null;
 }

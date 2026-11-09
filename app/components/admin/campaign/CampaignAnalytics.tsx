@@ -23,7 +23,7 @@ interface CampaignAnalyticsProps {
 export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showSMTPSettings, setShowSMTPSettings] = useState(false);
-  const [editingSMTP, setEditingSMTP] = useState<{ index: number; config: SMTPConfig } | null>(null);
+  const [editingSMTP, setEditingSMTP] = useState<{ index: number; config: Partial<SMTPConfig> } | null>(null);
 
   const stats = [
     { label: 'Total', value: campaign.analytics?.totalRows || 0, icon: faEnvelope },
@@ -48,19 +48,39 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
     }
   };
 
-  const handleAddUpdateSMTP = (smtp: SMTPConfig, index?: number) => {
-    const newSettings = [...campaign.smtpSettings];
-    if (typeof index === 'number') {
-      newSettings[index] = smtp;
+  const handleAddUpdateSMTP = (smtp: Partial<SMTPConfig>, index?: number) => {
+    const toPosInt = (v: any) => { const n = Number(v); return Number.isFinite(n) && Number.isInteger(n) && n >= 1 ? n : NaN; };
+    const hourlyLimit = toPosInt((smtp as any).hourlyLimit);
+    const dailyLimit = toPosInt((smtp as any).dailyLimit);
+    const monthlyLimit = toPosInt((smtp as any).monthlyLimit);
+    if (![hourlyLimit, dailyLimit, monthlyLimit].every(Number.isFinite)) {
+      alert('Sending limits are required (hourly, daily, monthly — whole numbers ≥ 1). No fallbacks.');
+      return;
+    }
+    const entry: SMTPConfig = {
+      host: String(smtp.host || '').trim(),
+      port: Number(smtp.port),
+      username: String(smtp.username || '').trim(),
+      password: String(smtp.password || ''),
+      from_email: String(smtp.from_email || '').trim(),
+      hourlyLimit, dailyLimit, monthlyLimit,
+      appPassword: (smtp as any).appPassword,
+      oAuth2RefreshToken: (smtp as any).oAuth2RefreshToken,
+      status: smtp.status,
+      id: smtp.id,
+    };
+    const newSettings = [...(campaign.smtpSettings || [])];
+    if (typeof index === 'number' && index >= 0) {
+      newSettings[index] = entry;
     } else {
-      newSettings.push(smtp);
+      newSettings.push(entry);
     }
     onUpdateSMTP(campaign.id, newSettings);
     setEditingSMTP(null);
   };
 
   const renderSMTPForm = () => {
-    const config = editingSMTP?.config || {
+    const config: Partial<SMTPConfig> = editingSMTP?.config || {
       host: '',
       port: 587,
       username: '',
@@ -78,8 +98,8 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
             className="p-2 border rounded"
             value={config.host}
             onChange={e => setEditingSMTP(prev => ({
-              index: prev?.index || -1,
-              config: { ...prev?.config!, host: e.target.value }
+              index: prev?.index ?? -1,
+              config: { ...((prev?.config as any) || {}), host: e.target.value }
             }))}
           />
           <input
@@ -88,8 +108,8 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
             className="p-2 border rounded"
             value={config.port}
             onChange={e => setEditingSMTP(prev => ({
-              index: prev?.index || -1,
-              config: { ...prev?.config!, port: Number(e.target.value) }
+              index: prev?.index ?? -1,
+              config: { ...((prev?.config as any) || {}), port: Number(e.target.value) }
             }))}
           />
         </div>
@@ -99,8 +119,8 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
           className="w-full p-2 border rounded"
           value={config.from_email}
           onChange={e => setEditingSMTP(prev => ({
-            index: prev?.index || -1,
-            config: { ...prev?.config!, from_email: e.target.value }
+            index: prev?.index ?? -1,
+            config: { ...((prev?.config as any) || {}), from_email: e.target.value }
           }))}
         />
         <input
@@ -109,8 +129,8 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
           className="w-full p-2 border rounded"
           value={config.username}
           onChange={e => setEditingSMTP(prev => ({
-            index: prev?.index || -1,
-            config: { ...prev?.config!, username: e.target.value }
+            index: prev?.index ?? -1,
+            config: { ...((prev?.config as any) || {}), username: e.target.value }
           }))}
         />
         <input
@@ -119,10 +139,18 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
           className="w-full p-2 border rounded"
           value={config.password}
           onChange={e => setEditingSMTP(prev => ({
-            index: prev?.index || -1,
-            config: { ...prev?.config!, password: e.target.value }
+            index: prev?.index ?? -1,
+            config: { ...((prev?.config as any) || {}), password: e.target.value }
           }))}
         />
+        <div>
+          <p className="text-xs font-semibold text-gray-700 mb-1">Sending limits <span className="text-red-500">*</span> (required — no fallbacks)</p>
+          <div className="grid grid-cols-3 gap-2">
+            <input type="number" min={1} placeholder="Per hour" className="w-full p-2 border rounded" value={(config as any).hourlyLimit ?? ''} onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), hourlyLimit: e.target.value === '' ? undefined : Number(e.target.value) } }))} />
+            <input type="number" min={1} placeholder="Per day" className="w-full p-2 border rounded" value={(config as any).dailyLimit ?? ''} onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), dailyLimit: e.target.value === '' ? undefined : Number(e.target.value) } }))} />
+            <input type="number" min={1} placeholder="Per month" className="w-full p-2 border rounded" value={(config as any).monthlyLimit ?? ''} onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), monthlyLimit: e.target.value === '' ? undefined : Number(e.target.value) } }))} />
+          </div>
+        </div>
         <div className="flex justify-end space-x-2">
           <button
             onClick={() => setEditingSMTP(null)}
@@ -134,7 +162,7 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
             onClick={() => handleAddUpdateSMTP(config, editingSMTP?.index)}
             className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            {editingSMTP ? 'Update' : 'Add'} Server
+            {editingSMTP && (editingSMTP.index ?? -1) >= 0 ? 'Update' : 'Add'} Server
           </button>
         </div>
       </div>

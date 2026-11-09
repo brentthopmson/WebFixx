@@ -35,6 +35,12 @@ export interface SMTPSetting {
   oAuth2RefreshToken?: string;
   from_email: string;
   status?: 'active' | 'inactive';
+  // Per-server send caps (MANDATORY, no fallbacks). SMTP servers are not
+  // mapped to the platform-actions-limits sheet, so each server must declare
+  // its own hourly/daily/monthly budget. Engine enforces these via sendRateLimiter.
+  hourlyLimit: number;
+  dailyLimit: number;
+  monthlyLimit: number;
 }
 
 // Alias for backward compatibility

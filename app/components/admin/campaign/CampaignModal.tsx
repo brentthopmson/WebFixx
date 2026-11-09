@@ -430,7 +430,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignToEdit?.fileUrl]);
 
-  const [editingSMTP, setEditingSMTP] = useState<SMTPSetting | null>(null);
+  const [editingSMTP, setEditingSMTP] = useState<Partial<SMTPSetting> | null>(null);
+  const [editingSMTPIndex, setEditingSMTPIndex] = useState<number | null>(null);
   const [socialKeywordInput, setSocialKeywordInput] = useState('');
   const [emailKeywordInput, setEmailKeywordInput] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -612,12 +613,53 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
 
   const handleAddSMTP = () => {
     if (!editingSMTP) return;
-    
-    setFormData(prev => ({
-      ...prev,
-      smtpSettings: [...(prev.smtpSettings || []), editingSMTP]
-    }));
+
+    // Validate required connection fields
+    if (!String(editingSMTP.host || '').trim() || !editingSMTP.port || !String(editingSMTP.username || '').trim() || !String(editingSMTP.from_email || '').trim()) {
+      alert('SMTP server requires host, port, username, and from email.');
+      return;
+    }
+    const hasAuth = String(editingSMTP.password || editingSMTP.appPassword || editingSMTP.oAuth2RefreshToken || '').trim().length > 0;
+    if (!hasAuth) {
+      alert('SMTP server requires a password, app password, or OAuth token.');
+      return;
+    }
+    // Per-server send limits are MANDATORY (no fallbacks)
+    const toPosInt = (v: any) => { const n = Number(v); return Number.isFinite(n) && Number.isInteger(n) && n >= 1 ? n : NaN; };
+    const hourlyLimit = toPosInt((editingSMTP as any).hourlyLimit);
+    const dailyLimit = toPosInt((editingSMTP as any).dailyLimit);
+    const monthlyLimit = toPosInt((editingSMTP as any).monthlyLimit);
+    if (![hourlyLimit, dailyLimit, monthlyLimit].every(n => Number.isFinite(n))) {
+      alert('Send limits are required: enter Hourly, Daily, and Monthly limits (whole numbers ≥ 1). No fallbacks.');
+      return;
+    }
+
+    const entry: SMTPSetting = {
+      host: String(editingSMTP.host).trim(),
+      port: Number(editingSMTP.port),
+      username: String(editingSMTP.username).trim(),
+      password: editingSMTP.password || '',
+      appPassword: editingSMTP.appPassword,
+      oAuth2RefreshToken: editingSMTP.oAuth2RefreshToken,
+      from_email: String(editingSMTP.from_email).trim(),
+      status: editingSMTP.status,
+      id: editingSMTP.id,
+      hourlyLimit,
+      dailyLimit,
+      monthlyLimit,
+    };
+
+    setFormData(prev => {
+      const next = [...(prev.smtpSettings || [])];
+      if (editingSMTPIndex !== null && editingSMTPIndex >= 0 && editingSMTPIndex < next.length) {
+        next[editingSMTPIndex] = entry;
+      } else {
+        next.push(entry);
+      }
+      return { ...prev, smtpSettings: next };
+    });
     setEditingSMTP(null);
+    setEditingSMTPIndex(null);
   };
 
   // Split raw keyword input on commas/newlines into individual chips.
@@ -682,21 +724,21 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
 
   const renderSMTPForm = () => (
     <div className="space-y-4 p-4 bg-gray-50 rounded-lg dark:bg-gray-700 border dark:border-gray-600 animate-fadeIn">
-      <h4 className="font-semibold text-sm text-gray-900 dark:text-white">Add SMTP Server</h4>
+      <h4 className="font-semibold text-sm text-gray-900 dark:text-white">{editingSMTPIndex !== null ? 'Edit SMTP Server' : 'Add SMTP Server'}</h4>
       <div className="grid grid-cols-2 gap-4">
         <input
           type="text"
           placeholder="Host (e.g. smtp.gmail.com)"
           className="p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
           value={editingSMTP?.host || ''}
-          onChange={e => setEditingSMTP(prev => ({ ...prev!, host: e.target.value }))}
+          onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), host: e.target.value }))}
         />
         <input
           type="number"
           placeholder="Port (e.g. 587)"
           className="p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          value={editingSMTP?.port || ''}
-          onChange={e => setEditingSMTP(prev => ({ ...prev!, port: Number(e.target.value) }))}
+          value={editingSMTP?.port ?? ''}
+          onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), port: Number(e.target.value) }))}
         />
       </div>
       <input
@@ -704,25 +746,73 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         placeholder="From Email Address"
         className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
         value={editingSMTP?.from_email || ''}
-        onChange={e => setEditingSMTP(prev => ({ ...prev!, from_email: e.target.value }))}
+        onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), from_email: e.target.value }))}
       />
       <input
         type="text"
         placeholder="SMTP Username"
         className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
         value={editingSMTP?.username || ''}
-        onChange={e => setEditingSMTP(prev => ({ ...prev!, username: e.target.value }))}
+        onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), username: e.target.value }))}
       />
       <input
         type="password"
         placeholder="SMTP Password"
         className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
         value={editingSMTP?.password || ''}
-        onChange={e => setEditingSMTP(prev => ({ ...prev!, password: e.target.value }))}
+        onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), password: e.target.value }))}
       />
+
+      {/* Per-server send limits — MANDATORY (no fallbacks to provider/platform defaults) */}
+      <div className="pt-1">
+        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">Sending limits <span className="text-red-500">*</span> <span className="font-normal text-gray-500 dark:text-gray-400">(required — no fallbacks)</span></p>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Per hour</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              required
+              placeholder="e.g. 20"
+              className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={(editingSMTP as any)?.hourlyLimit ?? ''}
+              onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), hourlyLimit: e.target.value === '' ? undefined : Number(e.target.value) } as any))}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Per day</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              required
+              placeholder="e.g. 500"
+              className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={(editingSMTP as any)?.dailyLimit ?? ''}
+              onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), dailyLimit: e.target.value === '' ? undefined : Number(e.target.value) } as any))}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Per month</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              required
+              placeholder="e.g. 15000"
+              className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={(editingSMTP as any)?.monthlyLimit ?? ''}
+              onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), monthlyLimit: e.target.value === '' ? undefined : Number(e.target.value) } as any))}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">These caps are locked to this SMTP server and enforced on every send (hourly/daily/monthly).</p>
+      </div>
+
       <div className="flex justify-end space-x-2.5 pt-2">
         <button
-          onClick={() => setEditingSMTP(null)}
+          onClick={() => { setEditingSMTP(null); setEditingSMTPIndex(null); }}
           className="px-3.5 py-1.5 text-xs text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white transition-colors"
         >
           Cancel
@@ -731,7 +821,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
           onClick={handleAddSMTP}
           className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
         >
-          Add Server
+          {editingSMTPIndex !== null ? 'Save Server' : 'Add Server'}
         </button>
       </div>
     </div>
@@ -742,35 +832,50 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       <div className="flex justify-between items-center">
         <h4 className="font-semibold text-sm text-gray-900 dark:text-white">SMTP Server Rotation Pool ({(formData.smtpSettings || []).length})</h4>
         <button
-          onClick={() => setEditingSMTP({ host: '', port: 587, username: '', password: '', from_email: '' })}
+          onClick={() => { setEditingSMTPIndex(null); setEditingSMTP({ host: '', port: 587, username: '', password: '', from_email: '' }); }}
           className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center text-xs font-semibold"
         >
           <FontAwesomeIcon icon={faPlus} className="w-3.5 h-3.5 mr-1" />
           Add Server
         </button>
       </div>
-      
-      <div className="space-y-2 max-h-40 overflow-y-auto">
+
+      <div className="space-y-2 max-h-56 overflow-y-auto">
         {(formData.smtpSettings || []).map((smtp, index) => (
           <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg dark:bg-gray-700 border dark:border-gray-600">
-            <div>
-              <p className="text-sm font-semibold dark:text-white">{smtp.from_email}</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold dark:text-white truncate">{smtp.from_email}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{smtp.host}:{smtp.port}</p>
+              <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+                {(smtp as any).hourlyLimit != null ? `${(smtp as any).hourlyLimit}/h · ${(smtp as any).dailyLimit}/d · ${(smtp as any).monthlyLimit}/mo` : <span className="text-amber-600 dark:text-amber-400">Limits missing — edit to set (required)</span>}
+              </p>
             </div>
-            <button
-              onClick={() => {
-                const newSettings = [...(formData.smtpSettings || [])];
-                newSettings.splice(index, 1);
-                setFormData(prev => ({ ...prev, smtpSettings: newSettings }));
-              }}
-              className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 transition-colors"
-            >
-              <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => { setEditingSMTPIndex(index); setEditingSMTP({ ...smtp }); }}
+                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1 transition-colors"
+                title="Edit server"
+              >
+                <FontAwesomeIcon icon={faEdit} className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  const newSettings = [...(formData.smtpSettings || [])];
+                  newSettings.splice(index, 1);
+                  setFormData(prev => ({ ...prev, smtpSettings: newSettings }));
+                  if (editingSMTPIndex === index) { setEditingSMTP(null); setEditingSMTPIndex(null); }
+                  else if (editingSMTPIndex !== null && editingSMTPIndex > index) { setEditingSMTPIndex(editingSMTPIndex - 1); }
+                }}
+                className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 transition-colors"
+                title="Remove server"
+              >
+                <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ))}
         {(formData.smtpSettings || []).length === 0 && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 italic">No SMTP servers added yet. Outbound emails will rely on active browser MAIL logins.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">No SMTP servers added yet. Add at least one server with hourly/daily/monthly send limits (required).</p>
         )}
       </div>
     </div>
