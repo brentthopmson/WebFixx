@@ -346,6 +346,11 @@ export default function Campaign() {
     shouldSendMessage: campaign.shouldSendMessage || false,
     campaignMode: campaign.campaignMode || (campaign.fileUrl ? 'file' : 'interactions-only'),
     targetLink: campaign.targetLink || '',
+    personalizeLink: (campaign as any).personalizeLink || false,
+    linkParam: (campaign as any).linkParam || 'email',
+    interactionTargetLink: (campaign as any).interactionTargetLink || '',
+    linkAfterTurns: (campaign as any).linkAfterTurns ?? 2,
+    durationDays: campaign.durationDays,
     emailKeywords: campaign.emailKeywords || [],
     emailStrategyPrompt: campaign.emailStrategyPrompt || '',
     isSetupComplete: campaign.isSetupComplete || false

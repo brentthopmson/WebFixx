@@ -174,6 +174,10 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [isStartingPipeline, setIsStartingPipeline] = useState(false);
+  // Immediate click feedback for Pause/Resume/Retry: set synchronously as
+  // the FIRST statement of each handler (before any await) so the button
+  // spins + disables the instant it is clicked, not after the request.
+  const [actingAction, setActingAction] = useState<'resume' | 'pause' | 'retry' | null>(null);
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -327,6 +331,11 @@ export default function CampaignDetailPage() {
   }, [campaignId]);
 
   const handlePauseCampaign = async () => {
+    if (actingAction) return;
+    setActingAction('pause');
+    // Optimistic: flip the badge to pausing immediately so the click has
+    // visible feedback before the backend round-trip completes.
+    setCampaign(prev => prev ? { ...prev, status: 'paused' } : prev);
     try {
       const res: any = await securedApi.callBackendFunction({
         functionName: 'pauseCampaign',
@@ -348,17 +357,26 @@ export default function CampaignDetailPage() {
         router.refresh();
       } else {
         toast.error(res.error || 'Failed to pause campaign');
+        pollCampaign();
       }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to pause campaign');
+      pollCampaign();
+    } finally {
+      setActingAction(null);
     }
   };
 
   const handleResumeCampaign = async () => {
+    if (actingAction) return;
     if (!isFeatureEnabled(appData, 'allowShooting')) {
       alert(featureDisabledMessage('allowShooting', 'campaign resumption'));
       return;
     }
+    // Immediate feedback: spinner + disabled + optimistic status flip,
+    // set synchronously BEFORE the (slow) backend call.
+    setActingAction('resume');
+    setCampaign(prev => prev ? { ...prev, status: 'running' } : prev);
     try {
       const res: any = await securedApi.callBackendFunction({
         functionName: 'resumeCampaign',
@@ -373,9 +391,13 @@ export default function CampaignDetailPage() {
         router.refresh();
       } else {
         toast.error(res.error || 'Failed to resume campaign');
+        pollCampaign();
       }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to resume campaign');
+      pollCampaign();
+    } finally {
+      setActingAction(null);
     }
   };
 
@@ -722,38 +744,45 @@ export default function CampaignDetailPage() {
               {(effectiveStatus === 'error' || effectiveStatus === 'failed') && !concurrentState.atLimit && (
                 <button
                   onClick={async () => {
+                    if (actingAction) return;
+                    setActingAction('retry');
                     try {
                       await securedApi.callBackendFunction({ functionName: 'runCampaignPipeline', campaignId, retry: true });
                       toast.success('Retry triggered');
                       pollCampaign();
                     } catch (e:any) {
                       toast.error(e?.message || 'Failed to retry');
+                    } finally {
+                      setActingAction(null);
                     }
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                  disabled={actingAction === 'retry'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
-                  Retry
+                  <FontAwesomeIcon icon={actingAction === 'retry' ? faSpinner : faPlay} spin={actingAction === 'retry'} className="w-3 h-3" />
+                  {actingAction === 'retry' ? 'Retrying…' : 'Retry'}
                 </button>
               )}
               {/* Running or Limit Reached: Pause */}
               {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached') && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
                 <button
                   onClick={handlePauseCampaign}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                  disabled={actingAction === 'pause'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <FontAwesomeIcon icon={faPause} className="w-3 h-3" />
-                  Pause
+                  <FontAwesomeIcon icon={actingAction === 'pause' ? faSpinner : faPause} spin={actingAction === 'pause'} className="w-3 h-3" />
+                  {actingAction === 'pause' ? 'Pausing…' : 'Pause'}
                 </button>
               )}
               {/* Paused: Resume (hidden at concurrent limit) */}
               {effectiveStatus === 'paused' && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
                 <button
                   onClick={handleResumeCampaign}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  disabled={actingAction === 'resume'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <FontAwesomeIcon icon={faPlay} className="w-3 h-3" />
-                  Resume
+                  <FontAwesomeIcon icon={actingAction === 'resume' ? faSpinner : faPlay} spin={actingAction === 'resume'} className="w-3 h-3" />
+                  {actingAction === 'resume' ? 'Resuming…' : 'Resume'}
                 </button>
               )}
             </>
