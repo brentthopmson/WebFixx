@@ -195,6 +195,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         targetLink: campaignToEdit.targetLink || '',
         personalizeLink: (campaignToEdit as any).personalizeLink ?? false,
         linkParam: (campaignToEdit as any).linkParam || 'email',
+        helperKeyword: (campaignToEdit as any).helperKeyword || '',
         interactionTargetLink: (campaignToEdit as any).interactionTargetLink || '',
         linkAfterTurns: (campaignToEdit as any).linkAfterTurns ?? 2,
         emailKeywords: campaignToEdit.emailKeywords || [],
@@ -247,6 +248,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       targetLink: '',
       personalizeLink: false,
       linkParam: 'email',
+      helperKeyword: '',
       interactionTargetLink: '',
       linkAfterTurns: 2,
       emailKeywords: [],
@@ -1348,6 +1350,15 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
                       When on, each recipient gets <span className="font-mono">targetLink?param=emailAddress</span> (written to the CSV <span className="font-mono">link</span> column, so every person gets a unique link).
                     </p>
+                    <div className="mt-3">
+                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                        Helper Keyword <span className="text-xxs font-normal lowercase text-gray-400">(stamped on every row — interactions watch for it)</span>
+                      </label>
+                      <input type="text" placeholder="e.g. #webfixx or a code word" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={(formData as any).helperKeyword || ''} onChange={e => setFormData(prev => ({ ...prev, helperKeyword: e.target.value } as any))} />
+                      <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
+                        The engine writes this into the CSV <span className="font-mono">HELPERKEYWORD</span> column for all rows at launch, so reply detection works even without watch keywords.
+                      </p>
+                    </div>
                   </div>
                   {/* Interaction replies block — dedicated link + template + turn gate */}
                   {formData.channel === 'email' && formData.interactionStaged && (

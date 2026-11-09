@@ -105,6 +105,7 @@ export interface Campaign {
   targetLink?: string; // Destination URL the AI weaves into its messages
   personalizeLink?: boolean; // Append ?<linkParam>=recipient to targetLink per CSV row (writes `link` column)
   linkParam?: string; // Query param name for the personalized link (default: email)
+  helperKeyword?: string; // Campaign keyword stamped into HELPERKEYWORD on every CSV row (interaction detection)
   interactionTargetLink?: string; // Destination for AI inbox replies (?email= appended per contact)
   linkAfterTurns?: number; // Their replies before the interaction link may be sent
   emailKeywords?: string[]; // Keywords the AI uses to find relevant emails in the inbox

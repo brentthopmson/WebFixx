@@ -348,6 +348,7 @@ export default function Campaign() {
     targetLink: campaign.targetLink || '',
     personalizeLink: (campaign as any).personalizeLink || false,
     linkParam: (campaign as any).linkParam || 'email',
+    helperKeyword: (campaign as any).helperKeyword || '',
     interactionTargetLink: (campaign as any).interactionTargetLink || '',
     linkAfterTurns: (campaign as any).linkAfterTurns ?? 2,
     durationDays: campaign.durationDays,
