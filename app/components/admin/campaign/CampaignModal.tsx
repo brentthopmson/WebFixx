@@ -180,7 +180,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         executeStaged: campaignToEdit.executeStaged ?? true,
         interactionStaged: campaignToEdit.interactionStaged || false,
         interactionStatus: campaignToEdit.interactionStatus || 'idle',
-        interactionStopAfterHours: campaignToEdit.interactionStopAfterHours || 72,
+        // (interactionStopAfterHours retired: durationDays is the guard)
         durationDays: campaignToEdit.durationDays || maxCampaignDurationDays,
         deliveryMethod: campaignToEdit.deliveryMethod || 'smtp',
         firestickEnabled: campaignToEdit.firestickEnabled || false,
@@ -193,6 +193,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         platform: campaignToEdit.platform || '',
         campaignMode: campaignToEdit.campaignMode || (campaignToEdit.fileUrl ? 'file' : 'interactions-only'),
         targetLink: campaignToEdit.targetLink || '',
+        personalizeLink: (campaignToEdit as any).personalizeLink ?? false,
+        linkParam: (campaignToEdit as any).linkParam || 'email',
+        interactionTargetLink: (campaignToEdit as any).interactionTargetLink || '',
+        linkAfterTurns: (campaignToEdit as any).linkAfterTurns ?? 2,
         emailKeywords: campaignToEdit.emailKeywords || [],
         emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || '',
         shouldSendMessage: campaignToEdit.shouldSendMessage || false,
@@ -228,7 +232,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       executeStaged: true,
       interactionStaged: false,
       interactionStatus: 'idle',
-      interactionStopAfterHours: 72,
+      // (interactionStopAfterHours retired: durationDays is the guard)
       durationDays: maxCampaignDurationDays,
       deliveryMethod: 'smtp',
       firestickEnabled: false,
@@ -241,6 +245,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       platform: '',
       campaignMode: 'file',
       targetLink: '',
+      personalizeLink: false,
+      linkParam: 'email',
+      interactionTargetLink: '',
+      linkAfterTurns: 2,
       emailKeywords: [],
       emailStrategyPrompt: '',
       shouldSendMessage: false,
@@ -309,7 +317,11 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         platform,
         projectId: row[projectIdIndex]
       };
-    });
+    })
+    // Latest-first: hub rows are append-ordered, so reverse keeps the newest
+    // at the top without needing a createdOn column.
+    .slice()
+    .reverse();
   };
 
   const accountsList = getHubAccountsForChannel(formData.channel || 'email') as { accountId: string; type: string; identifier?: string; platform?: string }[];
@@ -378,7 +390,10 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         email: channelType === 'social' ? (socials[0]?.username || row[emailIndex]) : row[emailIndex],
         platform,
       };
-    });
+    })
+    // Latest-first (append-ordered rows reversed).
+    .slice()
+    .reverse();
   };
 
   const interactionAccountsList = getCompletedAccountsForInteraction(formData.channel || 'email');
@@ -423,9 +438,12 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   // Validate placeholders in body against CSV headers
   const getMissingPlaceholders = (body: string, headers: string[]) => {
     if (!body || !headers) return [];
+    // Built-ins the engine resolves even when absent from the CSV (the
+    // `link` column is computed per row when personalizeLink is on).
+    const builtIns = ['link', 'url', 'email', 'first_name', 'firstname', 'last_name', 'lastname', 'company', 'businessName', 'context'];
     const placeholders = body.match(/\{\{(\w+)\}\}/g) || [];
     const keys = Array.from(new Set(placeholders.map((p: string) => p.slice(2, -2))));
-    return keys.filter(k => !headers.includes(k));
+    return keys.filter(k => !headers.includes(k) && !headers.map(h => String(h).toLowerCase()).includes(String(k).toLowerCase()) && !builtIns.includes(String(k).toLowerCase()));
   };
 
   const toggleSection = (section: string) => {
@@ -985,7 +1003,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
 
         {/* Step 2: Campaign Details */}
         {step === 2 && (
-          <div className="space-y-4 animate-fadeIn">
+          <div className="flex flex-col space-y-4 animate-fadeIn">
             {/* CSV Summary */}
             {csvAnalytics && (
               <div className="bg-blue-50/50 dark:bg-blue-950/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50 flex items-center space-x-3">
@@ -998,7 +1016,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
             )}
 
             {/* SECTION 1: Basic Campaign Info */}
-            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
+            <div className="border rounded-xl dark:border-gray-700 overflow-hidden order-1">
               <button type="button" onClick={() => toggleSection('basic')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
                   <FontAwesomeIcon icon={faInfoCircle} className="text-blue-500" />
@@ -1012,47 +1030,15 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Campaign Name</label>
                     <input type="text" placeholder="e.g. Q2 Customer Outreach Strategy" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.name || ''} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} />
                   </div>
-                  {/* Niche + link injection are email-campaign metadata. Social
-                      interactions carry their own Target Link in the pipeline
-                      section, so these stay hidden for the social channel. */}
-                  {formData.channel !== 'social' && (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Niche Category</label>
-                          <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.type || 'general'} onChange={e => setFormData(prev => ({ ...prev, type: e.target.value as Campaign['type'] }))}>
-                            <option value="general">General Niche</option>
-                            <option value="email_logs">Email Logs</option>
-                            <option value="bank_logs">Bank Logs</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Outreach Redirect/Project Link Injection</label>
-                          <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.linkType || 'project'} onChange={e => setFormData(prev => ({ ...prev, linkType: e.target.value as any, linkId: '' }))}>
-                            <option value="project">Project Link</option>
-                            <option value="redirect">Redirect Link</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Linked Target Link</label>
-                        <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.linkId || ''} onChange={e => setFormData(prev => ({ ...prev, linkId: e.target.value }))}>
-                          <option value="">-- Choose Link --</option>
-                          {formData.linkType === 'project' ? (
-                            projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)
-                          ) : (
-                            redirectsList.map((r: any) => <option key={r.redirectId} value={r.redirectId}>{r.title}</option>)
-                          )}
-                        </select>
-                      </div>
-                    </>
-                  )}
+                  {/* Target link lives in the Template section (plain URL textarea).
+                      The old niche / redirect / project-link injection is retired:
+                      the engine sends whatever URL the user pastes. */}
                 </div>
               )}
             </div>
 
-            {/* SECTION 2: Staging Pipeline */}
-            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
+            {/* SECTION 2: Staging Pipeline (third visually: order-3) */}
+            <div className="border rounded-xl dark:border-gray-700 overflow-hidden order-3">
               <button type="button" onClick={() => toggleSection('staging')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
                   <FontAwesomeIcon icon={faCheckSquare} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
@@ -1062,31 +1048,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               </button>
               {expandedSection === 'staging' && (
                 <div className="p-4 space-y-4">
-                  {/* Email interactions-only: keywords + strategy for the AI inbox watcher */}
-                  {formData.channel === 'email' && formData.campaignMode === 'interactions-only' && (
-                    <div className="space-y-3 p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/50">
-                      <div>
-                        <label className="block text-xs font-bold text-purple-500 dark:text-purple-300 uppercase tracking-wider mb-1.5 flex justify-between">
-                          <span>Inbox Watch Keywords</span>
-                          <span className="text-xxs text-gray-400 font-normal lowercase">Press enter to register tag</span>
-                        </label>
-                        <input type="text" placeholder="e.g. partnership, pricing, demo request" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold mb-2" value={emailKeywordInput} onChange={e => setEmailKeywordInput(e.target.value)} onKeyDown={handleAddEmailKeyword} />
-                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
-                          {(formData.emailKeywords || []).map(keyword => (
-                            <span key={keyword} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900/50">
-                              {keyword}
-                              <button type="button" onClick={() => handleRemoveEmailKeyword(keyword)} className="text-purple-500 hover:text-purple-700 dark:hover:text-purple-200 font-bold ml-0.5 text-xxs w-3 h-3 flex items-center justify-center rounded-full hover:bg-purple-100 dark:hover:bg-purple-900">×</button>
-                            </span>
-                          ))}
-                          {(formData.emailKeywords || []).length === 0 && <span className="text-xs text-gray-400 italic">No inbox keywords yet. The AI will rely on the strategy prompt below.</span>}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-purple-500 dark:text-purple-300 uppercase tracking-wider mb-1.5">AI Reply Strategy Prompt</label>
-                        <textarea placeholder="Describe how the AI should inspect the inbox and respond (e.g. Reply to anyone asking about pricing, be friendly, mention our target link naturally)" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none min-h-[80px]" value={formData.emailStrategyPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, emailStrategyPrompt: e.target.value }))} />
-                      </div>
-                    </div>
-                  )}
+                  {/* Inbox watch keywords + AI reply strategy live in the Template
+                      section (Interaction replies block) since the last move. */}
 
                   {formData.channel === 'social' ? (
                     <>
@@ -1135,20 +1098,20 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                   ) : (
                     <>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border dark:border-gray-700">
-                        <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
-                          <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.validationStaged || false} onChange={e => setFormData(prev => ({ ...prev, validationStaged: e.target.checked }))} />
+                        <label className={`flex items-center space-x-2 p-1.5 rounded-lg transition-colors ${formData.campaignMode === 'interactions-only' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
+                          <input type="checkbox" disabled={formData.campaignMode === 'interactions-only'} className="form-checkbox text-blue-600 rounded w-4 h-4 disabled:opacity-40" checked={formData.campaignMode === 'interactions-only' ? false : (formData.validationStaged || false)} onChange={e => setFormData(prev => ({ ...prev, validationStaged: e.target.checked }))} />
                           <span className="text-xs font-semibold dark:text-gray-300">Validation</span>
                         </label>
-                        <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
-                          <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.enrichmentStaged || false} onChange={e => setFormData(prev => ({ ...prev, enrichmentStaged: e.target.checked }))} />
+                        <label className={`flex items-center space-x-2 p-1.5 rounded-lg transition-colors ${formData.campaignMode === 'interactions-only' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
+                          <input type="checkbox" disabled={formData.campaignMode === 'interactions-only'} className="form-checkbox text-blue-600 rounded w-4 h-4 disabled:opacity-40" checked={formData.campaignMode === 'interactions-only' ? false : (formData.enrichmentStaged || false)} onChange={e => setFormData(prev => ({ ...prev, enrichmentStaged: e.target.checked }))} />
                           <span className="text-xs font-semibold dark:text-gray-300">Enrichment</span>
                         </label>
-                        <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
-                          <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.aiPersonalizationStaged || false} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationStaged: e.target.checked }))} />
+                        <label className={`flex items-center space-x-2 p-1.5 rounded-lg transition-colors ${formData.campaignMode === 'interactions-only' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
+                          <input type="checkbox" disabled={formData.campaignMode === 'interactions-only'} className="form-checkbox text-blue-600 rounded w-4 h-4 disabled:opacity-40" checked={formData.campaignMode === 'interactions-only' ? false : (formData.aiPersonalizationStaged || false)} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationStaged: e.target.checked }))} />
                           <span className="text-xs font-semibold dark:text-gray-300">AI Personalization</span>
                         </label>
-                        <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
-                          <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={formData.executeStaged ?? true} onChange={e => setFormData(prev => ({ ...prev, executeStaged: e.target.checked }))} />
+                        <label className={`flex items-center space-x-2 p-1.5 rounded-lg transition-colors ${formData.campaignMode === 'interactions-only' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
+                          <input type="checkbox" disabled={formData.campaignMode === 'interactions-only'} className="form-checkbox text-blue-600 rounded w-4 h-4 disabled:opacity-40" checked={formData.campaignMode === 'interactions-only' ? false : (formData.executeStaged ?? true)} onChange={e => setFormData(prev => ({ ...prev, executeStaged: e.target.checked }))} />
                           <span className="text-xs font-semibold dark:text-gray-300">Execute</span>
                         </label>
                         <label className="flex items-center space-x-2 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors">
@@ -1159,10 +1122,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       {formData.interactionStaged && (
                         <div className="animate-fadeIn space-y-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
                           <QuotaInfoBadge appData={appData} usageKey="interactionUsage" />
-                          <div>
-                            <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Stop After (hours)</label>
-                            <input type="number" min="1" max="720" className="w-full p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none" value={formData.interactionStopAfterHours || 72} onChange={e => setFormData(prev => ({ ...prev, interactionStopAfterHours: parseInt(e.target.value) || 72 }))} />
-                          </div>
+                          <p className="text-xxs text-gray-500 dark:text-gray-400">
+                            Interactions run until the campaign duration (days) expires or quotas cap out — no separate stop-hours timer.
+                          </p>
                           <div>
                             <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1.5">
                               Select Accounts for Interaction ({interactionAccountsList.length} COMPLETED)
@@ -1207,12 +1169,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                           </div>
                         </div>
                       )}
-                      {formData.aiPersonalizationStaged && (
-                        <div className="animate-fadeIn">
-                          <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Mail-Merge prompt</label>
-                          <textarea placeholder="Define personalized instructions using columns like {{first_name}} and {{company}} (e.g. Write a custom icebreaker about their company {{company}} in a friendly tone, vary subject lines)" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[80px]" value={formData.aiPersonalizationPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationPrompt: e.target.value }))} />
-                        </div>
-                      )}
                     </>
                   )}
 
@@ -1244,8 +1200,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 </div>
               )}
             </div>
-            {/* SECTION 3: Delivery Method */}
-            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
+            {/* SECTION 2: Delivery Method (moved above Staging via order classes;
+                hidden entirely for interactions-only: nothing to shoot from). */}
+            <div className={`border rounded-xl dark:border-gray-700 overflow-hidden ${formData.channel === 'email' && formData.campaignMode === 'interactions-only' ? 'hidden' : ''} order-2`}>
               <button type="button" onClick={() => toggleSection('delivery')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
                   <FontAwesomeIcon icon={faCog} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
@@ -1259,24 +1216,20 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     <div>
                       <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Delivery Method</label>
                       <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.deliveryMethod || 'smtp'} onChange={e => setFormData(prev => ({ ...prev, deliveryMethod: e.target.value as any }))}>
-                        <option value="smtp">Custom SMTP Rotative Pool Only</option>
+                        <option value="smtp">Custom SMTP Rotative Pool Only (no account picker)</option>
 <option value="wire">Active Hub MAIL profiles Only (Secure Web Session)</option>
 <option value="mixed">Mixed-Mode Rotation (Load balance SMTPs + MAIL sessions)</option>
                       </select>
                     </div>
                   )}
 
-                  {formData.deliveryMethod !== 'smtp' && (
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Select WebFixx Project</label>
-                      <select className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.projectId || ''} onChange={e => setFormData(prev => ({ ...prev, projectId: e.target.value }))}>
-                        <option value="">-- Choose Project --</option>
-                        {projectsList.map((p: any) => <option key={p.projectId} value={p.projectId}>{p.title}</option>)}
-                      </select>
-                    </div>
+                  {/* WebFixx project picker removed — Active/Mixed now pick MAIL
+                      accounts directly below (gated by Max allowed). */}
+                  {formData.channel === 'email' && formData.deliveryMethod === 'smtp' && (
+                    <p className="text-xxs text-gray-500 dark:text-gray-400 italic">SMTP only: no account selection needed.</p>
                   )}
 
-                  {(formData.channel === 'social' || formData.projectId) && (
+                  {((formData.channel === 'social') || (formData.channel === 'email' && (formData.deliveryMethod || 'smtp') !== 'smtp')) && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider">
@@ -1356,12 +1309,12 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               )}
             </div>
 
-            {/* SECTION 4: Template / Content */}
-            <div className="border rounded-xl dark:border-gray-700 overflow-hidden">
+            {/* SECTION 4: Template / Content (fourth visually) */}
+            <div className="border rounded-xl dark:border-gray-700 overflow-hidden order-4">
               <button type="button" onClick={() => toggleSection('template')} className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
                   <FontAwesomeIcon icon={faFileAlt} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
-                  {formData.channel === 'social' ? 'Message Template & AI Strategy' : 'Email Template'}
+                  {formData.channel === 'social' ? 'Message Template & AI Strategy' : 'Links, Templates & AI Strategy'}
                 </h3>
                 <FontAwesomeIcon icon={expandedSection === 'template' ? faChevronDown : faChevronRight} className="text-gray-400" />
               </button>
@@ -1379,7 +1332,55 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       value={formData.targetLink || ''}
                       onChange={e => setFormData(prev => ({ ...prev, targetLink: e.target.value }))}
                     />
+                    <div className="mt-2 flex items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" className="form-checkbox text-blue-600 rounded w-4 h-4" checked={!!(formData as any).personalizeLink} onChange={e => setFormData(prev => ({ ...prev, personalizeLink: e.target.checked, linkParam: (formData as any).linkParam || 'email' } as any))} />
+                        <span className="text-xs font-semibold dark:text-gray-300">Personalize link with merge fields</span>
+                      </label>
+                      <input type="text" placeholder="email" className="w-28 p-1.5 text-xs border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white" value={(formData as any).linkParam || 'email'} onChange={e => setFormData(prev => ({ ...prev, linkParam: e.target.value }))} disabled={!(formData as any).personalizeLink} />
+                    </div>
+                    <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
+                      When on, each recipient gets <span className="font-mono">targetLink?param=emailAddress</span> (written to the CSV <span className="font-mono">link</span> column, so every person gets a unique link).
+                    </p>
                   </div>
+                  {/* Interaction replies block — dedicated link + template + turn gate */}
+                  {formData.channel === 'email' && formData.interactionStaged && (
+                    <div className="space-y-3 p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/50">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-300 uppercase tracking-wider">Interaction replies</p>
+                      <div>
+                        <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Inbox watch keywords (required)</label>
+                        <input type="text" placeholder="e.g. partnership, pricing, demo request" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold mb-2" value={emailKeywordInput} onChange={e => setEmailKeywordInput(e.target.value)} onKeyDown={handleAddEmailKeyword} />
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                          {(formData.emailKeywords || []).map((keyword: string) => (
+                            <span key={keyword} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900/50">
+                              {keyword}
+                              <button type="button" onClick={() => handleRemoveEmailKeyword(keyword)} className="text-purple-500 hover:text-purple-700 dark:hover:text-purple-200 font-bold ml-0.5 text-xxs w-3 h-3 flex items-center justify-center rounded-full hover:bg-purple-100 dark:hover:bg-purple-900">×</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">AI reply strategy prompt (required)</label>
+                        <textarea placeholder="Describe how the AI should inspect the inbox and respond (e.g. Reply to anyone asking about pricing, be friendly, mention our target link naturally)" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none min-h-[80px]" value={formData.emailStrategyPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, emailStrategyPrompt: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Interaction target link (optional, person-specific)</label>
+                        <input type="url" placeholder="https://your-reply-destination.com" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold" value={(formData as any).interactionTargetLink || ''} onChange={e => setFormData(prev => ({ ...prev, interactionTargetLink: e.target.value } as any))} />
+                        <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">The AI appends <span className="font-mono">?email=contactEmail</span> for you — you never type it.</p>
+                      </div>
+                      <div>
+                        <label className="block text-xxs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Turns before sending the link (after their replies)</label>
+                        <input type="number" min="0" max="10" className="w-24 p-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white" value={(formData as any).linkAfterTurns ?? 2} onChange={e => setFormData(prev => ({ ...prev, linkAfterTurns: Math.min(10, Math.max(0, parseInt(e.target.value) || 0)) } as any))} />
+                      </div>
+                    </div>
+                  )}
+                  {/* AI Personalization (mail-merge) prompt — lives with the message it writes */}
+                  {formData.channel === 'email' && formData.aiPersonalizationStaged && formData.fileUrl && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Mail-merge prompt (AI Personalization)</label>
+                      <textarea placeholder="Define personalized instructions using columns like {{first_name}} and {{company}} (e.g. Write a custom icebreaker about their company {{company}} in a friendly tone, vary subject lines)" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[80px]" value={formData.aiPersonalizationPrompt || ''} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationPrompt: e.target.value }))} />
+                    </div>
+                  )}
                   {formData.channel === 'social' ? (
                     <>
                       <div>
@@ -1445,7 +1446,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                           </div>
                           <div>
                             <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Body</label>
-                            <textarea placeholder="Write your email body here. Supports mail merge tags like {{first_name}} and {{company}}..." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[120px]" value={formData.body || ''} onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))} />
+                            <textarea placeholder="Write your email body here. Supports mail merge tags like {{first_name}}, {{company}} and {{link}} (per-recipient personalized link)..." className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[120px]" value={formData.body || ''} onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))} />
                           </div>
                         </>
                       )}
@@ -1530,7 +1531,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         {formData.enrichmentStaged ? '✓ Enrichment ' : ''}
                         {formData.aiPersonalizationStaged ? '✓ AI Personalization ' : ''}
                         {(formData.executeStaged ?? true) ? '✓ Execute ' : ''}
-                        {formData.interactionStaged ? `✓ Interaction (${formData.interactionStopAfterHours || 72}h) ` : ''}
+                        {formData.interactionStaged ? '✓ Interaction ' : ''}
                         {!formData.validationStaged && !formData.enrichmentStaged && !formData.aiPersonalizationStaged && !(formData.executeStaged ?? true) && !formData.interactionStaged ? 'No stages selected' : ''}
                       </p>
                     </div>
@@ -1621,16 +1622,13 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 )}
 
                 <div className="col-span-1 sm:col-span-2">
-                  <p className="text-gray-400 font-medium">{formData.channel === 'social' ? 'Target Link' : 'Outreach injection Target Link'}</p>
+                  <p className="text-gray-400 font-medium">Target Link{formData.channel === 'email' && (formData as any).personalizeLink ? ` (personalized: ?${(formData as any).linkParam || 'email'}=recipient)` : ''}</p>
                   <p className="font-bold text-sm text-blue-600 dark:text-blue-400 mt-0.5 font-mono">
-                    {formData.channel === 'social'
-                      ? (formData.targetLink || 'No target link set')
-                      : formData.linkId ? `Linked via ${formData.linkType}: ${
-                          formData.linkType === 'project'
-                            ? projectsList.find((p: any) => p.projectId === formData.linkId)?.title || formData.linkId
-                            : redirectsList.find((r: any) => r.redirectId === formData.linkId)?.title || formData.linkId
-                        }` : 'No redirect tracking injected'}
+                    {formData.targetLink || 'No target link set'}
                   </p>
+                  {formData.channel === 'email' && formData.interactionStaged && (formData as any).interactionTargetLink && (
+                    <p className="text-xxs text-gray-500 mt-1 font-mono">Interaction link: {(formData as any).interactionTargetLink} (after {(formData as any).linkAfterTurns ?? 2} of their replies, ?email= appended automatically)</p>
+                  )}
                 </div>
 
                 {/* Outreach account chips — identifier + platform/type */}
@@ -1771,7 +1769,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                 {formData.channel === 'social'
                   ? 'Runs the full duration — daily waves with automatic rate-limit rest until expiry.'
                   : formData.interactionStaged
-                    ? `Reply interaction runs ${formData.interactionStopAfterHours || 72}h after sends finish; campaign expires ${schedulePreview.endLabel}.`
+                    ? `Reply interaction runs until the campaign duration expires (${schedulePreview.endLabel}).`
                     : 'Sends run per plan limits until complete or the duration expires.'}
               </p>
             </div>
@@ -1965,15 +1963,14 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                       alert('Please input a campaign name to proceed.');
                       return;
                     }
-                    if (formData.deliveryMethod !== 'smtp' && !formData.projectId) {
-                      alert('Please select a WebFixx Project to proceed.');
-                      return;
-                    }
                     if (formData.channel === 'email' && formData.campaignMode !== 'interactions-only' && !formData.subject) {
                       alert('Please input an email subject line to proceed.');
                       return;
                     }
-                    if ((formData.channel === 'social' || formData.deliveryMethod !== 'smtp') && (!formData.accounts || formData.accounts.length === 0)) {
+                    // Delivery: SMTP needs no account; wire/mixed require ≥1
+                    // selected MAIL account (capped by maxCampaignAccounts).
+                    const needsDeliveryAccounts = formData.channel === 'email' && (formData.deliveryMethod || 'smtp') !== 'smtp';
+                    if ((formData.channel === 'social' || needsDeliveryAccounts) && (!formData.accounts || formData.accounts.length === 0)) {
                       alert('Please select at least one active profile/account to proceed.');
                       return;
                     }
@@ -1984,6 +1981,11 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     if ((formData.interactionAccounts || []).length > maxCampaignAccounts) {
                       alert(`You can only select up to ${maxCampaignAccounts} interaction account${maxCampaignAccounts === 1 ? '' : 's'} per campaign. You have selected ${(formData.interactionAccounts || []).length}.`);
                       return;
+                    }
+                    // Interaction wants keywords + strategy (watch inbox / DM).
+                    if (formData.channel === 'email' && formData.interactionStaged) {
+                      if (!(formData.emailKeywords || []).length) { alert('Interaction is on: add at least one inbox watch keyword.'); return; }
+                      if (!String(formData.emailStrategyPrompt || '').trim()) { alert('Interaction is on: add an AI reply strategy prompt.'); return; }
                     }
                     if (formData.channel === 'social') {
                       // Flush pending keyword input (typed but not registered via

@@ -77,7 +77,7 @@ export interface Campaign {
   interactionStoppedReason?: 'time_limit_reached' | 'reply_limit_reached' | 'admin_stopped';
 
   // Per-campaign interaction limits
-  interactionStopAfterHours?: number; // Default: 72
+  interactionStopAfterHours?: number; // Deprecated: durationDays is the guard
   durationDays?: number; // Default: admin ceiling (SETTINGS.campaignMaxDurationDays) at creation
   restUntil?: number | string | null;
 
@@ -103,6 +103,10 @@ export interface Campaign {
   // Campaign mode + interactions-only (AI inbox watcher) support
   campaignMode?: 'file' | 'interactions-only'; // 'file' = CSV-driven, 'interactions-only' = AI-driven, no contact list
   targetLink?: string; // Destination URL the AI weaves into its messages
+  personalizeLink?: boolean; // Append ?<linkParam>=recipient to targetLink per CSV row (writes `link` column)
+  linkParam?: string; // Query param name for the personalized link (default: email)
+  interactionTargetLink?: string; // Destination for AI inbox replies (?email= appended per contact)
+  linkAfterTurns?: number; // Their replies before the interaction link may be sent
   emailKeywords?: string[]; // Keywords the AI uses to find relevant emails in the inbox
   emailStrategyPrompt?: string; // Strategy prompt for AI email replies
 
