@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -401,6 +401,35 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const interactionAccountsList = getCompletedAccountsForInteraction(formData.channel || 'email');
 
   const [csvAnalytics, setCsvAnalytics] = useState<CSVAnalytics | null>(null);
+
+  // Edit mode: re-seed the CSV summary from the saved fileUrl so the
+  // uploaded list doesn't "disappear" (previously only a fresh upload set
+  // csvAnalytics, so Edit Settings showed no CSV context).
+  useEffect(() => {
+    const url = campaignToEdit?.fileUrl;
+    if (!url || csvAnalytics) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/drive-csv?url=${encodeURIComponent(url)}`);
+        if (!res.ok) return;
+        const j = await res.json().catch(() => null);
+        const text = typeof j === 'string' ? j : j?.content || j?.csv || '';
+        if (!text || typeof text !== 'string') return;
+        const normalized = normalizeCSV(text as string);
+        if (cancelled || normalized.totalRows === 0) return;
+        setCsvAnalytics({
+          totalRows: normalized.totalRows,
+          headers: normalized.headers,
+          preview: normalized.preview as string[][],
+          summary: `Loaded ${normalized.totalRows} contacts from the saved CSV.`,
+        });
+      } catch { /* summary stays hidden (non-blocking) */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignToEdit?.fileUrl]);
+
   const [editingSMTP, setEditingSMTP] = useState<SMTPSetting | null>(null);
   const [socialKeywordInput, setSocialKeywordInput] = useState('');
   const [emailKeywordInput, setEmailKeywordInput] = useState('');

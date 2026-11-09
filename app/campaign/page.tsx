@@ -72,15 +72,38 @@ export default function Campaign() {
   const router = useRouter();
   const editCampaignId = searchParams.get('edit');
 
-  // Auto-open CampaignModal in edit mode when ?edit=campaignId is present
+  // Auto-open CampaignModal in edit mode when ?edit=campaignId is present.
+  // Soft navigation from the detail page used to drop this when the
+  // campaigns bundle was stale — fall back to a direct sheet fetch so the
+  // modal opens immediately, no hard reload required.
   useEffect(() => {
-    if (!editCampaignId || campaigns.length === 0) return;
+    if (!editCampaignId || showCampaignModal) return;
     const target = campaigns.find(c => c.id === editCampaignId);
     if (target) {
       setEditingCampaign(target);
       setShowCampaignModal(true);
+      return;
     }
-  }, [editCampaignId, campaigns]);
+    if (campaigns.length === 0) return; // still loading — retry on next render
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await securedApi.callBackendFunction({ functionName: 'getCampaign', campaignId: editCampaignId });
+        if (cancelled || !res?.success || !res?.data) return;
+        // getCampaign returns a header-keyed row object — transform it the
+        // same way the list transform does (single-row array).
+        const rowObj = res.data;
+        const headers = Object.keys(rowObj);
+        const transformed = transformCampaignData([headers.map(h => rowObj[h])], headers);
+        const direct = transformed.find((c: Campaign) => c.id === editCampaignId) || transformed[0];
+        if (direct) {
+          setEditingCampaign(direct);
+          setShowCampaignModal(true);
+        }
+      } catch { /* stays closed; user can retry */ }
+    })();
+    return () => { cancelled = true; };
+  }, [editCampaignId, campaigns, showCampaignModal]);
 
   const userLimits = getUserLimits(appData);
 
@@ -833,6 +856,8 @@ export default function Campaign() {
           onClose={() => {
             setShowCampaignModal(false);
             setEditingCampaign(null);
+            // Clear the ?edit param so a refresh doesn't reopen the modal.
+            router.replace('/campaign');
           }}
           onSave={handleSaveCampaign}
         />

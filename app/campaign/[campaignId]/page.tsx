@@ -706,6 +706,33 @@ export default function CampaignDetailPage() {
     Number(campaign.analytics?.sent) ||
     0;
 
+  // Execute gate: Execute Pipeline is disabled (with a reason) until the
+  // campaign actually satisfies its execution requirements — same checks
+  // the modal enforces on save, evaluated live on the detail page.
+  const executeBlockers: string[] = [];
+  if (campaign.channel === 'social') {
+    if (!(campaign.accounts || []).length) executeBlockers.push('Add at least one social profile');
+    if (!campaign.fileUrl && !(campaign.socialKeywords || []).length && !(campaign.socialInteractionTypes || []).length) {
+      executeBlockers.push('Add targeting keywords, upload a CSV, or enable an interaction hook');
+    }
+    if (!campaign.platform) executeBlockers.push('Select the target platform');
+  } else {
+    if (campaign.campaignMode !== 'interactions-only' && !campaign.fileUrl) executeBlockers.push('Upload a recipients CSV');
+    if (!campaign.subject) executeBlockers.push('Add an email subject line');
+    if (!campaign.body) executeBlockers.push('Add an email body');
+    const method = campaign.deliveryMethod || 'smtp';
+    if (method === 'smtp' && !(campaign.smtpSettings || []).length) executeBlockers.push('Add at least one SMTP server');
+    if (method !== 'smtp' && !(campaign.accounts || []).length) executeBlockers.push('Select at least one MAIL account');
+    if (method === 'mixed' && !(campaign.smtpSettings || []).length) executeBlockers.push('Add at least one SMTP server (mixed mode)');
+    if (campaign.interactionStaged) {
+      if (!(campaign.emailKeywords || []).length) executeBlockers.push('Add at least one inbox watch keyword');
+      if (!String(campaign.emailStrategyPrompt || '').trim()) executeBlockers.push('Add an AI reply strategy prompt');
+      if (!(campaign.interactionAccounts || []).length) executeBlockers.push('Select at least one interaction account');
+    }
+  }
+  if (exhaustedStagedQuotas.length > 0) executeBlockers.push(exhaustedQuotaMessage);
+  const canExecute = executeBlockers.length === 0;
+
   return (
     <div className="p-6 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
       {/* Header */}
@@ -753,8 +780,8 @@ export default function CampaignDetailPage() {
                 <button
                   onClick={() => setShowExecuteConfirm(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={exhaustedStagedQuotas.length > 0}
-                  title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
+                  disabled={!canExecute}
+                  title={!canExecute ? `Missing requirements: ${executeBlockers.join('; ')}` : undefined}
                 >
                   <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
                   Execute Pipeline
@@ -810,12 +837,6 @@ export default function CampaignDetailPage() {
           <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColor(isCampaignExpired && effectiveStatus === 'draft' ? 'completed' : effectiveStatus)}`}>
             {isCampaignExpired && effectiveStatus === 'draft' ? 'Expired' : effectiveStatus}
           </span>
-          {/* Monthly quota for the stages this campaign will run */}
-          <span className="hidden md:flex items-center gap-1.5">
-            {stagedQuotaKeys.map(k => (
-              <QuotaInfoBadge key={k} appData={appData} usageKey={k} compact />
-            ))}
-          </span>
           <button
             onClick={() => {
               pollCampaign();
@@ -828,6 +849,17 @@ export default function CampaignDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Monthly quota pills — own row BELOW the header (never share the
+          title row: it crushes the title and action buttons). */}
+      {stagedQuotaKeys.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-6">
+          <span className="text-xxs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1">Monthly usage:</span>
+          {stagedQuotaKeys.map(k => (
+            <QuotaInfoBadge key={k} appData={appData} usageKey={k} compact />
+          ))}
+        </div>
+      )}
 
       {concurrentState.atLimit && (
         <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-400">
