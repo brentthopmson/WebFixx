@@ -54,6 +54,9 @@ export default function Campaign() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const refreshAttemptedRef = useRef(false);
+  // Prevents the ?edit auto-open effect from re-opening the modal immediately
+  // after the user cancels (router.replace clears the param asynchronously).
+  const dismissedEditRef = useRef<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   // Per-row acting state for resume/pause/delete — spinner lives INSIDE the
   // clicked button only (no full-page overlay, no success modal).
@@ -77,7 +80,13 @@ export default function Campaign() {
   // campaigns bundle was stale — fall back to a direct sheet fetch so the
   // modal opens immediately, no hard reload required.
   useEffect(() => {
-    if (!editCampaignId || showCampaignModal) return;
+    if (!editCampaignId) {
+      dismissedEditRef.current = null;
+      return;
+    }
+    if (showCampaignModal) return;
+    // User just cancelled this edit — don't re-open until the param changes/clears.
+    if (dismissedEditRef.current === editCampaignId) return;
     const target = campaigns.find(c => c.id === editCampaignId);
     if (target) {
       setEditingCampaign(target);
@@ -253,6 +262,16 @@ export default function Campaign() {
         postStatus: settingsObj.postStatus || {},
         shouldSendMessage: settingsObj.shouldSendMessage || false,
         campaignMode: resolvedMode,
+        targetLink: settingsObj.targetLink || '',
+        personalizeLink: !!settingsObj.personalizeLink,
+        linkParam: settingsObj.linkParam || 'email',
+        helperKeyword: settingsObj.helperKeyword || '',
+        interactionTargetLink: settingsObj.interactionTargetLink || '',
+        linkAfterTurns: settingsObj.linkAfterTurns ?? 2,
+        emailKeywords: settingsObj.emailKeywords || [],
+        emailStrategyPrompt: settingsObj.emailStrategyPrompt || '',
+        sendMode: settingsObj.sendMode || 'now',
+        scheduleStartTime: settingsObj.scheduleStartTime || '',
         durationDays: durationDaysVal,
         restUntil: settingsObj.restUntil || null,
         isSetupComplete: settingsObj.isSetupComplete ||
@@ -854,6 +873,9 @@ export default function Campaign() {
           appData={appData}
           campaignToEdit={editingCampaign || undefined}
           onClose={() => {
+            // Block the ?edit auto-open effect from re-opening during the
+            // async router.replace (searchParams updates after navigation).
+            dismissedEditRef.current = editCampaignId;
             setShowCampaignModal(false);
             setEditingCampaign(null);
             // Clear the ?edit param so a refresh doesn't reopen the modal.
