@@ -831,13 +831,34 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h4 className="font-semibold text-sm text-gray-900 dark:text-white">SMTP Server Rotation Pool ({(formData.smtpSettings || []).length})</h4>
-        <button
-          onClick={() => { setEditingSMTPIndex(null); setEditingSMTP({ host: '', port: 587, username: '', password: '', from_email: '' }); }}
-          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center text-xs font-semibold"
-        >
-          <FontAwesomeIcon icon={faPlus} className="w-3.5 h-3.5 mr-1" />
-          Add Server
-        </button>
+        <div className="flex items-center gap-3">
+          {(formData.smtpSettings || []).length >= 2 && (
+            <button
+              onClick={() => {
+                const servers = formData.smtpSettings || [];
+                // Source: currently edited server if it has valid limits, else first server with limits
+                const isPos = (v: any) => { const n = Number(v); return Number.isFinite(n) && Number.isInteger(n) && n >= 1; };
+                const draft: any = editingSMTP || {};
+                const draftValid = isPos(draft.hourlyLimit) && isPos(draft.dailyLimit) && isPos(draft.monthlyLimit);
+                const source: any = draftValid ? draft : servers.find((s: any) => isPos(s.hourlyLimit) && isPos(s.dailyLimit) && isPos(s.monthlyLimit));
+                if (!source) { alert('Set hourly/daily/monthly limits on at least one server first, then apply to all.'); return; }
+                const limits = { hourlyLimit: Number(source.hourlyLimit), dailyLimit: Number(source.dailyLimit), monthlyLimit: Number(source.monthlyLimit) };
+                setFormData(prev => ({ ...prev, smtpSettings: (prev.smtpSettings || []).map(s => ({ ...s, ...limits })) }));
+              }}
+              className="text-gray-600 hover:text-blue-700 dark:text-gray-300 dark:hover:text-blue-300 text-xs font-semibold"
+              title="Copy send limits (hourly/daily/monthly) from the first configured server to all servers"
+            >
+              Apply limits to all
+            </button>
+          )}
+          <button
+            onClick={() => { setEditingSMTPIndex(null); setEditingSMTP({ host: '', port: 587, username: '', password: '', from_email: '' }); }}
+            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center text-xs font-semibold"
+          >
+            <FontAwesomeIcon icon={faPlus} className="w-3.5 h-3.5 mr-1" />
+            Add Server
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2 max-h-56 overflow-y-auto">

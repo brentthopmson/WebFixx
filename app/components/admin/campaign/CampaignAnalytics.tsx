@@ -240,59 +240,52 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
           <div className="space-y-4">
             {editingSMTP ? (
               <div className="space-y-4 p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
-                <h4 className="font-medium dark:text-white">{editingSMTP ? 'Edit' : 'Add'} SMTP Server</h4>
+                <h4 className="font-medium dark:text-white">{(editingSMTP.index ?? -1) >= 0 ? 'Edit' : 'Add'} SMTP Server</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <input
                     type="text"
                     placeholder="Host"
                     className="p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                    value={editingSMTP?.config.host || ''}
-                    onChange={e => setEditingSMTP(prev => ({
-                      index: prev?.index || -1,
-                      config: { ...prev?.config!, host: e.target.value }
-                    }))}
+                    value={editingSMTP.config.host || ''}
+                    onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), host: e.target.value } }))}
                   />
                   <input
                     type="number"
                     placeholder="Port"
                     className="p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                    value={editingSMTP?.config.port || ''}
-                    onChange={e => setEditingSMTP(prev => ({
-                      index: prev?.index || -1,
-                      config: { ...prev?.config!, port: Number(e.target.value) }
-                    }))}
+                    value={editingSMTP.config.port ?? ''}
+                    onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), port: Number(e.target.value) } }))}
                   />
                 </div>
                 <input
                   type="email"
                   placeholder="From Email"
                   className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                  value={editingSMTP?.config.from_email || ''}
-                  onChange={e => setEditingSMTP(prev => ({
-                    index: prev?.index || -1,
-                    config: { ...prev?.config!, from_email: e.target.value }
-                  }))}
+                  value={editingSMTP.config.from_email || ''}
+                  onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), from_email: e.target.value } }))}
                 />
                 <input
                   type="text"
                   placeholder="Username"
                   className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                  value={editingSMTP?.config.username || ''}
-                  onChange={e => setEditingSMTP(prev => ({
-                    index: prev?.index || -1,
-                    config: { ...prev?.config!, username: e.target.value }
-                  }))}
+                  value={editingSMTP.config.username || ''}
+                  onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), username: e.target.value } }))}
                 />
                 <input
                   type="password"
                   placeholder="Password"
                   className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                  value={editingSMTP?.config.password || ''}
-                  onChange={e => setEditingSMTP(prev => ({
-                    index: prev?.index || -1,
-                    config: { ...prev?.config!, password: e.target.value }
-                  }))}
+                  value={editingSMTP.config.password || ''}
+                  onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), password: e.target.value } }))}
                 />
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">Sending limits <span className="text-red-500">*</span> (required — no fallbacks)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input type="number" min={1} placeholder="Per hour" className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white" value={(editingSMTP.config as any).hourlyLimit ?? ''} onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), hourlyLimit: e.target.value === '' ? undefined : Number(e.target.value) } }))} />
+                    <input type="number" min={1} placeholder="Per day" className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white" value={(editingSMTP.config as any).dailyLimit ?? ''} onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), dailyLimit: e.target.value === '' ? undefined : Number(e.target.value) } }))} />
+                    <input type="number" min={1} placeholder="Per month" className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white" value={(editingSMTP.config as any).monthlyLimit ?? ''} onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), monthlyLimit: e.target.value === '' ? undefined : Number(e.target.value) } }))} />
+                  </div>
+                </div>
                 <div className="flex justify-end space-x-2">
                   <button
                     onClick={() => setEditingSMTP(null)}
@@ -301,21 +294,42 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
                     Cancel
                   </button>
                   <button
-                    onClick={() => handleAddUpdateSMTP(editingSMTP?.config!, editingSMTP?.index)}
+                    onClick={() => handleAddUpdateSMTP(editingSMTP.config, editingSMTP.index)}
                     className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
-                    {editingSMTP ? 'Update' : 'Add'} Server
+                    {(editingSMTP.index ?? -1) >= 0 ? 'Update' : 'Add'} Server
                   </button>
                 </div>
               </div>
             ) : (
               <>
+                {campaign.smtpSettings.length >= 2 && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        const servers = campaign.smtpSettings || [];
+                        const isPos = (v: any) => { const n = Number(v); return Number.isFinite(n) && Number.isInteger(n) && n >= 1; };
+                        const source: any = servers.find((s: any) => isPos(s.hourlyLimit) && isPos(s.dailyLimit) && isPos(s.monthlyLimit));
+                        if (!source) { alert('Set hourly/daily/monthly limits on at least one server first, then apply to all.'); return; }
+                        const limits = { hourlyLimit: Number(source.hourlyLimit), dailyLimit: Number(source.dailyLimit), monthlyLimit: Number(source.monthlyLimit) };
+                        onUpdateSMTP(campaign.id, servers.map(s => ({ ...s, ...limits })));
+                      }}
+                      className="text-xs font-semibold text-gray-600 hover:text-blue-700 dark:text-gray-300 dark:hover:text-blue-300"
+                      title="Copy send limits (hourly/daily/monthly) from the first configured server to all servers"
+                    >
+                      Apply limits to all
+                    </button>
+                  </div>
+                )}
                 {campaign.smtpSettings.map((smtp, index) => (
                   <div key={smtp.id || index} className="bg-gray-50 rounded-lg p-4 dark:bg-gray-700">
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-medium dark:text-white">{smtp.from_email}</h4>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{smtp.host}:{smtp.port}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
+                          {(smtp as any).hourlyLimit != null ? `${(smtp as any).hourlyLimit}/h · ${(smtp as any).dailyLimit}/d · ${(smtp as any).monthlyLimit}/mo` : <span className="text-amber-600 dark:text-amber-400">Limits missing — edit to set (required)</span>}
+                        </p>
                       </div>
                       <div className="flex space-x-2">
                         <button
