@@ -34,7 +34,7 @@ import ConfirmationModal from '../../../components/ConfirmationModal';
 interface CampaignModalProps {
   appData: any;
   onClose: () => void;
-  onSave: (campaign: Partial<Campaign>) => void;
+  onSave: (campaign: Partial<Campaign>) => void | Promise<void>;
   campaignToEdit?: Campaign;
 }
 
@@ -52,6 +52,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   const [loading, setLoading] = useState(false);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [isStartingPipeline, setIsStartingPipeline] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Parse projects list from appData (active only)
   const getProjectsList = () => {
@@ -977,6 +978,29 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
     .filter((a: any) => (formData.accounts || []).includes(a.accountId))
     .map((a: any) => ({ accountId: a.accountId, identifier: a.identifier || a.accountId, platform: a.platform || '', type: a.type || '' }));
   const previewPlatformSlug = normalizeSocialPlatformName(formData.platform);
+
+  const handleSaveDraft = async () => {
+    if (isSaving) return;
+    const validationError = validateCampaignCreation(formData, maxCampaignAccounts);
+    if (validationError) {
+      alert(getValidationErrorMessage(validationError));
+      return;
+    }
+    if (exhaustedQuotaMessage) {
+      alert(exhaustedQuotaMessage);
+      return;
+    }
+    if (!isEditing && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
+      alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await Promise.resolve(onSave({ ...applyCsvGating(withDerivedPlatform(formData)), status: 'draft', isSetupComplete: true }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 dark:bg-opacity-80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -2091,7 +2115,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         <div className="flex justify-between mt-6 border-t pt-4 dark:border-gray-700">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 text-xs font-bold rounded-xl transition-colors"
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 text-xs font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSaving || isStartingPipeline}
           >
             Cancel
           </button>
@@ -2100,7 +2125,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
               step === 3 && (
                 <button
                   onClick={() => setStep(2)}
-                  className="px-4 py-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors font-bold text-xs"
+                  className="px-4 py-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSaving || isStartingPipeline}
                 >
                   Back
                 </button>
@@ -2114,7 +2140,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     setStep(prev => prev - 1);
                   }
                 }}
-                className="px-4 py-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors font-bold text-xs"
+                className="px-4 py-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSaving || isStartingPipeline}
               >
                 Back
               </button>
@@ -2195,29 +2222,16 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
             ) : (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => {
-                    const validationError = validateCampaignCreation(formData, maxCampaignAccounts);
-                    if (validationError) {
-                      const errorMessage = getValidationErrorMessage(validationError);
-                      alert(errorMessage);
-                      return;
-                    }
-                    // Staged-aware quota validation — block before any backend call
-                    if (exhaustedQuotaMessage) {
-                      alert(exhaustedQuotaMessage);
-                      return;
-                    }
-                    if (!isEditing && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
-                      alert(featureDisabledMessage('allowCampaignCreation', 'campaign creation'));
-                      return;
-                    }
-                    onSave({ ...applyCsvGating(withDerivedPlatform(formData)), status: 'draft', isSetupComplete: true });
-                  }}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                  disabled={loading || exhaustedStagedQuotas.length > 0}
+                  onClick={handleSaveDraft}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={loading || exhaustedStagedQuotas.length > 0 || isSaving || isStartingPipeline}
                   title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
                 >
-                  {isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'}
+                  {isSaving ? (
+                    <><FontAwesomeIcon icon={faSpinner} className="w-3.5 h-3.5 mr-2 animate-spin" />{isEditing ? 'Saving...' : 'Creating...'}</>
+                  ) : (
+                    isEditing ? 'Save Changes' : 'Create Staged Campaign (Draft)'
+                  )}
                 </button>
                 {isEditing && (campaignToEdit?.status === 'draft' || formData.status === 'draft') && (campaignToEdit?.isSetupComplete || formData.isSetupComplete) && (
                   concurrentState.atLimit ? (
@@ -2236,8 +2250,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                         }
                         setShowExecuteConfirm(true);
                       }}
-                      className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                      disabled={loading || exhaustedStagedQuotas.length > 0}
+                      className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={loading || exhaustedStagedQuotas.length > 0 || isSaving}
                       title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
                     >
                       Execute Pipeline
