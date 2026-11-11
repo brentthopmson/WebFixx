@@ -82,6 +82,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
   const [visibleLinks, setVisibleLinks] = useState({
     dashboard: false,
     campaign: false,
+    graph: false,
     projectLinks: false,
     redirectLinks: false,
     customDev: false,
@@ -104,6 +105,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         setVisibleLinks({
           dashboard: false,
           campaign: true,
+          graph: true,
           projectLinks: false,
           redirectLinks: false,
           customDev: false,
@@ -122,6 +124,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         setVisibleLinks({
           dashboard: true,
           campaign: true,
+          graph: true,
           projectLinks: true,
           redirectLinks: true,
           customDev: false,
@@ -168,6 +171,7 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
       setVisibleLinks({
         dashboard: false,
         campaign: false,
+        graph: false,
         projectLinks: false,
         redirectLinks: false,
         customDev: false,
@@ -402,6 +406,12 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
         <Link href="/campaign" className="nav-link" onClick={handleNavClick}>
           <FontAwesomeIcon icon={faBullhorn} className="w-5 h-5" />
           <span className="ml-3">Campaign</span>
+        </Link>
+      )}
+      {visibleLinks.graph && (
+        <Link href="/graph" className="nav-link" onClick={handleNavClick}>
+          <FontAwesomeIcon icon={faComments} className="w-5 h-5" />
+          <span className="ml-3">Graph</span>
         </Link>
       )}
       {visibleLinks.projectLinks && (
