@@ -402,16 +402,16 @@ export default function RootLayout({ children, inter }: RootLayoutProps) {
           <span className="ml-3">Responses</span>
         </Link>
       )}
-      {visibleLinks.campaign && (
-        <Link href="/campaign" className="nav-link" onClick={handleNavClick}>
-          <FontAwesomeIcon icon={faBullhorn} className="w-5 h-5" />
-          <span className="ml-3">Campaign</span>
-        </Link>
-      )}
       {visibleLinks.graph && (
         <Link href="/graph" className="nav-link" onClick={handleNavClick}>
           <FontAwesomeIcon icon={faComments} className="w-5 h-5" />
           <span className="ml-3">Graph</span>
+        </Link>
+      )}
+      {visibleLinks.campaign && (
+        <Link href="/campaign" className="nav-link" onClick={handleNavClick}>
+          <FontAwesomeIcon icon={faBullhorn} className="w-5 h-5" />
+          <span className="ml-3">Campaign</span>
         </Link>
       )}
       {visibleLinks.projectLinks && (
