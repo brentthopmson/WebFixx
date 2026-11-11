@@ -8,6 +8,7 @@ import type { Custom } from '../app/types/custom'; // Add this import
 import type { Sender } from '../app/types/sender'; // Add this import
 import type { Limit } from '../app/types/limit'; // Add this import
 import type { Campaign } from '../app/types'; // Import Campaign
+import type { GraphDevice } from '../app/types/graph'; // Import GraphDevice
 
 export interface SecuredApiRequest {
     [key: string]: any;
@@ -56,6 +57,7 @@ export interface AppState {
       settings?: ApiResponseData<any>;
       users?: ApiResponseData<UserData>; // Use UserData type
       campaigns?: ApiResponseData<Campaign>; // Add campaigns
+       graph?: ApiResponseData<GraphDevice>; // Add graph devices
     };
     isAuthenticated: boolean;
 }

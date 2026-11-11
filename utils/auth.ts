@@ -8,6 +8,7 @@ import type { Custom } from '../app/types/custom'; // Add this import
 import type { Sender } from '../app/types/sender'; // Add this import
 import type { Limit } from '../app/types/limit'; // Add this import
 import type { Campaign } from '../app/types'; // Add this import
+import type { GraphDevice } from '../app/types/graph'; // Add this import
 
 declare var process: {
   env: {
@@ -98,6 +99,7 @@ export interface AppData {
   apis?: ApiResponseData<any>;
   settings?: ApiResponseData<any>;
   campaigns?: ApiResponseData<Campaign>; // Add campaigns
+  graph?: ApiResponseData<GraphDevice>; // Add graph
 }
 
 export interface LoginResponse {
@@ -142,6 +144,7 @@ export interface TokenValidationResponse {
     apis?: ApiResponseData<any>;
     settings?: ApiResponseData<any>;
     campaigns?: ApiResponseData<Campaign>; // Add campaigns
+    graph?: ApiResponseData<GraphDevice>; // Add graph
   };
   needsVerification?: boolean;
   error?: string;
@@ -449,7 +452,8 @@ export const authApi = {
         sender: responseData.data?.sender || [],
         limits: responseData.data?.limits || [],
         apis: responseData.data?.apis || [],
-        settings: responseData.data?.settings || []
+        settings: responseData.data?.settings || [],
+         graph: responseData.data?.graph || []
       },
       needsVerification: responseData.needsVerification || false,
       error: responseData.error || undefined
@@ -606,7 +610,8 @@ export const authApi = {
                 users: result.appData?.users || [],
                 apis: result.appData?.apis || [],
                 settings: result.appData?.settings || [],
-                campaigns: result.appData?.campaigns || []
+                campaigns: result.appData?.campaigns || [],
+                 graph: result.appData?.graph || []
               },
               isAuthenticated: true
             };
@@ -634,7 +639,8 @@ export const authApi = {
                 users: result.appData?.users || appState.appData?.data?.users || [],
                 apis: result.appData?.apis || appState.appData?.data?.apis || [],
                 settings: result.appData?.settings || appState.appData?.data?.settings || [],
-                campaigns: result.appData?.campaigns || appState.appData?.data?.campaigns || []
+                campaigns: result.appData?.campaigns || appState.appData?.data?.campaigns || [],
+                 graph: result.appData?.graph || appState.appData?.data?.graph || []
               },
               isAuthenticated: true
             };
@@ -794,7 +800,8 @@ export const securedApi = {
               users: result.appData?.users || appState.appData?.data?.users || [],
               apis: result.appData?.apis || appState.appData?.data?.apis || [],
               settings: result.appData?.settings || appState.appData?.data?.settings || [],
-              campaigns: mergedCampaigns
+              campaigns: mergedCampaigns,
+               graph: result.appData?.graph || appState.appData?.data?.graph || []
             },
             isAuthenticated: true
           };

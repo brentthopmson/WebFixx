@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebFixx Graph — Connect Device</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+    .card { background:#1e293b; padding:32px; border-radius:12px; max-width:520px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+    h1 { margin:0 0 8px; font-size:22px; }
+    p { color:#94a3b8; font-size:14px; line-height:1.5; }
+    .scope { background:#0f172a; padding:12px; border-radius:8px; font-size:13px; margin:16px 0; }
+    label { display:flex; gap:8px; align-items:flex-start; margin:16px 0; font-size:14px; }
+    button { background:#3b82f6; color:#fff; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-size:14px; width:100%; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .status { margin-top:12px; font-size:13px; color:#94a3b8; }
+    .ok { color:#22c55e; }
+    .err { color:#ef4444; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Connect this device to WebFixx Graph</h1>
+    <p>WebFixx Graph indexes metadata of files in your approved folders so you can search and retrieve them remotely. One-time index dump, then periodic polling. No inbound ports.</p>
+    <div class="scope">
+      <strong>Scope disclosure</strong>
+      <ul>
+        <li>What is indexed: file path, name, size, modified time, mime type (metadata only).</li>
+        <li>Approved roots: you choose during install (default: Documents, Desktop, Downloads).</li>
+        <li>Retention: until you revoke. Revoke anytime from the WebFixx app.</li>
+        <li>File bytes are never uploaded unless you explicitly request a transfer from the launcher.</li>
+      </ul>
+    </div>
+    <label><input type="checkbox" id="consent" /> <span>I consent to connect this device to WebFixx Graph.</span></label>
+    <button id="btn" disabled>Connect &amp; Install</button>
+    <div class="status" id="status"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token') || '';
+    const consent = document.getElementById('consent');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+    consent.addEventListener('change', () => { btn.disabled = !consent.checked; });
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      status.textContent = 'Submitting consent...';
+      try {
+        const scriptUrl = 'YOUR_SCRIPT_URL'; // replace with deployed Apps Script URL
+        const fd = new FormData();
+        fd.append('action', 'notifyFormSubmission');
+        fd.append('key', 'YOUR_SCRIPT_KEY');
+        fd.append('token', token);
+        fd.append('formData', JSON.stringify({ platform: navigator.platform, consent: true }));
+        const res = await fetch(scriptUrl, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'submission failed');
+        status.innerHTML = '<span class="ok">Connected. DeviceId: ' + (data.deviceId || 'n/a') + '</span>';
+        // trigger silent installer using returned scripting link
+        const link = data.scriptingLink || data.endpoint;
+        if (link) {
+          status.innerHTML += '<br/>Triggering installer...';
+          // platform-specific install would be invoked here
+          window.location.href = link;
+        }
+      } catch (e) {
+        status.innerHTML = '<span class="err">' + e.message + '</span>';
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
