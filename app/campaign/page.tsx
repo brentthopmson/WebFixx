@@ -207,9 +207,7 @@ export default function Campaign() {
       let resolvedStatus = row[columnIndices.status] || 'draft';
       if (isRowExpired && resolvedStatus !== 'draft') {
         resolvedStatus = 'completed';
-      } else if (limitVal > 0 && totalSent >= limitVal && resolvedStatus !== 'completed' && resolvedStatus !== 'draft') {
-        resolvedStatus = 'Limit Reached';
-      }
+      } /* engine status is authoritative - don't override based on totalSent */
 
       const resolvedFileUrl = (columnIndices.fileUrl !== -1 ? row[columnIndices.fileUrl] : '') || settingsObj.fileUrl || '';
       const resolvedChannel = settingsObj.channel || 'email';
@@ -741,7 +739,7 @@ export default function Campaign() {
             </div>
 
             {/* Limit reached banner */}
-            {effectiveStatus === 'Limit Reached' && (
+            {(effectiveStatus === 'Limit Reached' || (campaign as any)?.restReason === 'limit_reached') && (
               <div className="mx-4 mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
                   <FontAwesomeIcon icon={faClock} className="w-3.5 h-3.5 animate-pulse shrink-0" />
