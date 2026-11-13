@@ -196,7 +196,7 @@ export default function Campaign() {
         parseErrors.push(msg);
       }
 
-      const totalSent = Number((statsObj as any).totalActions) || statsObj.interactions || Number(settingsObj.analytics?.sent) || 0;
+      const totalSent = Number(settingsObj.analytics?.sent) || Number((statsObj as any).totalActions) || statsObj.interactions || 0;
       const limitVal = userLimits?.shootCampaignLimit || 0;
       const durationDaysVal = settingsObj.durationDays || 7;
       const createdRaw = row[columnIndices.createdOn] || '';
