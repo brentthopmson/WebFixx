@@ -11,8 +11,10 @@ import {
   faCog,
   faTrash,
   faPlus,
-  faEdit
+  faEdit,
+  faVial
 } from '@fortawesome/free-solid-svg-icons';
+import { toast } from 'sonner';
 import type { Campaign, SMTPConfig } from '../../../types';
 
 interface CampaignAnalyticsProps {
@@ -24,6 +26,10 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
   const [isLoading, setIsLoading] = useState(false);
   const [showSMTPSettings, setShowSMTPSettings] = useState(false);
   const [editingSMTP, setEditingSMTP] = useState<{ index: number; config: Partial<SMTPConfig> } | null>(null);
+  const [testingSMTP, setTestingSMTP] = useState<{ index: number; smtp: SMTPConfig } | null>(null);
+  const [testRecipient, setTestRecipient] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
 
   const stats = [
     { label: 'Total', value: campaign.analytics?.totalRows || 0, icon: faEnvelope },
@@ -333,6 +339,13 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
                       </div>
                       <div className="flex space-x-2">
                         <button
+                          onClick={() => { setTestingSMTP({ index, smtp }); setTestRecipient(smtp.from_email || ''); setTestError(null); }}
+                          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                          title="Send test email"
+                        >
+                          <FontAwesomeIcon icon={faVial} className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setEditingSMTP({ index, config: { ...smtp } })}
                           className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                         >
@@ -371,6 +384,69 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
           </div>
         )}
       </div>
+
+      {testingSMTP && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4 dark:text-white">Test SMTP Server</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {testingSMTP.smtp.from_email} — {testingSMTP.smtp.host}:{testingSMTP.smtp.port}
+            </p>
+            <input
+              type="email"
+              placeholder="Recipient email"
+              className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white mb-2"
+              value={testRecipient}
+              onChange={e => setTestRecipient(e.target.value)}
+              disabled={testLoading}
+            />
+            {testError && (
+              <p className="text-sm text-red-600 dark:text-red-400 mb-2">{testError}</p>
+            )}
+            <div className="flex justify-end space-x-2 mt-4">
+              <button
+                onClick={() => setTestingSMTP(null)}
+                className="px-3 py-1 text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
+                disabled={testLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!testRecipient) { setTestError('Recipient email is required'); return; }
+                  setTestLoading(true);
+                  setTestError(null);
+                  try {
+                    const res = await fetch('/api/smtp/test', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ smtp: testingSMTP.smtp, recipient: testRecipient }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast.success(`SMTP test successful — email sent to ${testRecipient}`);
+                      setTestingSMTP(null);
+                    } else {
+                      setTestError(data.error || 'Unknown error');
+                      toast.error(`SMTP test failed: ${data.error || 'Unknown error'}`);
+                    }
+                  } catch (err: any) {
+                    const msg = err?.message || String(err);
+                    setTestError(msg);
+                    toast.error(`SMTP test failed: ${msg}`);
+                  } finally {
+                    setTestLoading(false);
+                  }
+                }}
+                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                disabled={testLoading}
+              >
+                {testLoading ? 'Sending...' : 'Send Test'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
