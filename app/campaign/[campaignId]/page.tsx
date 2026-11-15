@@ -287,6 +287,7 @@ export default function CampaignDetailPage() {
         const d = res.data as any;
         const mapped = campaignFromRowObject(d, campaignId);
         setCampaign(mapped);
+        if (mapped.status === 'running') setIsStartingPipeline(false);
         if (d.engineStopped) {
           toast.error('Engine Stopped Responding', {
             description: d.engineError || 'The engine server stopped responding — this campaign was automatically paused.'
@@ -787,15 +788,15 @@ export default function CampaignDetailPage() {
                 </button>
               )}
               {/* Draft + setup complete: Execute Pipeline (hidden at concurrent limit) */}
-              {effectiveStatus === 'draft' && campaign.isSetupComplete && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
+              {(effectiveStatus === 'draft' || isStartingPipeline) && campaign.isSetupComplete && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
                 <button
                   onClick={() => setShowExecuteConfirm(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!canExecute}
+                  disabled={!canExecute || isStartingPipeline}
                   title={!canExecute ? `Missing requirements: ${executeBlockers.join('; ')}` : undefined}
                 >
-                  <FontAwesomeIcon icon={faRocket} className="w-3 h-3" />
-                  Execute Pipeline
+                  <FontAwesomeIcon icon={isStartingPipeline ? faSpinner : faRocket} spin={isStartingPipeline} className="w-3 h-3" />
+                  {isStartingPipeline ? 'Starting…' : 'Execute Pipeline'}
                 </button>
               )}
               {/* Error/Failed: Retry (hidden at concurrent limit) */}
