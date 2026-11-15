@@ -1289,6 +1289,17 @@ enrichmentContext: '',
                           <input type="checkbox" disabled={formData.campaignMode === 'interactions-only'} className="form-checkbox text-blue-600 rounded w-4 h-4 disabled:opacity-40" checked={formData.campaignMode === 'interactions-only' ? false : (formData.enrichmentStaged || false)} onChange={e => setFormData(prev => ({ ...prev, enrichmentStaged: e.target.checked }))} />
                           <span className="text-xs font-semibold dark:text-gray-300">Enrichment</span>
                         </label>
+                        {formData.enrichmentStaged && formData.campaignMode !== 'interactions-only' && (
+                          <div className="ml-6 mt-1 mb-1">
+                            <label className="block text-xxs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1">Enrichment Context (optional)</label>
+                            <textarea
+                              placeholder="What to find/extract (e.g. Find CEO/personal email and LinkedIn, company size, key services). Leave blank for general enrichment."
+                              className="w-full p-2 text-xs border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[60px]"
+                              value={(formData as any).enrichmentContext || ''}
+                              onChange={e => setFormData(prev => ({ ...prev, enrichmentContext: e.target.value } as any))}
+                            />
+                          </div>
+                        )}
                         <label className={`flex items-center space-x-2 p-1.5 rounded-lg transition-colors ${formData.campaignMode === 'interactions-only' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
                           <input type="checkbox" disabled={formData.campaignMode === 'interactions-only'} className="form-checkbox text-blue-600 rounded w-4 h-4 disabled:opacity-40" checked={formData.campaignMode === 'interactions-only' ? false : (formData.aiPersonalizationStaged || false)} onChange={e => setFormData(prev => ({ ...prev, aiPersonalizationStaged: e.target.checked }))} />
                           <span className="text-xs font-semibold dark:text-gray-300">AI Personalization</span>

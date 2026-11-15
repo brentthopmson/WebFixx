@@ -1227,7 +1227,7 @@ export default function CampaignDetailPage() {
         </div>
 
         {viewMode === 'progress' ? (
-          <CampaignProgressView campaign={campaign} rows={csvData} loading={csvLoading} />
+          <CampaignProgressView campaign={campaign} rows={csvData} loading={csvLoading} headers={csvHeaders} />
         ) : (
           <>
             <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
