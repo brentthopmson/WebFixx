@@ -446,40 +446,40 @@ export default function CampaignDetailPage() {
       setShowExecuteConfirm(false);
       return;
     }
-    // Loading state: blocks double-submit (each extra click fired another
-    // runCampaignPipeline → duplicate orchestrator invocations).
+    // Close modal immediately so the user isn't blocked waiting for the
+    // backend (validation can take minutes). Fire-and-forget the request.
+    setShowExecuteConfirm(false);
     setIsStartingPipeline(true);
-    try {
-      const data: any = await securedApi.callBackendFunction({
-        functionName: 'runCampaignPipeline',
-        campaignId
-      });
-      if (data.success) {
+    toast.info('Starting pipeline...', { description: 'Campaign execution has begun.' });
+
+    securedApi.callBackendFunction({
+      functionName: 'runCampaignPipeline',
+      campaignId
+    }).then((data: any) => {
+      if (data?.success) {
         toast.success('Pipeline Started', { description: data.message || 'Campaign execution has begun.' });
         setCampaign(prev => prev ? {
           ...prev,
           status: 'running',
-          // Optimistically mark first staged stage as processing so spinner shows immediately
           ...(prev.validationStaged ? { validationStatus: 'processing' } : {}),
           ...(prev.enrichmentStaged ? { enrichmentStatus: 'processing' } : {}),
           ...(prev.aiPersonalizationStaged ? { personalizationStatus: 'processing' } : {}),
           ...(prev.interactionStaged ? { interactionStatus: 'processing' } : {}),
         } : prev);
-        // Pull the authoritative row status right away (GAS wrote 'running'
-        // server-side) so the controlling-key chip reflects truth, not just
-        // the optimistic state.
         pollCampaign();
       } else {
-        toast.error(data.message || data.error || 'Failed to start pipeline', {
-          description: data.error || data.message
+        toast.error(data?.message || data?.error || 'Failed to start pipeline', {
+          description: data?.error || data?.message
         });
+        setIsStartingPipeline(false);
       }
-    } catch (err: any) {
+    }).catch((err: any) => {
       toast.error(err?.message || 'Failed to start pipeline');
-    } finally {
       setIsStartingPipeline(false);
-      setShowExecuteConfirm(false);
-    }
+    });
+
+    // Keep isStartingPipeline true until pollCampaign flips status to running
+    setTimeout(() => setIsStartingPipeline(false), 30000);
   };
 
   useEffect(() => {

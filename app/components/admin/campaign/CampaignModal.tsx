@@ -177,6 +177,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         enrichmentStatus: campaignToEdit.enrichmentStatus || 'idle',
         aiPersonalizationStaged: campaignToEdit.aiPersonalizationStaged || false,
         aiPersonalizationPrompt: campaignToEdit.aiPersonalizationPrompt || '',
+        campaignKeyword: campaignToEdit.campaignKeyword || '',
+        enrichmentContext: campaignToEdit.enrichmentContext || '',
         personalizationStatus: campaignToEdit.personalizationStatus || 'idle',
         executeStaged: campaignToEdit.executeStaged ?? true,
         interactionStaged: campaignToEdit.interactionStaged || false,
@@ -204,7 +206,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         shouldSendMessage: campaignToEdit.shouldSendMessage || false,
         sendMode: campaignToEdit.sendMode || 'now',
         scheduleStartTime: campaignToEdit.scheduleStartTime || '',
-        campaignKeyword: campaignToEdit.campaignKeyword || '',
       };
     }
     return {
@@ -230,6 +231,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       enrichmentStatus: 'idle',
       aiPersonalizationStaged: false,
       aiPersonalizationPrompt: '',
+enrichmentContext: '',
       personalizationStatus: 'idle',
       executeStaged: true,
       interactionStaged: false,

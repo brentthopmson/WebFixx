@@ -75,6 +75,7 @@ export interface Campaign {
   enrichmentStatus?: 'idle' | 'processing' | 'completed' | 'failed' | 'retry';
   aiPersonalizationStaged?: boolean; // AI personalization toggle
   aiPersonalizationPrompt?: string; // Prompt for dynamic row generation
+enrichmentContext?: string; // Optional context for enrichment: what to search for, what to extract
   personalizationStatus?: 'idle' | 'processing' | 'completed' | 'failed' | 'retry';
   executeStaged?: boolean; // Whether to include execute stage
   interactionStaged?: boolean; // Whether to include interaction stage
