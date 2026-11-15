@@ -204,7 +204,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         shouldSendMessage: campaignToEdit.shouldSendMessage || false,
         sendMode: campaignToEdit.sendMode || 'now',
         scheduleStartTime: campaignToEdit.scheduleStartTime || '',
-        replyFolder: campaignToEdit.replyFolder || '',
+        campaignKeyword: campaignToEdit.campaignKeyword || '',
       };
     }
     return {
@@ -257,7 +257,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       shouldSendMessage: false,
       sendMode: 'now',
       scheduleStartTime: '',
-      replyFolder: '',
+      campaignKeyword: '',
     };
   };
 
@@ -1636,9 +1636,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                             <input type="text" placeholder="e.g. Quick question regarding operations" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={formData.subject || ''} onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))} />
                           </div>
                           <div>
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Reply Folder</label>
-                            <input type="text" placeholder="Campaign-Replies" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.replyFolder || ''} onChange={e => setFormData(prev => ({ ...prev, replyFolder: e.target.value }))} />
-                            <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">Replies carrying the campaign ID are moved here instead of the inbox. Blank = Campaign-Replies.</p>
+                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Campaign Keyword</label>
+                            <input type="text" placeholder="e.g. 5R1234899" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.campaignKeyword || ''} onChange={e => setFormData(prev => ({ ...prev, campaignKeyword: e.target.value }))} />
+                            <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">Unified keyword used for reply filter (rule + folder), subject/body identifier, and inbox interaction detection. Blank = campaign ID.</p>
                           </div>
                           <div>
                             <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">Email Body</label>
@@ -1751,7 +1751,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
                     </div>
                     <div className="col-span-1 sm:col-span-2">
                       <p className="text-gray-400 font-medium">Reply Folder</p>
-                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{formData.replyFolder || 'None'}</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">{formData.campaignKeyword || 'None (uses campaign ID)'}</p>
                     </div>
                   </>
                 ) : (

@@ -554,7 +554,7 @@ export default function Dashboard() {
     linkId?: string;
     sendMode?: 'now' | 'schedule';
     scheduleStartTime?: string;
-    replyFolder?: string;
+    campaignKeyword?: string;
   }) => {
     setLoading(true);
     setActionError(null);
@@ -579,7 +579,7 @@ export default function Dashboard() {
         linkId: shootData.linkId || '',
         sendMode: shootData.sendMode || 'now',
         scheduleStartTime: shootData.scheduleStartTime || null,
-        replyFolder: shootData.replyFolder || '',
+        campaignKeyword: shootData.campaignKeyword || '',
       });
 
       if (result && result.success === false) {

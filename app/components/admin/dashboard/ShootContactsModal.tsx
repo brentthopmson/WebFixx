@@ -58,7 +58,7 @@ interface ShootContactsModalProps {
     linkId?: string;
     sendMode?: 'now' | 'schedule';
     scheduleStartTime?: string;
-    replyFolder?: string;
+    campaignKeyword?: string;
   }) => Promise<void>;
   onComposeAI?: (contactEmail: string, linkType?: string, linkId?: string) => Promise<{
     subject: string;
@@ -185,7 +185,7 @@ export const ShootContactsModal = ({
   const [mailMerge, setMailMerge] = useState(true);
   const [showVars, setShowVars] = useState(false);
   const [subject, setSubject] = useState('');
-  const [replyFolder, setReplyFolder] = useState('');
+  const [campaignKeyword, setCampaignKeyword] = useState('');
   const [body, setBody] = useState('');
 
   // Link selection
@@ -264,7 +264,7 @@ export const ShootContactsModal = ({
     setMailMerge(true);
     setShowVars(false);
     setSubject('');
-    setReplyFolder('');
+    setCampaignKeyword('');
     setBody('');
     setLinkType('none');
     setLinkId('');
@@ -499,7 +499,7 @@ export const ShootContactsModal = ({
           selectedContacts: [contact],
           subject: sendSubject,
           body: sendBody,
-          replyFolder: replyFolder || undefined,
+          campaignKeyword: campaignKeyword || undefined,
           method,
           mailMerge,
           linkType: linkType !== 'none' ? linkType : undefined,
@@ -537,7 +537,7 @@ export const ShootContactsModal = ({
               selectedContacts: [contact],
               subject: sendSubject,
               body: sendBody,
-              replyFolder: replyFolder || undefined,
+              campaignKeyword: campaignKeyword || undefined,
               method,
               mailMerge,
               linkType: linkType !== 'none' ? linkType : undefined,
@@ -767,13 +767,13 @@ export const ShootContactsModal = ({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reply folder</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Campaign keyword</label>
               <input
                 type="text"
                 className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                placeholder="Campaign-Replies"
-                value={replyFolder}
-                onChange={(e) => setReplyFolder(e.target.value)}
+                placeholder="e.g. 5R1234899"
+                value={campaignKeyword}
+                onChange={(e) => setCampaignKeyword(e.target.value)}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Replies matching the subject are moved here instead of the inbox. Leave blank for default.

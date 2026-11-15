@@ -123,14 +123,14 @@ function getRowProgress(row: CSVRow, channel: string): RowProgress {
   const validation = (row['validation'] || '').trim().toLowerCase();
   const sendStamp = (row['sendStamp'] || '').trim();
   const provider = (row['providerMXResult'] || '').trim();
-  const valStatus = (row['validation_status'] || '').trim();
+  const valStatus = (row['validation_status'] || row['executionStatus'] || row['lastSendStatus'] || '').trim();
   const interactStatus = (row['interactStatus'] || '').trim().toLowerCase();
   const interactCount = (row['interactCount'] || '').trim();
   const interactStamp = (row['interactStamp'] || '').trim();
 
   let status: RowStatus = 'waiting';
-  if (validation === 'failed') status = 'failed';
-  else if (validation === 'sent') status = 'done';
+  if (validation === 'failed' || validation === 'failed_final') status = 'failed';
+  else if (validation === 'sent' || validation === 'scheduled') status = 'done';
 
   let detail = status === 'failed'
     ? (provider || 'Delivery failed')

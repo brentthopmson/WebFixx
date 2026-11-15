@@ -152,7 +152,7 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     emailStrategyPrompt: settingsObj.emailStrategyPrompt || '',
     sendMode: settingsObj.sendMode || 'now',
     scheduleStartTime: settingsObj.scheduleStartTime || '',
-    replyFolder: settingsObj.replyFolder || '',
+    campaignKeyword: settingsObj.campaignKeyword || '',
     template: settingsObj.template || '',
     templateId: settingsObj.templateId || '',
     templateContent: settingsObj.templateContent || '',
