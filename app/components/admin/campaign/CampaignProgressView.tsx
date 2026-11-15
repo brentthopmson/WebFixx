@@ -21,7 +21,7 @@ interface CSVRow {
   [key: string]: string;
 }
 
-type StageBucket = 'execute' | 'personalize' | 'enrich' | 'validated' | 'failed';
+type StageBucket = 'execute' | 'personalize' | 'enrich' | 'awaiting' | 'validated' | 'failed';
 type TabKey = 'all' | StageBucket;
 
 interface RowProgress {
@@ -86,6 +86,17 @@ const BUCKET_META: Record<StageBucket, {
     text: 'text-blue-600 dark:text-blue-400',
     chipActive: 'bg-blue-600 text-white',
     chipIdle: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  },
+  awaiting: {
+    label: 'Awaiting',
+    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-300',
+    border: 'border-l-sky-400',
+    avatar: 'bg-sky-500',
+    dot: 'bg-sky-400',
+    icon: faClock,
+    text: 'text-sky-600 dark:text-sky-400',
+    chipActive: 'bg-sky-600 text-white',
+    chipIdle: 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300',
   },
   validated: {
     label: 'Validated',
@@ -221,16 +232,14 @@ function classifyRow(row: CSVRow, campaign: Campaign): RowProgress {
   }
   // 5) Validated (eligible) or awaiting validation (if staged)
   else if (validationStaged && !isSocial) {
-    bucket = 'validated';
     if (validationEligibleFinal) {
+      bucket = 'validated';
       label = 'Valid';
       detail = `Validation: ${validation}${provider ? ` (${provider})` : ''}`;
-    } else if (validation) {
-      label = 'Validated';
-      detail = `Validation: ${validation}${provider ? ` (${provider})` : ''}`;
     } else {
-      label = 'Pending';
-      detail = 'Awaiting validation';
+      bucket = 'awaiting';
+      label = validation ? `Awaiting (${validation})` : 'Awaiting validation';
+      detail = validation ? `Validation: ${validation}${provider ? ` (${provider})` : ''}` : 'Awaiting validation';
     }
   }
   // Defaults when stages not staged / social
@@ -243,11 +252,11 @@ function classifyRow(row: CSVRow, campaign: Campaign): RowProgress {
     label = 'Pending';
     detail = personalizationStatus ? `Personalization: ${personalizationStatus}` : 'Awaiting personalization';
   } else if (isSocial) {
-    bucket = 'validated';
+    bucket = 'awaiting';
     label = searchStatus || interactStatus ? 'Processing' : 'Pending';
     detail = searchKeys || (searchStatus ? `Search: ${searchStatus}` : interactStatus ? `Interaction: ${interactStatus}` : 'Queued for interaction');
   } else {
-    bucket = 'validated';
+    bucket = 'awaiting';
     label = validation ? validation : 'Pending';
     detail = validation ? `Validation: ${validation}` : (execStatus ? `Execution: ${execStatus}` : 'Queued');
   }
@@ -307,7 +316,7 @@ export function CampaignProgressView({ campaign, rows, loading, headers }: Campa
   );
 
   const counts = useMemo(() => {
-    const c: Record<TabKey, number> = { all: progressRows.length, execute: 0, personalize: 0, enrich: 0, validated: 0, failed: 0 };
+    const c: Record<TabKey, number> = { all: progressRows.length, execute: 0, personalize: 0, enrich: 0, awaiting: 0, validated: 0, failed: 0 };
     for (const p of progressRows) c[p.progress.bucket]++;
     return c;
   }, [progressRows]);
@@ -317,10 +326,16 @@ export function CampaignProgressView({ campaign, rows, loading, headers }: Campa
     if (executeStaged) tabs.push({ key: 'execute', label: 'Execute' });
     if (personalizeStaged) tabs.push({ key: 'personalize', label: 'Personalize' });
     if (enrichmentStaged) tabs.push({ key: 'enrich', label: 'Enrich' });
-    if (validationStaged) tabs.push({ key: 'validated', label: 'Validated' });
+    if (validationStaged) {
+      tabs.push({ key: 'validated', label: 'Validated' });
+      tabs.push({ key: 'awaiting', label: 'Awaiting' });
+    } else {
+      // Show awaiting when there are pending/unprocessed rows outside staged validation flow (e.g. not started/social)
+      if (counts.awaiting > 0) tabs.push({ key: 'awaiting', label: 'Awaiting' });
+    }
     tabs.push({ key: 'failed', label: 'Failed' });
     return tabs;
-  }, [executeStaged, personalizeStaged, enrichmentStaged, validationStaged]);
+  }, [executeStaged, personalizeStaged, enrichmentStaged, validationStaged, counts.awaiting]);
 
   const effectiveTab: TabKey = visibleTabs.some(t => t.key === activeTab) ? activeTab : 'all';
 
@@ -371,8 +386,15 @@ export function CampaignProgressView({ campaign, rows, loading, headers }: Campa
     URL.revokeObjectURL(url);
   };
 
-  const summaryBuckets = (['execute', 'personalize', 'enrich', 'validated', 'failed'] as StageBucket[])
-    .filter(b => (b === 'failed') || (b === 'execute' ? executeStaged : b === 'personalize' ? personalizeStaged : b === 'enrich' ? enrichmentStaged : validationStaged));
+  const summaryBuckets = (['execute', 'personalize', 'enrich', 'validated', 'awaiting', 'failed'] as StageBucket[])
+    .filter(b => {
+      if (b === 'failed') return true;
+      if (b === 'execute') return executeStaged;
+      if (b === 'personalize') return personalizeStaged;
+      if (b === 'enrich') return enrichmentStaged;
+      if (b === 'awaiting' || b === 'validated') return validationStaged || (!validationStaged && b === 'awaiting' && counts.awaiting > 0);
+      return true;
+    });
 
   return (
     <div>
@@ -401,7 +423,7 @@ export function CampaignProgressView({ campaign, rows, loading, headers }: Campa
             style={{ width: `${pct}%` }}
           />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-4">
           {summaryBuckets.map(b => {
             const meta = BUCKET_META[b];
             return (
