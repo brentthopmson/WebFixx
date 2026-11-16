@@ -177,7 +177,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         enrichmentStatus: campaignToEdit.enrichmentStatus || 'idle',
         aiPersonalizationStaged: campaignToEdit.aiPersonalizationStaged || false,
         aiPersonalizationPrompt: campaignToEdit.aiPersonalizationPrompt || '',
-        campaignKeyword: campaignToEdit.campaignKeyword || '',
+        campaignKeyword: campaignToEdit.campaignKeyword || (campaignToEdit as any).helperKeyword || (campaignToEdit as any).replyFolder || '',
         enrichmentContext: campaignToEdit.enrichmentContext || '',
         personalizationStatus: campaignToEdit.personalizationStatus || 'idle',
         executeStaged: campaignToEdit.executeStaged ?? true,
@@ -198,7 +198,6 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         targetLink: campaignToEdit.targetLink || '',
         personalizeLink: (campaignToEdit as any).personalizeLink ?? false,
         linkParam: (campaignToEdit as any).linkParam || 'email',
-        helperKeyword: (campaignToEdit as any).helperKeyword || '',
         interactionTargetLink: (campaignToEdit as any).interactionTargetLink || '',
         linkAfterTurns: (campaignToEdit as any).linkAfterTurns ?? 2,
         emailKeywords: campaignToEdit.emailKeywords || [],
@@ -251,7 +250,6 @@ enrichmentContext: '',
       targetLink: '',
       personalizeLink: false,
       linkParam: 'email',
-      helperKeyword: '',
       interactionTargetLink: '',
       linkAfterTurns: 2,
       emailKeywords: [],
@@ -998,7 +996,12 @@ enrichmentContext: '',
     }
     setIsSaving(true);
     try {
-      await Promise.resolve(onSave({ ...applyCsvGating(withDerivedPlatform(formData)), status: 'draft', isSetupComplete: true }));
+      const payload: any = { ...applyCsvGating(withDerivedPlatform(formData)), status: 'draft', isSetupComplete: true };
+      const kw = String(payload.campaignKeyword || '').trim();
+      payload.campaignKeyword = kw;
+      payload.helperKeyword = kw;
+      delete payload.replyFolder;
+      await Promise.resolve(onSave(payload));
     } finally {
       setIsSaving(false);
     }
@@ -1542,15 +1545,9 @@ enrichmentContext: '',
                     <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
                       When on, each recipient gets <span className="font-mono">targetLink?param=emailAddress</span> (written to the CSV <span className="font-mono">link</span> column, so every person gets a unique link).
                     </p>
-                    <div className="mt-3">
-                      <label className="block text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                        Helper Keyword <span className="text-xxs font-normal lowercase text-gray-400">(stamped on every row — interactions watch for it)</span>
-                      </label>
-                      <input type="text" placeholder="e.g. #webfixx or a code word" className="w-full p-2.5 text-sm border rounded-xl dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold" value={(formData as any).helperKeyword || ''} onChange={e => setFormData(prev => ({ ...prev, helperKeyword: e.target.value } as any))} />
-                      <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1">
-                        The engine writes this into the CSV <span className="font-mono">HELPERKEYWORD</span> column for all rows at launch, so reply detection works even without watch keywords.
-                      </p>
-                    </div>
+                    <p className="text-xxs text-gray-500 dark:text-gray-400 mt-2">
+                      Campaign keyword is used for reply/filter tracking and is also stamped to the CSV <span className="font-mono">HELPERKEYWORD</span> column for compatibility.
+                    </p>
                   </div>
                   {/* Interaction replies block — dedicated link + template + turn gate */}
                   {formData.channel === 'email' && formData.interactionStaged && (
@@ -2288,7 +2285,12 @@ enrichmentContext: '',
                         scheduleStartTime: formData.scheduleStartTime || null,
                       });
                       if (data.success) {
-                        onSave({ ...applyCsvGating(withDerivedPlatform(formData)), status: 'running', isSetupComplete: true });
+                        const startPayload: any = { ...applyCsvGating(withDerivedPlatform(formData)), status: 'running', isSetupComplete: true };
+                        const skw = String(startPayload.campaignKeyword || '').trim();
+                        startPayload.campaignKeyword = skw;
+                        startPayload.helperKeyword = skw;
+                        delete startPayload.replyFolder;
+                        onSave(startPayload);
                       } else {
                         alert(data.message || data.error || 'Failed to start pipeline');
                       }
