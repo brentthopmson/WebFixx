@@ -996,7 +996,35 @@ enrichmentContext: '',
     }
     setIsSaving(true);
     try {
-      const payload: any = { ...applyCsvGating(withDerivedPlatform(formData)), status: 'draft', isSetupComplete: true };
+      // A settings save must never rewrite run state. While the campaign is
+      // running/paused/resting, carry the authoritative values from the row
+      // instead of the (possibly stale) form snapshot.
+      const rawStatus = String((campaignToEdit as any)?.status || '').toLowerCase();
+      const activeStatuses = ['running', 'processing', 'staged', 'paused', 'resting', 'limit reached'];
+      const preserveRuntime = isEditing && activeStatuses.includes(rawStatus);
+      const preserved: Record<string, any> = preserveRuntime ? {
+        status: (campaignToEdit as any).status,
+        validationStatus: (campaignToEdit as any).validationStatus,
+        enrichmentStatus: (campaignToEdit as any).enrichmentStatus,
+        personalizationStatus: (campaignToEdit as any).personalizationStatus,
+        executionStatus: (campaignToEdit as any).executionStatus,
+        interactionStatus: (campaignToEdit as any).interactionStatus,
+        mailMerged: (campaignToEdit as any).mailMerged,
+        lastProcessedRow: (campaignToEdit as any).lastProcessedRow,
+        retryAttempts: (campaignToEdit as any).retryAttempts,
+        serverAssignments: (campaignToEdit as any).serverAssignments,
+        restUntil: (campaignToEdit as any).restUntil,
+        restReason: (campaignToEdit as any).restReason,
+        runLease: (campaignToEdit as any).runLease,
+        lastError: (campaignToEdit as any).lastError,
+        lastEngineError: (campaignToEdit as any).lastEngineError,
+      } : {};
+      const payload: any = {
+        ...applyCsvGating(withDerivedPlatform(formData)),
+        ...Object.fromEntries(Object.entries(preserved).filter(([, v]) => v !== undefined)),
+        status: preserveRuntime ? (campaignToEdit as any).status : 'draft',
+        isSetupComplete: true,
+      };
       const kw = String(payload.campaignKeyword || '').trim();
       payload.campaignKeyword = kw;
       payload.helperKeyword = kw;

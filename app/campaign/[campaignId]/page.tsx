@@ -522,11 +522,21 @@ export default function CampaignDetailPage() {
   }, [findCampaign, fetchCSV, pollCampaign, campaignId]);
 
   // Auto-poll for status + cleanup refresh timeout on unmount.
-  // 15s while running, 30s while in error/retry, 60s otherwise.
-  // Stop on terminal states (completed / draft) or once durationDays has elapsed.
+  // 15s while a run is active, 30s while in error/retry, 60s otherwise.
+  // A row can briefly read 'draft' while a stage is actually processing (e.g. a
+  // stale save); stage statuses are the authoritative signal, so never stop
+  // polling just because the row status lagged behind.
   useEffect(() => {
     if (!campaign) return;
-    const s = campaign.status;
+    const s = String(campaign.status || '').toLowerCase();
+    const stageStates = [
+      campaign.validationStatus, campaign.enrichmentStatus, campaign.personalizationStatus,
+      campaign.executionStatus, campaign.interactionStatus,
+    ].map(v => String(v || '').toLowerCase());
+    const stageActive = stageStates.some(v =>
+      ['processing', 'resting', 'retry', 'running', 'waiting_quota', 'staged'].includes(v)
+    );
+    const rowActive = ['running', 'processing', 'staged', 'resting', 'paused', 'limit reached'].includes(s);
     const createdMs = campaign.created_at ? new Date(campaign.created_at).getTime() : 0;
     const expired = createdMs > 0 && Date.now() >= createdMs + (campaign.durationDays || 7) * 86400000;
     if (expired) {
@@ -536,8 +546,8 @@ export default function CampaignDetailPage() {
       }
       return;
     }
-    if (s === 'completed' || s === 'draft') return;
-    const intervalMs = s === 'running' ? 15000 : (s === 'error' ? 30000 : 60000);
+    if (!stageActive && (s === 'completed' || s === 'draft')) return;
+    const intervalMs = (rowActive || stageActive) ? 15000 : (s === 'error' ? 30000 : 60000);
     const interval = setInterval(pollCampaign, intervalMs);
     return () => {
       clearInterval(interval);

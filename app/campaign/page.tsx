@@ -346,7 +346,8 @@ export default function Campaign() {
     }
   };
 
-  const buildStrategyContext = (campaign: Partial<Campaign>) => JSON.stringify({
+  const buildStrategyContext = (campaign: Partial<Campaign>) => {
+    const ctx: any = {
     name: campaign.name || '',
     channel: campaign.channel || 'email',
     type: campaign.type || 'general',
@@ -395,7 +396,23 @@ export default function Campaign() {
     emailKeywords: campaign.emailKeywords || [],
     emailStrategyPrompt: campaign.emailStrategyPrompt || '',
     isSetupComplete: campaign.isSetupComplete || false
-  });
+  };
+
+  // Runtime bookkeeping must round-trip through an edit/save. Without it, saving
+  // settings mid-run rewrites the sheet with a stale snapshot and parks the
+  // orchestrator on an old stage status (or reverts a running row to draft).
+  const runtimeKeys = [
+    'mailMerged', 'lastProcessedRow', 'retryAttempts', 'serverAssignments',
+    'restUntil', 'restReason', 'restSetAt', 'runLease', 'lastError',
+    'lastEngineError', 'firstStartedAt', 'startedAt', 'expiresAt',
+    '_settingsVersion', 'executionStatus',
+  ];
+    for (const key of runtimeKeys) {
+      const value = (campaign as any)?.[key];
+      if (value !== undefined) ctx[key] = value;
+    }
+    return JSON.stringify(ctx);
+  };
 
   const handleSaveCampaign = async (newCampaign: Partial<Campaign>) => {
     const isUpdate = !!newCampaign.id || !!editingCampaign?.id;
