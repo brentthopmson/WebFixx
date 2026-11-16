@@ -132,6 +132,7 @@ const VALIDATION_ELIGIBLE = new Set(['verified_exists', 'valid_mx', 'social_vali
 const EXEC_SENT = new Set(['sent', 'scheduled']);
 const EXEC_FAILED = new Set(['failed', 'failed_final', 'skipped_invalid', 'skipped', 'blocked']);
 const ENRICH_DONE = new Set(['enriched', 'no_data', 'skipped', 'completed']);
+const PERSONALIZE_DONE = new Set(['personalized', 'completed', 'fallback', 'ai_fallback', 'template_fallback', 'failed_fallback']);
 
 function getStaged(campaign: Campaign) {
   const c: any = campaign || {};
@@ -190,7 +191,11 @@ function classifyRow(row: CSVRow, campaign: Campaign): RowProgress {
   const isSent = EXEC_SENT.has(execStatus) || (EXEC_SENT.has(validation) && !isSocial);
   const isSocialDone = searchStatus === 'executed' || searchStatus === 'messaged' || interactStatus === 'executed' || interactStatus === 'messaged';
   const isSocialFailed = searchStatus === 'failed' || interactStatus === 'failed' || execStatus === 'failed' || execStatus === 'failed_final';
-  const personalizedDone = personalizationStatus === 'personalized' || personalizationStatus === 'completed' || !!enhancedBody || !!enhancedSubject || !!enhancedSocial;
+  // Personalization completion must reflect actual personalize-stage work/status (AI-generated or explicit fallback),
+  // not merely template-merged enhanced fields.
+  const personalizedDone = personalizeStaged
+    ? PERSONALIZE_DONE.has(personalizationStatus)
+    : (personalizationStatus === 'personalized' || personalizationStatus === 'completed' || !!enhancedBody || !!enhancedSubject || !!enhancedSocial);
   const enrichFinalized = ENRICH_DONE.has(enrichmentStatus);
   const validationEligibleFinal = VALIDATION_ELIGIBLE.has(validation);
   const validationHardFail = VALIDATION_HARD_FAIL.has(validation);
