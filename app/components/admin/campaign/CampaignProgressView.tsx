@@ -237,10 +237,19 @@ function classifyRow(row: CSVRow, campaign: Campaign): RowProgress {
   }
   // 5) Validated (eligible) or awaiting validation (if staged)
   else if (validationStaged && !isSocial) {
+    const vStageStatus = norm((campaign as any)?.validationStatus);
+    const validationFinalized = vStageStatus === 'completed';
     if (validationEligibleFinal) {
-      bucket = 'validated';
-      label = 'Valid';
-      detail = `Validation: ${validation}${provider ? ` (${provider})` : ''}`;
+      if (validationFinalized) {
+        bucket = 'validated';
+        label = 'Valid';
+        detail = `Validation: ${validation}${provider ? ` (${provider})` : ''}`;
+      } else {
+        // Row resolved/eligible, but validation stage still running/checkpointing — keep out of final "Validated" tab
+        bucket = 'awaiting';
+        label = vStageStatus === 'paused' ? `Valid (paused)` : `Valid (checking)`;
+        detail = `Validation: ${validation}${provider ? ` (${provider})` : ''} — stage ${vStageStatus || 'in progress'}`;
+      }
     } else {
       bucket = 'awaiting';
       label = validation ? `Awaiting (${validation})` : 'Awaiting validation';
