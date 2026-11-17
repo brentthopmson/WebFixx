@@ -41,6 +41,30 @@ interface CSVRow {
   [key: string]: string;
 }
 
+// Human-readable explanation for a paused/resting campaign, built from the
+// reason/detail fields the engine persists. Keeps the raw verbose errors out of
+// the main view while still explaining WHY the campaign stopped.
+function statusReasonText(c: Campaign): string {
+  const engine = (c.lastEngineError || '').trim();
+  const detail = (c.restDetail || '').trim();
+  const reason = (c.restReason || c.pauseReason || '').trim();
+  if (engine) {
+    if (/no eligible engine server|not routing to unrelated/i.test(engine)) {
+      return 'Resume failed: no eligible engine server for this campaign category/platform. Start the engine and retry the resume.';
+    }
+    return `Engine error: ${engine.slice(0, 160)}`;
+  }
+  if (reason === 'limit_reached') {
+    if (detail) return `Quota reached — sending rests until the limit window resets. ${detail.slice(0, 160)}`;
+    return 'Sending quota reached — the campaign will auto-resume when the limit window resets.';
+  }
+  if (reason === 'retry_pending') return 'Some rows are awaiting retry; resume to continue them.';
+  if (reason === 'paused_by_admin') return 'Paused manually.';
+  if (reason) return reason;
+  if (detail) return detail.slice(0, 160);
+  return '';
+}
+
 const PLATFORM_ACTION_LABELS: Array<{ key: string; label: string }> = [
   { key: 'likesOnPost', label: 'Post Likes' },
   { key: 'commentOnPost', label: 'Post Comments' },
@@ -162,6 +186,10 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     templateContent: settingsObj.templateContent || '',
     durationDays,
     restUntil: settingsObj.restUntil || null,
+    restReason: settingsObj.restReason || null,
+    restDetail: settingsObj.restDetail || null,
+    pauseReason: settingsObj.pauseReason || null,
+    lastEngineError: settingsObj.lastEngineError || null,
     isSetupComplete: settingsObj.isSetupComplete ||
       !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
          settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
@@ -871,6 +899,33 @@ export default function CampaignDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Why the campaign paused/rested — surfaced from engine settings. */}
+      {(() => {
+        const informative = effectiveStatus === 'paused' || effectiveStatus === 'resting' || isResting;
+        if (!informative) return null;
+        const reason = statusReasonText(campaign);
+        if (!reason) return null;
+        return (
+          <div className={`mb-5 flex items-start gap-2.5 p-3 rounded-lg border text-xs ${
+            campaign.lastEngineError
+              ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300'
+              : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300'
+          }`}>
+            <FontAwesomeIcon icon={faExclamationTriangle} className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <span className="font-semibold">Status: {effectiveStatus}. </span>
+              <span>{reason}</span>
+              {campaign.lastEngineError && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer font-semibold underline hover:no-underline">Full error details</summary>
+                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px] max-h-40 overflow-auto">{campaign.lastEngineError}</pre>
+                </details>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Monthly quota pills — own row BELOW the header (never share the
           title row: it crushes the title and action buttons). */}

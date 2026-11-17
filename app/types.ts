@@ -92,6 +92,10 @@ enrichmentContext?: string; // Optional context for enrichment: what to search f
   interactionStopAfterHours?: number; // Deprecated: durationDays is the guard
   durationDays?: number; // Default: admin ceiling (SETTINGS.campaignMaxDurationDays) at creation
   restUntil?: number | string | null;
+  restReason?: string | null; // why the campaign is resting (e.g. limit_reached)
+  restDetail?: string | null; // human-readable quota detail from the engine
+  pauseReason?: string | null; // why the campaign is paused (e.g. retry_pending)
+  lastEngineError?: string | null; // relay/dispatch error from a failed resume
 
   // Setup completion tracking
   isSetupComplete?: boolean; // True when campaign setup wizard is fully completed

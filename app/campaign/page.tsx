@@ -36,6 +36,27 @@ import TransactionResultModal from '../components/TransactionResultModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UpgradePlanModal from '../components/admin/settings/UpgradePlanModal';
 
+// Human-readable explanation for a paused/resting campaign, from engine fields.
+function statusReasonText(c: Campaign): string {
+  const engine = (c.lastEngineError || '').trim();
+  const detail = (c.restDetail || '').trim();
+  const reason = (c.restReason || c.pauseReason || '').trim();
+  if (engine) {
+    if (/no eligible engine server|not routing to unrelated/i.test(engine)) {
+      return 'Resume failed: no eligible engine server. Start the engine and retry.';
+    }
+    return `Engine error: ${engine.slice(0, 140)}`;
+  }
+  if (reason === 'limit_reached') {
+    return detail ? `Quota reached: ${detail.slice(0, 140)}` : 'Sending quota reached; auto-resumes when the window resets.';
+  }
+  if (reason === 'retry_pending') return 'Some rows await retry; resume to continue.';
+  if (reason === 'paused_by_admin') return 'Paused manually.';
+  if (reason) return reason;
+  if (detail) return detail.slice(0, 140);
+  return '';
+}
+
 export default function Campaign() {
   const { appData, setAppData } = useAppState();
   // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
@@ -275,6 +296,10 @@ export default function Campaign() {
         scheduleStartTime: settingsObj.scheduleStartTime || '',
         durationDays: durationDaysVal,
         restUntil: settingsObj.restUntil || null,
+        restReason: settingsObj.restReason || null,
+        restDetail: settingsObj.restDetail || null,
+        pauseReason: settingsObj.pauseReason || null,
+        lastEngineError: settingsObj.lastEngineError || null,
         isSetupComplete: settingsObj.isSetupComplete ||
           !!(settingsObj.validationStaged || settingsObj.enrichmentStaged ||
              settingsObj.aiPersonalizationStaged || settingsObj.executeStaged || settingsObj.interactionStaged) || false,
@@ -778,15 +803,23 @@ export default function Campaign() {
               )}
             </div>
 
-            {/* Limit reached banner */}
-            {(effectiveStatus === 'Limit Reached' || (campaign as any)?.restReason === 'limit_reached') && (
-              <div className="mx-4 mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
-                  <FontAwesomeIcon icon={faClock} className="w-3.5 h-3.5 animate-pulse shrink-0" />
-                  <span>Plan limit (<strong>{limit}</strong>) reached. <button onClick={() => setShowUpgradeModal(true)} className="font-semibold underline hover:no-underline">Upgrade</button></span>
+            {/* Why the campaign paused/rested (from engine fields) */}
+            {(() => {
+              const reason = statusReasonText(campaign);
+              if (!reason || (effectiveStatus !== 'paused' && effectiveStatus !== 'resting' && !isResting && effectiveStatus !== 'Limit Reached' && campaign.restReason !== 'limit_reached')) return null;
+              const isEngine = !!campaign.lastEngineError;
+              return (
+                <div className={`mx-4 mb-3 p-2.5 rounded-lg border text-xs ${isEngine ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300'}`}>
+                  <div className="flex items-center gap-2">
+                    <FontAwesomeIcon icon={faExclamationTriangle} className="w-3.5 h-3.5 shrink-0" />
+                    <span><span className="font-semibold">Status: {effectiveStatus}. </span>{reason}</span>
+                  </div>
+                  {campaign.restReason === 'limit_reached' && (
+                    <span className="block mt-1">Plan limit (<strong>{limit}</strong>) reached. <button onClick={() => setShowUpgradeModal(true)} className="font-semibold underline hover:no-underline">Upgrade</button></span>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Failed banner */}
             {effectiveStatus === 'failed' && (
