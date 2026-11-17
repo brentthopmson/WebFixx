@@ -400,16 +400,6 @@ export function CampaignProgressView({ campaign, rows, loading, headers }: Campa
     URL.revokeObjectURL(url);
   };
 
-  const summaryBuckets = (['execute', 'personalize', 'enrich', 'validated', 'awaiting', 'failed'] as StageBucket[])
-    .filter(b => {
-      if (b === 'failed') return true;
-      if (b === 'execute') return executeStaged;
-      if (b === 'personalize') return personalizeStaged;
-      if (b === 'enrich') return enrichmentStaged;
-      if (b === 'awaiting' || b === 'validated') return validationStaged || (!validationStaged && b === 'awaiting' && counts.awaiting > 0);
-      return true;
-    });
-
   return (
     <div>
       {/* Summary strip */}
@@ -436,18 +426,6 @@ export function CampaignProgressView({ campaign, rows, loading, headers }: Campa
             className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-500"
             style={{ width: `${pct}%` }}
           />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-4">
-          {summaryBuckets.map(b => {
-            const meta = BUCKET_META[b];
-            return (
-              <div key={b} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border dark:border-gray-700 ${meta.badge}`}>
-                <FontAwesomeIcon icon={meta.icon} className={`w-3.5 h-3.5 ${meta.text}`} />
-                <span className="text-xs font-semibold">{meta.label}</span>
-                <span className="text-sm font-bold">{counts[b].toLocaleString()}</span>
-              </div>
-            );
-          })}
         </div>
       </div>
 

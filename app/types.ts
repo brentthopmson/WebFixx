@@ -54,6 +54,9 @@ export interface Campaign {
   subject?: string;
   body?: string; // Added for editor content
   campaignKeyword?: string; // Unified keyword: reply filter rule+folder, subject/body identifier, inbox interaction detection (blank = campaign ID)
+  replyFilterInstalled?: boolean; // Reply filter/rule installed in the sending account
+  replyFilterKeyword?: string; // Keyword the installed rule/folder uses
+  replyFilterAt?: string; // ISO timestamp of successful filter installation
   projectId?: string; // Added for project association
   accounts?: string[]; // Selected active Hub Account IDs (WIRE or SOCIAL)
   interactionAccounts?: string[]; // Hub Account IDs selected for interaction step

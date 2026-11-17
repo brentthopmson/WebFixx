@@ -222,6 +222,9 @@ export default function Campaign() {
         subject: settingsObj.subject || '',
         body: settingsObj.body || '',
         campaignKeyword: settingsObj.campaignKeyword || '',
+        replyFilterInstalled: settingsObj.replyFilterInstalled === true || settingsObj.replyFilterInstalled === "true",
+        replyFilterKeyword: settingsObj.replyFilterKeyword || '',
+        replyFilterAt: settingsObj.replyFilterAt || '',
         accounts: settingsObj.accounts || [],
         smtpSettings: settingsObj.smtpSettings || [],
         fileUrl: resolvedFileUrl,
@@ -765,6 +768,14 @@ export default function Campaign() {
               }`}>
                 {isResting ? `Resting (${restRemainingMin}m left)` : effectiveStatus === 'running' ? `Running · ${daysRemaining}d left` : (isExpired && effectiveStatus === 'draft' ? 'Expired' : effectiveStatus)}
               </span>
+              {campaign.replyFilterInstalled && (
+                <span
+                  className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 shrink-0"
+                  title={`Reply filter installed${campaign.replyFilterKeyword ? ` · keyword: ${campaign.replyFilterKeyword}` : ''}${campaign.replyFilterAt ? ` · ${campaign.replyFilterAt}` : ''}`}
+                >
+                  Reply filter active
+                </span>
+              )}
             </div>
 
             {/* Limit reached banner */}

@@ -153,6 +153,9 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     sendMode: settingsObj.sendMode || 'now',
     scheduleStartTime: settingsObj.scheduleStartTime || '',
     campaignKeyword: settingsObj.campaignKeyword || '',
+    replyFilterInstalled: settingsObj.replyFilterInstalled === true || settingsObj.replyFilterInstalled === "true",
+    replyFilterKeyword: settingsObj.replyFilterKeyword || '',
+    replyFilterAt: settingsObj.replyFilterAt || '',
     template: settingsObj.template || '',
     templateId: settingsObj.templateId || '',
     templateContent: settingsObj.templateContent || '',
@@ -842,6 +845,14 @@ export default function CampaignDetailPage() {
           <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColor(isCampaignExpired && effectiveStatus === 'draft' ? 'completed' : effectiveStatus)}`}>
             {isCampaignExpired && effectiveStatus === 'draft' ? 'Expired' : effectiveStatus}
           </span>
+          {campaign.replyFilterInstalled && (
+            <span
+              className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300"
+              title={`Reply filter installed${campaign.replyFilterKeyword ? ` · keyword: ${campaign.replyFilterKeyword}` : ''}${campaign.replyFilterAt ? ` · ${campaign.replyFilterAt}` : ''}`}
+            >
+              Reply filter active
+            </span>
+          )}
           <button
             onClick={() => {
               pollCampaign();
