@@ -300,42 +300,10 @@ export default function CampaignDetailPage() {
           return;
         }
 
-        // Auto-trigger next pipeline stage when current stage completes (email multi-stage pipelines only)
-        if (mapped.channel !== 'social' && mapped.status === 'running') {
-          const stageOrder = ['validation', 'enrichment', 'personalization', 'execute', 'interact'] as const;
-          const statusMap: Record<string, string> = {
-            validation: mapped.validationStatus || 'idle',
-            enrichment: mapped.enrichmentStatus || 'idle',
-            personalization: mapped.personalizationStatus || 'idle',
-            execute: mapped.executionStatus === 'completed' ? 'completed' : (mapped.status || 'idle'),
-            interact: mapped.interactionStatus || 'idle',
-          };
-          const stagedMap: Record<string, boolean> = {
-            validation: mapped.validationStaged || false,
-            enrichment: mapped.enrichmentStaged || false,
-            personalization: mapped.aiPersonalizationStaged || false,
-            execute: mapped.executeStaged ?? true,
-            interact: mapped.interactionStaged || false,
-          };
-
-          for (const stage of stageOrder) {
-            if (!stagedMap[stage]) continue;
-            if (statusMap[stage] === 'completed') {
-              const idx = stageOrder.indexOf(stage);
-              for (let i = idx + 1; i < stageOrder.length; i++) {
-                const next = stageOrder[i];
-                if (stagedMap[next] && statusMap[next] !== 'completed' && statusMap[next] !== 'processing') {
-                  securedApi.callBackendFunction({
-                    functionName: 'runCampaignPipeline',
-                    campaignId
-                  });
-                  break;
-                }
-              }
-              break;
-            }
-          }
-        }
+        // NO client-side stage auto-trigger here. The engine self-advances when a
+        // stage completes, and a stale/cached poll used to fire a duplicate
+        // runCampaignPipeline mid-run (whose GAS dispatch failure reverted the
+        // row to 'paused' at 00:16:47). Polling is read-only.
       }
     } catch {
       // Poll failed — silent
