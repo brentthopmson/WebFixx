@@ -333,6 +333,18 @@ export default function Campaign() {
     fetchCampaigns();
   }, [appData]);
 
+  // Keep the list view live while a pipeline runs. Previously this page only
+  // re-read appData after an explicit action, so a campaign that the engine had
+  // marked running/paused in the sheet stayed "draft" in the UI until reload.
+  useEffect(() => {
+    const tick = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      try { await authApi.updateAppData(setAppData, true); } catch { /* keep last known state */ }
+    };
+    const timer = setInterval(tick, 15000);
+    return () => clearInterval(timer);
+  }, [setAppData]);
+
   const handleRefreshData = async () => {
     setRefreshing(true);
     try {

@@ -26,7 +26,7 @@ import {
   faExclamationTriangle
 } from '@fortawesome/free-solid-svg-icons';
 import { useAppState } from '../../context/AppContext';
-import { securedApi } from '../../../utils/auth';
+import { securedApi, authApi } from '../../../utils/auth';
 import { isFeatureEnabled, featureDisabledMessage, getConcurrentCampaignState } from '../../../utils/featureFlags';
 import { getQuotaInfo } from '../../../utils/helpers';
 import { QuotaInfoBadge } from '../../components/QuotaInfo';
@@ -177,7 +177,7 @@ export default function CampaignDetailPage() {
   const params = useParams();
   const router = useRouter();
   const campaignId = params?.campaignId as string;
-  const { appData } = useAppState();
+  const { appData, setAppData } = useAppState();
   // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
   // mirrors engine/GAS). atLimit hides Execute Pipeline/Retry/Resume.
   const concurrentState = getConcurrentCampaignState(appData);
@@ -468,6 +468,19 @@ export default function CampaignDetailPage() {
           ...(prev.interactionStaged ? { interactionStatus: 'processing' } : {}),
         } : prev);
         pollCampaign();
+        // If the backend getCampaign response is still cached as 'draft' a few
+        // seconds after a successful start, bypass the appData cache entirely
+        // and re-read the sheet so the running badge/pause button appear.
+        setTimeout(async () => {
+          try {
+            const live = await securedApi.callBackendFunction({ functionName: 'getCampaign', campaignId });
+            const liveStatus = String((live as any)?.data?.status || '').toLowerCase();
+            if (liveStatus === 'draft' || !liveStatus) {
+              await authApi.updateAppData(setAppData, true);
+              pollCampaign();
+            }
+          } catch { /* keep the optimistic running state */ }
+        }, 5000);
       } else {
         toast.error(data?.message || data?.error || 'Failed to start pipeline', {
           description: data?.error || data?.message
@@ -546,8 +559,10 @@ export default function CampaignDetailPage() {
       }
       return;
     }
-    if (!stageActive && (s === 'completed' || s === 'draft')) return;
-    const intervalMs = (rowActive || stageActive) ? 15000 : (s === 'error' ? 30000 : 60000);
+    // 'draft' is NOT terminal for polling: appData is seeded once and can be
+    // stale while the engine has already moved the sheet to running/paused.
+    if (s === 'completed') return;
+    const intervalMs = (rowActive || stageActive || s === 'draft') ? 15000 : (s === 'error' ? 30000 : 60000);
     const interval = setInterval(pollCampaign, intervalMs);
     return () => {
       clearInterval(interval);
