@@ -229,13 +229,16 @@ export default function CampaignDetailPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'progress' | 'table'>('progress');
   const rowsPerPage = 50;
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const seededCampaignIdRef = useRef<string | null>(null);
 
   // CSV data refresh runs via /api/drive-csv (Next.js -> Drive API, no AppScript),
   // so it can poll fast during an active run without touching the AppScript quota.
-  const getRefreshInterval = (status?: string) =>
-    status === 'running' || status === 'Limit Reached' ? 20000 : 60000;
+  const getRefreshInterval = (status?: string) => {
+    const s = String(status || '').toLowerCase();
+    // Fast cadence for any state where rows/stages are actively changing.
+    if (['running', 'processing', 'staged', 'resting', 'paused', 'limit reached'].includes(s)) return 15000;
+    return 60000;
+  };
 
   // Find campaign from appData (may be stale — callers fall back to getCampaign)
   const findCampaign = useCallback(() => {
@@ -302,10 +305,10 @@ export default function CampaignDetailPage() {
       try {
         localStorage.setItem(cacheKey, JSON.stringify({ headers, rows, timestamp: Date.now() }));
       } catch {}
-
-      // Schedule next refresh
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = setTimeout(() => fetchCSV(url, true, refreshInterval), refreshInterval);
+      // NOTE: refresh scheduling lives in its own effect keyed on primitive
+      // values (see below). Do NOT self-schedule here — a setTimeout handle
+      // housed in this component gets cleared whenever the campaign object
+      // changes, and status polling creates a new object every cycle.
     } catch (err) {
       console.error('Failed to fetch CSV:', err);
     } finally {
@@ -569,11 +572,21 @@ export default function CampaignDetailPage() {
     if (s === 'completed') return;
     const intervalMs = (rowActive || stageActive || s === 'draft') ? 15000 : (s === 'error' ? 30000 : 60000);
     const interval = setInterval(pollCampaign, intervalMs);
-    return () => {
-      clearInterval(interval);
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    };
+    return () => clearInterval(interval);
   }, [campaign, pollCampaign, campaignId]);
+
+  // Dedicated CSV refresh: driven by a primitive fileUrl + cadence, NOT by the
+  // campaign object. pollCampaign() replaces the campaign object every cycle,
+  // so any effect depending on `campaign` tears down its timer before the CSV
+  // refresh fires — which is why the table went stale until a manual reload.
+  const csvFileUrl = campaign?.fileUrl || '';
+  const csvRefreshMs = getRefreshInterval(campaign?.status);
+  useEffect(() => {
+    if (!csvFileUrl) return;
+    fetchCSV(csvFileUrl, true, csvRefreshMs);
+    const t = setInterval(() => fetchCSV(csvFileUrl, true, csvRefreshMs), csvRefreshMs);
+    return () => clearInterval(t);
+  }, [csvFileUrl, csvRefreshMs, fetchCSV]);
 
   // Filter and paginate CSV data
   const filteredData = searchQuery

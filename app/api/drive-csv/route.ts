@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// Always live: this endpoint is polled during an active run and must never be
+// cached by Next.js or a CDN, otherwise the rendered CSV stays stale.
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   const fileId = request.nextUrl.searchParams.get('fileId');
   if (!fileId) {
@@ -9,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const res = await fetch(
       `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`,
-      { redirect: 'follow' }
+      { redirect: 'follow', cache: 'no-store' }
     );
     if (!res.ok) {
       return NextResponse.json({ success: false, error: `Drive returned ${res.status}` }, { status: 502 });
