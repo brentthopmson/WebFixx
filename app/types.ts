@@ -34,6 +34,8 @@ export interface SMTPSetting {
   appPassword?: string;
   oAuth2RefreshToken?: string;
   from_email: string;
+  senderName?: string; // Display name shown in the From header
+  replyTo?: string; // Reply-To address (SMTP sends only)
   status?: 'active' | 'inactive';
   // Per-server send caps (MANDATORY, no fallbacks). SMTP servers are not
   // mapped to the platform-actions-limits sheet, so each server must declare

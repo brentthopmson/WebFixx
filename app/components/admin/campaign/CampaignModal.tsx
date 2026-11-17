@@ -22,6 +22,12 @@ import {
   faClock
 } from '@fortawesome/free-solid-svg-icons';
 import type { Campaign, SMTPSetting, CSVAnalytics } from '../../../types';
+import {
+  DEFAULT_ENRICHMENT_CONTEXT,
+  DEFAULT_PERSONALIZATION_PROMPT,
+  DEFAULT_EMAIL_STRATEGY_PROMPT,
+  DEFAULT_SOCIAL_STRATEGY_PROMPT,
+} from '../../../constants/campaignDefaults';
 import { securedApi } from '../../../../utils/auth';
 import { checkFileBeforeUpload, FILE_CONSTRAINTS } from '../../../utils/fileValidators';
 import { validateCampaignCreation, getValidationErrorMessage } from '../../../utils/campaignValidators';
@@ -176,9 +182,9 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         enrichmentStaged: campaignToEdit.enrichmentStaged || false,
         enrichmentStatus: campaignToEdit.enrichmentStatus || 'idle',
         aiPersonalizationStaged: campaignToEdit.aiPersonalizationStaged || false,
-        aiPersonalizationPrompt: campaignToEdit.aiPersonalizationPrompt || '',
+        aiPersonalizationPrompt: campaignToEdit.aiPersonalizationPrompt || DEFAULT_PERSONALIZATION_PROMPT,
         campaignKeyword: campaignToEdit.campaignKeyword || (campaignToEdit as any).helperKeyword || (campaignToEdit as any).replyFolder || '',
-        enrichmentContext: campaignToEdit.enrichmentContext || '',
+        enrichmentContext: campaignToEdit.enrichmentContext || DEFAULT_ENRICHMENT_CONTEXT,
         personalizationStatus: campaignToEdit.personalizationStatus || 'idle',
         executeStaged: campaignToEdit.executeStaged ?? true,
         interactionStaged: campaignToEdit.interactionStaged || false,
@@ -190,7 +196,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         linkType: campaignToEdit.linkType || 'project',
         linkId: campaignToEdit.linkId || '',
         socialInteractionTypes: campaignToEdit.socialInteractionTypes || [],
-        socialStrategyPrompt: campaignToEdit.socialStrategyPrompt || '',
+        socialStrategyPrompt: campaignToEdit.socialStrategyPrompt || DEFAULT_SOCIAL_STRATEGY_PROMPT,
         socialKeywords: campaignToEdit.socialKeywords || [],
         tagStatus: campaignToEdit.tagStatus || {},
         platform: campaignToEdit.platform || '',
@@ -201,7 +207,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         interactionTargetLink: (campaignToEdit as any).interactionTargetLink || '',
         linkAfterTurns: (campaignToEdit as any).linkAfterTurns ?? 2,
         emailKeywords: campaignToEdit.emailKeywords || [],
-        emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || '',
+        emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || DEFAULT_EMAIL_STRATEGY_PROMPT,
         shouldSendMessage: campaignToEdit.shouldSendMessage || false,
         sendMode: campaignToEdit.sendMode || 'now',
         scheduleStartTime: campaignToEdit.scheduleStartTime || '',
@@ -229,8 +235,8 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
       enrichmentStaged: false,
       enrichmentStatus: 'idle',
       aiPersonalizationStaged: false,
-      aiPersonalizationPrompt: '',
-enrichmentContext: '',
+      aiPersonalizationPrompt: DEFAULT_PERSONALIZATION_PROMPT,
+enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       personalizationStatus: 'idle',
       executeStaged: true,
       interactionStaged: false,
@@ -242,7 +248,7 @@ enrichmentContext: '',
       linkType: 'project',
       linkId: '',
       socialInteractionTypes: [],
-      socialStrategyPrompt: '',
+      socialStrategyPrompt: DEFAULT_SOCIAL_STRATEGY_PROMPT,
       socialKeywords: [],
       tagStatus: {},
       platform: '',
@@ -253,7 +259,7 @@ enrichmentContext: '',
       interactionTargetLink: '',
       linkAfterTurns: 2,
       emailKeywords: [],
-      emailStrategyPrompt: '',
+      emailStrategyPrompt: DEFAULT_EMAIL_STRATEGY_PROMPT,
       shouldSendMessage: false,
       sendMode: 'now',
       scheduleStartTime: '',
@@ -643,6 +649,8 @@ enrichmentContext: '',
       appPassword: editingSMTP.appPassword,
       oAuth2RefreshToken: editingSMTP.oAuth2RefreshToken,
       from_email: String(editingSMTP.from_email).trim(),
+      senderName: String(editingSMTP.senderName || '').trim() || undefined,
+      replyTo: String(editingSMTP.replyTo || '').trim() || undefined,
       status: editingSMTP.status,
       id: editingSMTP.id,
       hourlyLimit,
@@ -751,6 +759,20 @@ enrichmentContext: '',
       />
       <input
         type="text"
+        placeholder="Sender Name (shown in From)"
+        className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        value={editingSMTP?.senderName || ''}
+        onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), senderName: e.target.value }))}
+      />
+      <input
+        type="email"
+        placeholder="Reply-To Email (optional)"
+        className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        value={editingSMTP?.replyTo || ''}
+        onChange={e => setEditingSMTP(prev => ({ ...(prev || {}), replyTo: e.target.value }))}
+      />
+      <input
+        type="text"
         placeholder="SMTP Username"
         className="w-full p-2.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
         value={editingSMTP?.username || ''}
@@ -852,6 +874,40 @@ enrichmentContext: '',
               Apply limits to all
             </button>
           )}
+          {(formData.smtpSettings || []).length >= 2 && (
+            <button
+              onClick={() => {
+                const draft: any = editingSMTP || {};
+                const source: any = String(draft.senderName || '').trim()
+                  ? draft
+                  : (formData.smtpSettings || []).find((s: any) => String(s.senderName || '').trim());
+                if (!source) { alert('Set a sender name on at least one server first, then apply to all.'); return; }
+                const name = String(source.senderName).trim();
+                setFormData(prev => ({ ...prev, smtpSettings: (prev.smtpSettings || []).map(s => ({ ...s, senderName: name })) }));
+              }}
+              className="text-gray-600 hover:text-blue-700 dark:text-gray-300 dark:hover:text-blue-300 text-xs font-semibold"
+              title="Copy the sender name to all SMTP servers"
+            >
+              Apply name to all
+            </button>
+          )}
+          {(formData.smtpSettings || []).length >= 2 && (
+            <button
+              onClick={() => {
+                const draft: any = editingSMTP || {};
+                const source: any = String(draft.replyTo || '').trim()
+                  ? draft
+                  : (formData.smtpSettings || []).find((s: any) => String(s.replyTo || '').trim());
+                if (!source) { alert('Set a reply-to email on at least one server first, then apply to all.'); return; }
+                const replyTo = String(source.replyTo).trim();
+                setFormData(prev => ({ ...prev, smtpSettings: (prev.smtpSettings || []).map(s => ({ ...s, replyTo })) }));
+              }}
+              className="text-gray-600 hover:text-blue-700 dark:text-gray-300 dark:hover:text-blue-300 text-xs font-semibold"
+              title="Copy the reply-to email to all SMTP servers"
+            >
+              Apply reply-to to all
+            </button>
+          )}
           <button
             onClick={() => { setEditingSMTPIndex(null); setEditingSMTP({ host: '', port: 587, username: '', password: '', from_email: '' }); }}
             className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center text-xs font-semibold"
@@ -866,8 +922,9 @@ enrichmentContext: '',
         {(formData.smtpSettings || []).map((smtp, index) => (
           <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg dark:bg-gray-700 border dark:border-gray-600">
             <div className="min-w-0">
-              <p className="text-sm font-semibold dark:text-white truncate">{smtp.from_email}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{smtp.host}:{smtp.port}</p>
+              <p className="text-sm font-semibold dark:text-white truncate">{smtp.senderName || smtp.from_email}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{smtp.from_email} · {smtp.host}:{smtp.port}</p>
+              {smtp.replyTo && <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Reply-To: {smtp.replyTo}</p>}
               <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
                 {(smtp as any).hourlyLimit != null ? `${(smtp as any).hourlyLimit}/h · ${(smtp as any).dailyLimit}/d · ${(smtp as any).monthlyLimit}/mo` : <span className="text-amber-600 dark:text-amber-400">Limits missing — edit to set (required)</span>}
               </p>

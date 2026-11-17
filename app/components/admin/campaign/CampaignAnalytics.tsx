@@ -272,6 +272,20 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
                 />
                 <input
                   type="text"
+                  placeholder="Sender Name (shown in From)"
+                  className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                  value={(editingSMTP.config as any).senderName || ''}
+                  onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), senderName: e.target.value } }))}
+                />
+                <input
+                  type="email"
+                  placeholder="Reply-To Email (optional)"
+                  className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                  value={(editingSMTP.config as any).replyTo || ''}
+                  onChange={e => setEditingSMTP(prev => ({ index: prev?.index ?? -1, config: { ...((prev?.config as any) || {}), replyTo: e.target.value } }))}
+                />
+                <input
+                  type="text"
                   placeholder="Username"
                   className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                   value={editingSMTP.config.username || ''}
@@ -325,14 +339,41 @@ export function CampaignAnalytics({ campaign, onUpdateSMTP }: CampaignAnalyticsP
                     >
                       Apply limits to all
                     </button>
+                    <button
+                      onClick={() => {
+                        const servers = campaign.smtpSettings || [];
+                        const source: any = servers.find((s: any) => String((s as any).senderName || '').trim());
+                        if (!source) { alert('Set a sender name on at least one server first, then apply to all.'); return; }
+                        const name = String(source.senderName).trim();
+                        onUpdateSMTP(campaign.id, servers.map(s => ({ ...s, senderName: name })));
+                      }}
+                      className="text-xs font-semibold text-gray-600 hover:text-blue-700 dark:text-gray-300 dark:hover:text-blue-300"
+                      title="Copy sender name to all servers"
+                    >
+                      Apply name to all
+                    </button>
+                    <button
+                      onClick={() => {
+                        const servers = campaign.smtpSettings || [];
+                        const source: any = servers.find((s: any) => String((s as any).replyTo || '').trim());
+                        if (!source) { alert('Set a reply-to email on at least one server first, then apply to all.'); return; }
+                        const replyTo = String(source.replyTo).trim();
+                        onUpdateSMTP(campaign.id, servers.map(s => ({ ...s, replyTo })));
+                      }}
+                      className="text-xs font-semibold text-gray-600 hover:text-blue-700 dark:text-gray-300 dark:hover:text-blue-300"
+                      title="Copy reply-to email to all servers"
+                    >
+                      Apply reply-to to all
+                    </button>
                   </div>
                 )}
                 {campaign.smtpSettings.map((smtp, index) => (
                   <div key={smtp.id || index} className="bg-gray-50 rounded-lg p-4 dark:bg-gray-700">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="font-medium dark:text-white">{smtp.from_email}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{smtp.host}:{smtp.port}</p>
+                        <h4 className="font-medium dark:text-white">{(smtp as any).senderName || smtp.from_email}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{smtp.from_email} · {smtp.host}:{smtp.port}</p>
+                        {(smtp as any).replyTo && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reply-To: {(smtp as any).replyTo}</p>}
                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                           {(smtp as any).hourlyLimit != null ? `${(smtp as any).hourlyLimit}/h · ${(smtp as any).dailyLimit}/d · ${(smtp as any).monthlyLimit}/mo` : <span className="text-amber-600 dark:text-amber-400">Limits missing — edit to set (required)</span>}
                         </p>

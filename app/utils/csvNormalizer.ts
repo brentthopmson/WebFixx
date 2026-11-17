@@ -49,7 +49,7 @@ const FUZZY_MAP: Record<string, string[]> = {
   URL: ['URL', 'LINK', 'WEBSITE', 'WEB', 'REFERENCE']
 };
 
-function parseCSV(text: string): string[][] {
+export function parseCSV(text: string): string[][] {
   // Auto-detect tab-delimited files
   const firstNewline = text.indexOf('\n');
   const firstLine = firstNewline > 0 ? text.slice(0, firstNewline) : text;

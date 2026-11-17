@@ -31,6 +31,7 @@ import { isFeatureEnabled, featureDisabledMessage, getConcurrentCampaignState } 
 import { getQuotaInfo } from '../../../utils/helpers';
 import { QuotaInfoBadge } from '../../components/QuotaInfo';
 import { toast } from 'sonner';
+import { parseCSV } from '../../utils/csvNormalizer';
 import type { Campaign } from '../../types';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { CampaignProgressView } from '../../components/admin/campaign/CampaignProgressView';
@@ -253,15 +254,20 @@ export default function CampaignDetailPage() {
       if (!json.success || !json.data) throw new Error(json.error || 'Failed to fetch CSV');
       const text = json.data;
 
-      const lines = text.split('\n').filter((l: string) => l.trim());
-      if (lines.length === 0) return;
-      const headers = lines[0].split(',').map((h: string) => h.trim().replace(/^"|"$/g, ''));
-      const rows = lines.slice(1).map((line: string) => {
-        const vals = line.split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
-        const row: CSVRow = {};
-        headers.forEach((h: string, i: number) => { row[h] = vals[i] || ''; });
-        return row;
-      });
+      // Use a quote-aware CSV parser: personalized email bodies contain commas
+      // and newlines inside quoted fields. A naive split('\n')/split(',') turned
+      // each body line into a fake "row" (54 real rows -> 246) and scattered
+      // values into the wrong columns.
+      const parsed = parseCSV(text);
+      if (parsed.length === 0) return;
+      const headers = parsed[0].map((h: string) => String(h || '').trim().replace(/^"|"$/g, ''));
+      const rows = parsed.slice(1)
+        .filter((vals: string[]) => vals.some((v: string) => String(v || '').trim()))
+        .map((vals: string[]) => {
+          const row: CSVRow = {};
+          headers.forEach((h: string, i: number) => { row[h] = String(vals[i] ?? '').trim(); });
+          return row;
+        });
       setCsvHeaders(headers);
       setCsvData(rows);
 
