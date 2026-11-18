@@ -16,7 +16,7 @@ export interface AppDataShape {
     settings?: AppDataSettings;
     campaigns?: AppDataCampaigns;
   };
-  user?: { userId?: string | null } | null;
+  user?: { userId?: string | null; plan?: string | null } | null;
 }
 
 const OFF_VALUES = ['0', 'false', 'no', 'off', 'disabled'];
@@ -93,16 +93,29 @@ export function getMaxCampaignDurationDays(appData: AppDataShape | null | undefi
 // via TRIGGERS and therefore still holds its slot.
 const ACTIVE_CAMPAIGN_STATUSES = ['running', 'processing', 'staged', 'resting'];
 
+// Static plan -> concurrent-slot map, mirroring the Limits sheet
+// campaignConcurrentLimit column. Used as a fallback when appData.data.limits
+// has not loaded yet, so the UI never shows a wrong "X of 1" while loading.
+const PLAN_CONCURRENT_LIMITS: Record<string, number> = {
+  LEGEND: 10, VETERAN: 7, OG: 5, NEWBEE: 3, FREE: 1,
+};
+
 /**
- * Per-user concurrent campaign cap from the SETTINGS sheet
- * (campaignConcurrentLimit). Mirrors the engine/GAS read — fallback 1
- * (safety valve, not a spend cap).
+ * Per-user concurrent campaign cap from the user's PLAN (Limits sheet plan
+ * row campaignConcurrentLimit), never the SETTINGS sheet. Mirrors the engine
+ * and GAS reads. Falls back to the static plan map (then 1) only when the
+ * limits sheet data is not yet available.
  */
 export function getMaxConcurrentCampaigns(appData: AppDataShape | null | undefined): number {
   // From the user's PLAN (Limits sheet plan row), never the SETTINGS sheet.
-  const val = getUserLimits(appData)?.campaignConcurrentLimit;
-  const parsed = Number(val);
-  return !Number.isFinite(parsed) || parsed <= 0 ? 1 : Math.floor(parsed);
+  const fromSheet = getUserLimits(appData)?.campaignConcurrentLimit;
+  const sheetVal = Number(fromSheet);
+  if (Number.isFinite(sheetVal) && sheetVal > 0) return Math.floor(sheetVal);
+  // Limits not loaded yet — derive from the signed-in user's plan.
+  const plan = String(appData?.user?.plan || '').trim().toUpperCase();
+  const planLimit = PLAN_CONCURRENT_LIMITS[plan];
+  if (Number.isFinite(planLimit) && planLimit > 0) return planLimit;
+  return 1;
 }
 
 export interface ConcurrentCampaignState {
