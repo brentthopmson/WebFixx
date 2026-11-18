@@ -210,13 +210,17 @@ export default function CampaignDetailPage() {
   const router = useRouter();
   const campaignId = params?.campaignId as string;
   const { appData, setAppData } = useAppState();
-  // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
-  // mirrors engine/GAS). atLimit hides Execute Pipeline/Retry/Resume.
-  const concurrentState = getConcurrentCampaignState(appData);
+  // Per-user concurrent campaign guardrail (from the user's PLAN, per engine/GAS).
+  // Exclude this campaign so a running/paused campaign holding the last slot can
+  // still show its own Resume/Retry controls (mirrors the engine's exclude-self).
+  const concurrentState = getConcurrentCampaignState(appData, campaignId);
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [isStartingPipeline, setIsStartingPipeline] = useState(false);
+  // Stay in "pausing" until the ENGINE has actually persisted status=paused in
+  // the sheet (mirrors isStartingPipeline). Cleared only by pollCampaign().
+  const [isPausing, setIsPausing] = useState(false);
   // Immediate click feedback for Pause/Resume/Retry: set synchronously as
   // the FIRST statement of each handler (before any await) so the button
   // spins + disables the instant it is clicked, not after the request.
@@ -228,6 +232,7 @@ export default function CampaignDetailPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'progress' | 'table'>('progress');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const rowsPerPage = 50;
   const seededCampaignIdRef = useRef<string | null>(null);
 
@@ -328,6 +333,8 @@ export default function CampaignDetailPage() {
         const mapped = campaignFromRowObject(d, campaignId);
         setCampaign(mapped);
         if (mapped.status === 'running') setIsStartingPipeline(false);
+        // Only the engine's persisted sheet state confirms a real pause.
+        if (mapped.status === 'paused') setIsPausing(false);
         if (d.engineStopped) {
           toast.error('Engine Stopped Responding', {
             description: d.engineError || 'The engine server stopped responding — this campaign was automatically paused.'
@@ -350,36 +357,72 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId]);
 
+  // Manual refresh: force-refresh app-level data, the campaign row, and the
+  // CSV in one go, with visible feedback (the button spins while in flight).
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    const fileUrl = campaign?.fileUrl || '';
+    try {
+      await Promise.allSettled([
+        authApi.updateAppData(setAppData, true),
+        pollCampaign(),
+        fileUrl ? fetchCSV(fileUrl, true) : Promise.resolve(),
+      ]);
+      toast.success('Data refreshed');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, setAppData, pollCampaign, fetchCSV, campaign?.fileUrl]);
+
   const handlePauseCampaign = async () => {
-    if (actingAction) return;
+    if (actingAction || isPausing) return;
     setActingAction('pause');
-    // Optimistic: flip the badge to pausing immediately so the click has
-    // visible feedback before the backend round-trip completes.
+    setIsPausing(true); // spinner + "Pausing…" — mirrors the starting flow
+    // Optimistic badge flip for instant feedback; the REAL confirmation comes
+    // from pollCampaign() reading status=paused from the sheet.
     setCampaign(prev => prev ? { ...prev, status: 'paused' } : prev);
+    toast.info('Pausing campaign…', { description: 'Waiting for the engine to stop at the current checkpoint.' });
+    let confirmed = false;
     try {
       const res: any = await securedApi.callBackendFunction({
         functionName: 'pauseCampaign',
         campaignId
       });
-      if (res.success) {
-        toast.success('Campaign Paused', {
-          description: res.message || 'Campaign paused. Resume anytime to continue.'
-        });
-        setCampaign(prev => prev ? {
-          ...prev,
-          status: 'paused',
-          validationStatus: prev.validationStatus === 'processing' ? 'idle' : prev.validationStatus,
-          enrichmentStatus: prev.enrichmentStatus === 'processing' ? 'idle' : prev.enrichmentStatus,
-          personalizationStatus: prev.personalizationStatus === 'processing' ? 'idle' : prev.personalizationStatus,
-          interactionStatus: prev.interactionStatus === 'processing' ? 'idle' : prev.interactionStatus,
-        } : prev);
-        pollCampaign();
-        router.refresh();
+      if (res.success || /already paused/i.test(String(res.error || ''))) {
+        // Poll immediately and a few times so the "paused" sheet state (written
+        // by GAS) is picked up quickly; isPausing clears only on a real confirm.
+        for (let i = 0; i < 8; i++) {
+          await pollCampaign();
+          // pollCampaign() calls setIsPausing(false) once it sees status=paused.
+          // Re-check the sheet via a fresh getCampaign to avoid a stale cache.
+          const live: any = await securedApi.callBackendFunction({ functionName: 'getCampaign', campaignId }).catch(() => null);
+          if (String(live?.data?.status || '').toLowerCase() === 'paused') {
+            setIsPausing(false);
+            confirmed = true;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        if (confirmed) {
+          toast.success('Campaign Paused', {
+            description: 'Engine has stopped at the current checkpoint. Resume anytime to continue.'
+          });
+          router.refresh();
+        } else {
+          // Safety: don't leave the UI stuck; let the next poll reconcile.
+          setIsPausing(false);
+          toast.error('Pause not yet confirmed', {
+            description: 'The pause request was sent but the engine has not confirmed a stopped state yet. Check the status badge.'
+          });
+        }
       } else {
+        setIsPausing(false);
         toast.error(res.error || 'Failed to pause campaign');
         pollCampaign();
       }
     } catch (err: any) {
+      setIsPausing(false);
       toast.error(err?.message || 'Failed to pause campaign');
       pollCampaign();
     } finally {
@@ -570,10 +613,11 @@ export default function CampaignDetailPage() {
     // 'draft' is NOT terminal for polling: appData is seeded once and can be
     // stale while the engine has already moved the sheet to running/paused.
     if (s === 'completed') return;
-    const intervalMs = (rowActive || stageActive || s === 'draft') ? 15000 : (s === 'error' ? 30000 : 60000);
+    // Poll fast while a pause is being confirmed so the UI updates promptly.
+    const intervalMs = isPausing ? 2000 : (rowActive || stageActive || s === 'draft') ? 15000 : (s === 'error' ? 30000 : 60000);
     const interval = setInterval(pollCampaign, intervalMs);
     return () => clearInterval(interval);
-  }, [campaign, pollCampaign, campaignId]);
+  }, [campaign, pollCampaign, campaignId, isPausing]);
 
   // Dedicated CSV refresh: driven by a primitive fileUrl + cadence, NOT by the
   // campaign object. pollCampaign() replaces the campaign object every cycle,
@@ -865,19 +909,20 @@ export default function CampaignDetailPage() {
                   {actingAction === 'retry' ? 'Retrying…' : 'Retry'}
                 </button>
               )}
-              {/* Running or Limit Reached: Pause */}
-              {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached') && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+              {/* Running or Limit Reached: Pause. Keep visible while confirming
+                  the pause so the spinner stays until the engine really stops. */}
+              {((effectiveStatus === 'running' || effectiveStatus === 'Limit Reached' || isPausing)) && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
                 <button
                   onClick={handlePauseCampaign}
-                  disabled={actingAction === 'pause'}
+                  disabled={actingAction === 'pause' || isPausing}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <FontAwesomeIcon icon={actingAction === 'pause' ? faSpinner : faPause} spin={actingAction === 'pause'} className="w-3 h-3" />
-                  {actingAction === 'pause' ? 'Pausing…' : 'Pause'}
+                  <FontAwesomeIcon icon={isPausing || actingAction === 'pause' ? faSpinner : faPause} spin={isPausing || actingAction === 'pause'} className="w-3 h-3" />
+                  {isPausing || actingAction === 'pause' ? 'Pausing…' : 'Pause'}
                 </button>
               )}
               {/* Paused: Resume (hidden at concurrent limit) */}
-              {effectiveStatus === 'paused' && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
+              {effectiveStatus === 'paused' && !isPausing && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
                 <button
                   onClick={handleResumeCampaign}
                   disabled={actingAction === 'resume'}
@@ -901,14 +946,12 @@ export default function CampaignDetailPage() {
             </span>
           )}
           <button
-            onClick={() => {
-              pollCampaign();
-              if (campaign.fileUrl) fetchCSV(campaign.fileUrl, true, getRefreshInterval(effectiveStatus));
-            }}
-            className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             title="Refresh Data"
           >
-            <FontAwesomeIcon icon={faSync} className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            <FontAwesomeIcon icon={faSync} spin={isRefreshing} className="w-4 h-4 text-gray-600 dark:text-gray-300" />
           </button>
         </div>
       </div>

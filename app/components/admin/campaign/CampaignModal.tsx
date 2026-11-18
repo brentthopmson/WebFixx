@@ -1052,6 +1052,10 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       return;
     }
     setIsSaving(true);
+    // Safety valve: never leave the form stuck on "Creating..." if the parent's
+    // onSave promise stalls. The normal path clears this immediately on resolve;
+    // this only fires if the backend call never settles.
+    const safetyTimer = setTimeout(() => setIsSaving(false), 20000);
     try {
       // A settings save must never rewrite run state. While the campaign is
       // running/paused/resting, carry the authoritative values from the row
@@ -1088,6 +1092,7 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       delete payload.replyFolder;
       await Promise.resolve(onSave(payload));
     } finally {
+      clearTimeout(safetyTimer);
       setIsSaving(false);
     }
   };

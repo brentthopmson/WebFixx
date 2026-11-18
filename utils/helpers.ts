@@ -88,6 +88,7 @@ export interface UserLimits {
   shootContactsLimit: number;
   interactionLimit: number;
   campaignFileSize: number;
+  campaignConcurrentLimit: number; // from the user's PLAN (Limits sheet), not SETTINGS
   // Campaign-specific limits
   validateLimit: number;
   enrichLimit: number;
@@ -139,6 +140,7 @@ export const getUserLimits = (appData: any): UserLimits | null => {
       shootContactsLimit: Number(getColumnValue('shootContactsLimit')) || 0,
       interactionLimit: Number(getColumnValue('interactionLimit')) || 0,
       campaignFileSize: Number(getColumnValue('campaignFileSize')) || 100,
+      campaignConcurrentLimit: Number(getColumnValue('campaignConcurrentLimit')) || 1,
       // Campaign-specific limits
       validateLimit: Number(getColumnValue('validateLimit')) || 0,
       enrichLimit: Number(getColumnValue('enrichLimit')) || 0,

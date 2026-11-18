@@ -247,23 +247,35 @@ async function _fetchAppDataLite(token: string, forceRefresh: boolean, skipClien
       let retries = 2;
       let delay = 2000;
       let response: Response | null = null;
+      // Hard ceiling (~15s incl. one 429 backoff) so a hung getAppDataLite can
+      // never leave callers (e.g. the campaign-creation modal) waiting forever.
+      const deadline = Date.now() + 15000;
 
       while (retries >= 0) {
-        response = await fetch(`${API_BASE_URL}/backend-function`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json',
-          },
-          body: objectToFormData({
-            token,
-            traceId: generateTraceId(),
-            functionName: 'getAppDataLite',
-            forceRefresh: forceRefresh ? 'true' : 'false',
-          }),
-        });
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), remaining);
+        try {
+          response = await fetch(`${API_BASE_URL}/backend-function`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+            },
+            body: objectToFormData({
+              token,
+              traceId: generateTraceId(),
+              functionName: 'getAppDataLite',
+              forceRefresh: forceRefresh ? 'true' : 'false',
+            }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
 
-        if (response.status === 429 && retries > 0) {
+        if (response.status === 429 && retries > 0 && (deadline - Date.now()) > delay) {
           retries--;
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;

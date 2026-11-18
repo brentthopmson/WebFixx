@@ -519,7 +519,9 @@ export default function Campaign() {
             ? 'Your campaign settings have been saved.'
             : 'Your campaign has been successfully created.',
         });
-        await authApi.updateAppData(setAppData);
+        // Refresh app data in the BACKGROUND. A slow/hung getAppDataLite must
+        // never keep the modal stuck on "Creating..." after the save succeeded.
+        authApi.updateAppData(setAppData).catch(() => {});
       } else {
         console.error('[Campaign] Backend returned error:', response.error);
         setResultModalProps({

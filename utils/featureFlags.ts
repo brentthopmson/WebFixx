@@ -1,4 +1,5 @@
 import { rowsToObjects } from '../app/utils/rows';
+import { getUserLimits } from './helpers';
 
 export interface AppDataSettings {
   data?: unknown[][];
@@ -75,12 +76,14 @@ export function getMaxAccountsPerCampaign(appData: AppDataShape | null | undefin
 /**
  * Gets the maximum campaign run duration in days from the SETTINGS sheet.
  * Used strictly as an admin ceiling during campaign creation.
- * Defaults to 30 days if not configured.
+ * The sheet value (e.g. 14) is authoritative. If it is missing/unparseable,
+ * fail safe to 7 — NEVER to 30, which would wrongly allow entering more days
+ * than the real ceiling and contradict the views (which also fall back to 7).
  */
 export function getMaxCampaignDurationDays(appData: AppDataShape | null | undefined): number {
-  const val = getSettingValueFromAppData(appData, 'campaignMaxDurationDays', '30');
+  const val = getSettingValueFromAppData(appData, 'campaignMaxDurationDays', '7');
   const parsed = parseInt(val, 10);
-  return isNaN(parsed) || parsed <= 0 ? 30 : parsed;
+  return isNaN(parsed) || parsed <= 0 ? 7 : parsed;
 }
 
 // ==================== Per-user concurrent campaign guardrail ====================
@@ -96,9 +99,10 @@ const ACTIVE_CAMPAIGN_STATUSES = ['running', 'processing', 'staged', 'resting'];
  * (safety valve, not a spend cap).
  */
 export function getMaxConcurrentCampaigns(appData: AppDataShape | null | undefined): number {
-  const val = getSettingValueFromAppData(appData, 'campaignConcurrentLimit', '1');
-  const parsed = parseInt(val, 10);
-  return isNaN(parsed) || parsed <= 0 ? 1 : parsed;
+  // From the user's PLAN (Limits sheet plan row), never the SETTINGS sheet.
+  const val = getUserLimits(appData)?.campaignConcurrentLimit;
+  const parsed = Number(val);
+  return !Number.isFinite(parsed) || parsed <= 0 ? 1 : Math.floor(parsed);
 }
 
 export interface ConcurrentCampaignState {
