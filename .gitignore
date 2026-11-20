@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Pi deployment work — moved to its own private repos; all credentials live on the Pi
+/pi-deploy/
+
+# Local credentials / secrets — never commit
+/secrets/
+os-password.txt
+service.env
