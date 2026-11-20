@@ -93,30 +93,38 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
     try {
       // Update app data to get latest transactions
       const result = await authApi.updateAppData(setAppData);
-      
-      if (!result?.data?.transactions) {
+
+      // getAppDataLite returns tables under `appData` (with `data: null`).
+      // Support both shapes so the check works regardless of backend version.
+      const bundle = result as any;
+      const transactionsObj = bundle?.appData?.transactions || bundle?.data?.transactions;
+
+      if (!transactionsObj) {
         return;
       }
 
       // Find matching transaction by orderId using header names
       let matchingTransaction = null;
-      const transactionsObj = result.data.transactions;
-      const headers = transactionsObj.headers;
+      const headers = Array.isArray(transactionsObj.headers) ? transactionsObj.headers : [];
       const data = transactionsObj.data;
       const orderIdIndex = headers.indexOf('reference');
       const statusIndex = headers.indexOf('status');
+      if (orderIdIndex === -1 || statusIndex === -1) {
+        return;
+      }
+      const targetRef = String(orderIdRef.current || '').trim().toLowerCase();
       if (Array.isArray(data)) {
         matchingTransaction = data.find((tx: any[]) => {
-          const orderId = tx[orderIdIndex];
-          return orderId === orderIdRef.current;
+          const orderId = String(tx?.[orderIdIndex] ?? '').trim().toLowerCase();
+          return orderId === targetRef;
         });
       } else {
         console.error('Expected transactions.data to be an array:', data);
       }
 
       if (matchingTransaction) {
-        const status = matchingTransaction[statusIndex];
-        
+        const status = String(matchingTransaction[statusIndex] ?? '').trim().toLowerCase();
+
         if (status === 'completed' && paymentStatus !== 'completed') {
           // Clear interval and update state
           if (statusCheckIntervalRef.current) {
@@ -127,6 +135,8 @@ export default function FundWalletModal({ onClose, addresses }: FundWalletModalP
         }
       }
     } catch (error) {
+      // A timed-out data refresh is not a payment failure — keep the check quiet.
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error('Error checking payment status:', error);
     }
   }, [onClose, paymentStatus]);

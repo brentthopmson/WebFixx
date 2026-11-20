@@ -283,6 +283,7 @@ export default function Campaign() {
         tagStatus: settingsObj.tagStatus || {},
         postStatus: settingsObj.postStatus || {},
         shouldSendMessage: settingsObj.shouldSendMessage || false,
+        requireAiForComments: !!settingsObj.requireAiForComments,
         campaignMode: resolvedMode,
         targetLink: settingsObj.targetLink || '',
         personalizeLink: !!settingsObj.personalizeLink,
@@ -900,13 +901,11 @@ export default function Campaign() {
                 {/* Only show start/execute/resume/pause buttons when campaign duration has NOT elapsed */}
                 {!isExpired && effectiveStatus !== 'completed' && (
                   <>
-                    {/* Draft + setup incomplete: Continue Setup */}
-                    {effectiveStatus === 'draft' && !campaign.isSetupComplete && (
-                      <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors" title="Continue Setup">
-                        <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
-                        Continue Setup
-                      </button>
-                    )}
+                    {/* Edit Setup for any active campaign (wrapper hides completed/expired) */}
+                    <button onClick={() => { setEditingCampaign(campaign); setShowCampaignModal(true); }} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors" title="Edit campaign setup — changes take effect on the next engine cycle">
+                      <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+                      {campaign.isSetupComplete ? 'Edit' : 'Continue Setup'}
+                    </button>
                     {/* Draft + setup complete: Execute (hidden at concurrent limit) */}
                     {effectiveStatus === 'draft' && campaign.isSetupComplete && !concurrentState.atLimit && (
                       <button onClick={() => router.push(`/campaign/${campaign.id}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" title="Execute Campaign">

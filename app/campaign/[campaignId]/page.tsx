@@ -166,6 +166,7 @@ function campaignFromRowObject(row: Record<string, any>, fallbackId: string): Ca
     tagStatus: settingsObj.tagStatus || {},
     postStatus: postStatusObj,
     shouldSendMessage: settingsObj.shouldSendMessage || false,
+    requireAiForComments: !!settingsObj.requireAiForComments,
     campaignMode: resolvedMode,
     targetLink: settingsObj.targetLink || '',
     personalizeLink: !!settingsObj.personalizeLink,
@@ -854,26 +855,15 @@ export default function CampaignDetailPage() {
           {/* Action buttons are strictly hidden once the campaign duration has elapsed or status is completed */}
           {!isCampaignExpired && effectiveStatus !== 'completed' && (
             <>
-              {/* Draft + setup incomplete: Continue Setup */}
-              {effectiveStatus === 'draft' && !campaign.isSetupComplete && (
-                <button
-                  onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
-                >
-                  <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
-                  Continue Setup
-                </button>
-              )}
-              {/* Draft + setup complete: Edit Settings */}
-              {effectiveStatus === 'draft' && campaign.isSetupComplete && (
-                <button
-                  onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                >
-                  <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
-                  Edit Settings
-                </button>
-              )}
+              {/* Edit Setup — available for any active campaign (completed/expired hidden by wrapper above) */}
+              <button
+                onClick={() => router.push(`/campaign?edit=${campaign.id}`)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                title="Edit campaign setup — changes take effect on the next engine cycle"
+              >
+                <FontAwesomeIcon icon={faEdit} className="w-3 h-3" />
+                {campaign.isSetupComplete ? 'Edit Setup' : 'Continue Setup'}
+              </button>
               {/* Draft + setup complete: Execute Pipeline (hidden at concurrent limit) */}
               {(effectiveStatus === 'draft' || isStartingPipeline) && campaign.isSetupComplete && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && !concurrentState.atLimit && (
                 <button

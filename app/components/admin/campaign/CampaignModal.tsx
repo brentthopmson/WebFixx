@@ -209,6 +209,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         emailKeywords: campaignToEdit.emailKeywords || [],
         emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || DEFAULT_EMAIL_STRATEGY_PROMPT,
         shouldSendMessage: campaignToEdit.shouldSendMessage || false,
+        requireAiForComments: (campaignToEdit as any).requireAiForComments ?? false,
         sendMode: campaignToEdit.sendMode || 'now',
         scheduleStartTime: campaignToEdit.scheduleStartTime || '',
       };
@@ -261,6 +262,7 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       emailKeywords: [],
       emailStrategyPrompt: DEFAULT_EMAIL_STRATEGY_PROMPT,
       shouldSendMessage: false,
+      requireAiForComments: false,
       sendMode: 'now',
       scheduleStartTime: '',
       campaignKeyword: '',
@@ -1043,7 +1045,7 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       alert(getValidationErrorMessage(validationError));
       return;
     }
-    if (exhaustedQuotaMessage) {
+    if (exhaustedQuotaMessage && !(isEditing && ['running','processing','staged','paused','resting','limit reached'].includes(String(campaignToEdit?.status || '').toLowerCase()))) {
       alert(exhaustedQuotaMessage);
       return;
     }
@@ -1351,6 +1353,12 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
                           <label className={`flex items-center space-x-2.5 p-1 rounded transition-colors ${!formData.fileUrl ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white dark:hover:bg-gray-800'}`}>
                             <input type="checkbox" className="form-checkbox text-emerald-600 rounded focus:ring-emerald-500 w-4 h-4" disabled={!formData.fileUrl} checked={formData.shouldSendMessage === true} onChange={e => setFormData(prev => ({ ...prev, shouldSendMessage: e.target.checked }))} />
                             <span className="text-xs font-semibold dark:text-gray-300">Send DM to all CSV profiles{!formData.fileUrl ? ' (needs CSV)' : ''}</span>
+                          </label>
+                          <label className="flex items-start space-x-2.5 p-1 rounded cursor-pointer hover:bg-white dark:hover:bg-gray-800 col-span-1 sm:col-span-2" title="When ON, comments and replies are skipped if no AI model is reachable — the account only likes/follows. When OFF, fallback emojis are used.">
+                            <input type="checkbox" className="form-checkbox text-amber-600 rounded focus:ring-amber-500 w-4 h-4 mt-0.5" checked={formData.requireAiForComments === true} onChange={e => setFormData(prev => ({ ...prev, requireAiForComments: e.target.checked }))} />
+                            <span className="text-xs font-semibold dark:text-gray-300">Never comment without AI
+                              <span className="block text-xxs font-normal text-gray-500 dark:text-gray-400 mt-0.5">If no AI model is reachable, skip comments and replies entirely (likes/follows still run) instead of posting fallback emojis.</span>
+                            </span>
                           </label>
                         </div>
                       </div>
@@ -2196,7 +2204,7 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
                 <FontAwesomeIcon icon={faInfoCircle} className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <div className="space-y-1">
                   <p className="font-semibold">Updating Campaign Settings</p>
-                  <p className="leading-relaxed">Changes will be saved to this existing campaign. The campaign will remain in <strong>{campaignToEdit?.status || 'draft'}</strong> status.</p>
+                  <p className="leading-relaxed">Changes will be saved to this existing campaign. The campaign will remain in <strong>{campaignToEdit?.status || 'draft'}</strong> status. Changes take effect on the next engine cycle.</p>
                 </div>
               </div>
             ) : (
@@ -2324,8 +2332,8 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
                 <button
                   onClick={handleSaveDraft}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading || exhaustedStagedQuotas.length > 0 || isSaving || isStartingPipeline}
-                  title={exhaustedStagedQuotas.length ? exhaustedQuotaMessage : undefined}
+                  disabled={loading || (exhaustedStagedQuotas.length > 0 && !(isEditing && ['running','processing','staged','paused','resting','limit reached'].includes(String(campaignToEdit?.status || '').toLowerCase()))) || isSaving || isStartingPipeline}
+                  title={(exhaustedStagedQuotas.length > 0 && !(isEditing && ['running','processing','staged','paused','resting','limit reached'].includes(String(campaignToEdit?.status || '').toLowerCase()))) ? exhaustedQuotaMessage : undefined}
                 >
                   {isSaving ? (
                     <><FontAwesomeIcon icon={faSpinner} className="w-3.5 h-3.5 mr-2 animate-spin" />{isEditing ? 'Saving...' : 'Creating...'}</>
