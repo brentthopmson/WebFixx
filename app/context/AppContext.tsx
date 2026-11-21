@@ -58,7 +58,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 limits: appData.data?.limits || [],
                 users: [],
                 apis: [],
-                settings: [],
+                // Keep SETTINGS in the slim cache: guardrails like
+                // campaignMaxDurationDays must survive a hard refresh even when
+                // the full snapshot was too large for localStorage.
+                settings: appData.data?.settings || [],
                 campaigns: []
               }
             }));
@@ -97,18 +100,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!cancelled) setIsRestoringSession(false);
           return;
         }
-        // If localStorage already hydrated an authenticated session, no blocking restore needed.
+        // If localStorage already hydrated an authenticated session, still do a
+        // BACKGROUND refresh (do not block rendering): a quota-trimmed snapshot
+        // can carry stale/empty SETTINGS, so skipping the fetch leaves guardrails
+        // like campaignMaxDurationDays stuck on their fallback values.
+        let haveCachedSession = false;
         try {
           const stored = localStorage.getItem('appState');
           if (stored) {
             const parsed = JSON.parse(stored);
-            if (parsed?.isAuthenticated && parsed?.user) {
-              if (!cancelled) setIsRestoringSession(false);
-              return;
-            }
+            if (parsed?.isAuthenticated && parsed?.user) haveCachedSession = true;
           }
         } catch {
           // ignore localStorage parse issues and fall through to backend restore
+        }
+        if (haveCachedSession) {
+          if (!cancelled) setIsRestoringSession(false); // render immediately
+          // fire-and-forget background refresh so SETTINGS come from the sheet
+          authApi.updateAppData(handleSetAppData, false).catch(() => {});
+          return;
         }
         // Rehydrate from backend using the cookie token. updateAppData handles
         // definitive auth failures; transient/network/invalid-response errors are caught

@@ -83,7 +83,14 @@ export function getMaxAccountsPerCampaign(appData: AppDataShape | null | undefin
 export function getMaxCampaignDurationDays(appData: AppDataShape | null | undefined): number {
   const val = getSettingValueFromAppData(appData, 'campaignMaxDurationDays', '7');
   const parsed = parseInt(val, 10);
-  return isNaN(parsed) || parsed <= 0 ? 7 : parsed;
+  const result = isNaN(parsed) || parsed <= 0 ? 7 : parsed;
+  // Diagnostic: surface exactly what the browser received for this ceiling.
+  // If you see raw='7' here, the SETTINGS row is missing from the appData bundle
+  // (stale cache or non-admin settings filter), NOT a hard-coded fallback bug.
+  if (typeof window !== 'undefined') {
+    console.log('[getMaxCampaignDurationDays]', { raw: val, parsed, result, hasSettings: !!appData?.data?.settings, settingsRows: appData?.data?.settings?.data?.length });
+  }
+  return result;
 }
 
 // ==================== Per-user concurrent campaign guardrail ====================
