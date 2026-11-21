@@ -28,7 +28,7 @@ import {
   DEFAULT_EMAIL_STRATEGY_PROMPT,
   DEFAULT_SOCIAL_STRATEGY_PROMPT,
 } from '../../../constants/campaignDefaults';
-import { securedApi } from '../../../../utils/auth';
+import { securedApi, authApi } from '../../../../utils/auth';
 import { checkFileBeforeUpload, FILE_CONSTRAINTS } from '../../../utils/fileValidators';
 import { validateCampaignCreation, getValidationErrorMessage } from '../../../utils/campaignValidators';
 import { normalizeCSV, generateSampleCSV } from '../../../utils/csvNormalizer';
@@ -54,6 +54,16 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
   // Per-user concurrent campaign guardrail (SETTINGS campaignConcurrentLimit —
   // mirrors engine/GAS). atLimit hides Execute Pipeline; draft-save stays.
   const concurrentState = getConcurrentCampaignState(appData);
+
+  // SETTINGS-backed guardrails (e.g. campaignMaxDurationDays) are served from
+  // cached appData. Force one fresh read when the modal opens so the admin
+  // ceiling and other settings reflect the current sheet, not a stale bundle.
+  useEffect(() => {
+    authApi.updateAppData(undefined, true).catch((err: any) =>
+      console.warn('[CampaignModal] settings refresh failed:', err)
+    );
+  }, []);
+
   const [step, setStep] = useState(isEditing ? 2 : 0);
   const [loading, setLoading] = useState(false);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
@@ -1479,7 +1489,11 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
                           <FontAwesomeIcon icon={faClock} className={formData.channel === 'social' ? 'text-emerald-500' : 'text-blue-500'} />
                           <span>Campaign Run Duration (Days)</span>
                         </label>
-                        <span className="text-xxs text-gray-400">Default: {maxCampaignDurationDays} days (admin ceiling)</span>
+                        <span className="text-xxs text-gray-400">
+                          {isEditing && campaignToEdit?.durationDays
+                            ? `Saved: ${campaignToEdit.durationDays} days · ceiling: ${maxCampaignDurationDays}`
+                            : `Default: ${maxCampaignDurationDays} days (admin ceiling)`}
+                        </span>
                       </div>
                       <input
                         type="number"
