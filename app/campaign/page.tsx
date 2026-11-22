@@ -458,6 +458,23 @@ export default function Campaign() {
     return JSON.stringify(ctx);
   };
 
+  // On edit, send ONLY the fields the user actually changed. GAS updateCampaign
+  // merges incoming keys over the stored settings, so anything omitted stays
+  // untouched. Sending a full snapshot (with defaults) risks silently resetting
+  // unrelated values — e.g. a lowered global duration ceiling re-clamping a
+  // campaign's previously-saved 365 days down to 14 on an unrelated account edit.
+  const buildChangedSettingsPatch = (original: Partial<Campaign> | null, edited: Partial<Campaign>) => {
+    const origCtx = JSON.parse(buildStrategyContext(original || {}));
+    const newCtx = JSON.parse(buildStrategyContext(edited));
+    const patch: Record<string, any> = {};
+    Object.keys(newCtx).forEach((key) => {
+      if (JSON.stringify(origCtx[key]) !== JSON.stringify(newCtx[key])) {
+        patch[key] = newCtx[key];
+      }
+    });
+    return JSON.stringify(patch);
+  };
+
   const handleSaveCampaign = async (newCampaign: Partial<Campaign>) => {
     const isUpdate = !!newCampaign.id || !!editingCampaign?.id;
     if (!isUpdate && !isFeatureEnabled(appData, 'allowCampaignCreation')) {
@@ -492,7 +509,12 @@ export default function Campaign() {
       }
 
       const isUpdateExisting = campaignId.length > 0;
-      const strategyContext = buildStrategyContext(newCampaign);
+      // For edits, send a diff so only what the user changed is written — every
+      // other setting (durationDays, requireAiForComments, tags, rest state…)
+      // stays exactly as stored. Creates still send the full snapshot.
+      const strategyContext = isUpdateExisting
+        ? buildChangedSettingsPatch(editingCampaign, newCampaign)
+        : buildStrategyContext(newCampaign);
       // silent
 
       if (isUpdate) {
