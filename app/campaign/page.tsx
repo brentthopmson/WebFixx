@@ -426,6 +426,9 @@ export default function Campaign() {
     socialStrategyPrompt: campaign.socialStrategyPrompt || '',
     socialKeywords: campaign.socialKeywords || [],
     shouldSendMessage: campaign.shouldSendMessage || false,
+    // MUST round-trip through edit/save — without this the "Never comment without
+    // AI" checkbox is dropped from the sheet and the engine falls back to emojis.
+    requireAiForComments: campaign.requireAiForComments === true || String(campaign.requireAiForComments || '').toLowerCase() === 'true',
     campaignMode: campaign.campaignMode || (campaign.fileUrl ? 'file' : 'interactions-only'),
     targetLink: campaign.targetLink || '',
     personalizeLink: (campaign as any).personalizeLink || false,

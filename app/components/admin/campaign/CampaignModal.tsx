@@ -537,7 +537,10 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       const draftContext: Record<string, any> = {
         name: campaignName,
         channel,
-        type: formData.type || 'general'
+        type: formData.type || 'general',
+        // Persist from creation so the "Never comment without AI" choice is
+        // never lost between draft creation and the first edit/save.
+        requireAiForComments: formData.requireAiForComments === true || String(formData.requireAiForComments || '').toLowerCase() === 'true'
       };
       if (channel === 'email') {
         draftContext.subject = '';
