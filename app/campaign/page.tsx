@@ -738,7 +738,10 @@ export default function Campaign() {
           const elapsedMs = createdDate ? now - createdDate.getTime() : 0;
           const totalMs = durationDays * 86400000;
           const pct = totalMs > 0 ? Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100))) : 0;
-          const isResting = !isExpired && (campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil)));
+          // A paused campaign with a stale restUntil is not "resting" — it's
+          // actionable (Resume) and must show the Resume button, not rest info.
+          const isResting = !isExpired && campaign.status !== 'paused'
+            && (campaign.status === 'resting' || (campaign.restUntil && now < Number(campaign.restUntil)));
           const effectiveStatus = isExpired && campaign.status !== 'draft' ? 'completed' : campaign.status;
           const socialInteractStageStatus =
             (isExpired && campaign.status !== 'draft') || effectiveStatus === 'completed'
@@ -938,8 +941,9 @@ export default function Campaign() {
                         Execute
                       </button>
                     )}
-                    {/* Running or Limit Reached: Pause */}
-                    {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached') && (
+                    {/* Running / Limit Reached / Resting: Pause. Pausing a resting
+                        campaign stops the GAS auto-resume at the next check. */}
+                    {(effectiveStatus === 'running' || effectiveStatus === 'Limit Reached' || effectiveStatus === 'resting' || isResting) && (
                       <button onClick={() => { setCampaignToPause(campaign.id); setShowPauseConfirmation(true); }} disabled={actingId === campaign.id} className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Pause Campaign">
                         <FontAwesomeIcon icon={actingId === campaign.id ? faSpinner : faPause} spin={actingId === campaign.id} className="w-4 h-4" />
                       </button>

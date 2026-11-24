@@ -709,7 +709,10 @@ export default function CampaignDetailPage() {
   const progressMode: 'list' | 'interaction' | 'duration' = !hasList
     ? (interactionOn ? 'interaction' : 'duration')
     : (listDone && interactionOn ? 'interaction' : 'list');
-  const isResting = !isCampaignExpired && (effectiveStatus === 'resting' || (campaign.restUntil && nowMs < Number(campaign.restUntil)));
+  // Once the user pauses, a leftover restUntil must not keep the UI looking
+  // "resting" — a paused campaign is actionable (Resume), not resting.
+  const isResting = !isCampaignExpired && effectiveStatus !== 'paused'
+    && (effectiveStatus === 'resting' || (campaign.restUntil && nowMs < Number(campaign.restUntil)));
 
   // Resolve connected accounts and their platform usage — STRICTLY from this
   // campaign row's stats column (campaign-scoped). Never read the hub's
@@ -899,9 +902,11 @@ export default function CampaignDetailPage() {
                   {actingAction === 'retry' ? 'Retrying…' : 'Retry'}
                 </button>
               )}
-              {/* Running or Limit Reached: Pause. Keep visible while confirming
-                  the pause so the spinner stays until the engine really stops. */}
-              {((effectiveStatus === 'running' || effectiveStatus === 'Limit Reached' || isPausing)) && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
+              {/* Running / Limit Reached / Resting: Pause. A resting campaign can
+                  be paused by the user — that stops the GAS auto-resume so the
+                  next checker pass won't restart it. Keep visible while confirming
+                  so the spinner stays until the pause is persisted. */}
+              {((effectiveStatus === 'running' || effectiveStatus === 'Limit Reached' || effectiveStatus === 'resting' || isResting || isPausing)) && (effectiveStatus as any) !== 'error' && (effectiveStatus as any) !== 'failed' && (
                 <button
                   onClick={handlePauseCampaign}
                   disabled={actingAction === 'pause' || isPausing}
