@@ -220,6 +220,7 @@ export function CampaignModal({ appData, onClose, onSave, campaignToEdit }: Camp
         emailStrategyPrompt: campaignToEdit.emailStrategyPrompt || DEFAULT_EMAIL_STRATEGY_PROMPT,
         shouldSendMessage: campaignToEdit.shouldSendMessage || false,
         requireAiForComments: (campaignToEdit as any).requireAiForComments ?? false,
+        targetedComments: (campaignToEdit as any).targetedComments ?? false,
         sendMode: campaignToEdit.sendMode || 'now',
         scheduleStartTime: campaignToEdit.scheduleStartTime || '',
       };
@@ -273,6 +274,7 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
       emailStrategyPrompt: DEFAULT_EMAIL_STRATEGY_PROMPT,
       shouldSendMessage: false,
       requireAiForComments: false,
+      targetedComments: false,
       sendMode: 'now',
       scheduleStartTime: '',
       campaignKeyword: '',
@@ -540,7 +542,8 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
         type: formData.type || 'general',
         // Persist from creation so the "Never comment without AI" choice is
         // never lost between draft creation and the first edit/save.
-        requireAiForComments: formData.requireAiForComments === true || String(formData.requireAiForComments || '').toLowerCase() === 'true'
+        requireAiForComments: formData.requireAiForComments === true || String(formData.requireAiForComments || '').toLowerCase() === 'true',
+        targetedComments: formData.targetedComments === true || String(formData.targetedComments || '').toLowerCase() === 'true'
       };
       if (channel === 'email') {
         draftContext.subject = '';
@@ -1371,6 +1374,12 @@ enrichmentContext: DEFAULT_ENRICHMENT_CONTEXT,
                             <input type="checkbox" className="form-checkbox text-amber-600 rounded focus:ring-amber-500 w-4 h-4 mt-0.5" checked={formData.requireAiForComments === true} onChange={e => setFormData(prev => ({ ...prev, requireAiForComments: e.target.checked }))} />
                             <span className="text-xs font-semibold dark:text-gray-300">Never comment without AI
                               <span className="block text-xxs font-normal text-gray-500 dark:text-gray-400 mt-0.5">If no AI model is reachable, skip comments and replies entirely (likes/follows still run) instead of posting fallback emojis.</span>
+                            </span>
+                          </label>
+                          <label className="flex items-start space-x-2.5 p-1 rounded cursor-pointer hover:bg-white dark:hover:bg-gray-800 col-span-1 sm:col-span-2" title="When ON, AI screens comments/messages before replying; only on-target ones get replies.">
+                            <input type="checkbox" className="form-checkbox text-amber-600 rounded focus:ring-amber-500 w-4 h-4 mt-0.5" checked={formData.targetedComments === true} onChange={e => setFormData(prev => ({ ...prev, targetedComments: e.target.checked }))} />
+                            <span className="text-xs font-semibold dark:text-gray-300">Targeted comments
+                              <span className="block text-xxs font-normal text-gray-500 dark:text-gray-400 mt-0.5">AI reviews each comment/message using your campaign context and replies only to on-target people (tickets, meetups, artist inquiries, fans showing love). Others are left alone.</span>
                             </span>
                           </label>
                         </div>

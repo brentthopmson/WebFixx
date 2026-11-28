@@ -163,7 +163,7 @@ export default function Campaign() {
     const parseErrors: string[] = [];
     const result = processedData.map((row: any) => {
       let settingsObj: any = { accounts: [], subject: '', body: '', smtpSettings: [], fileUrl: '' };
-      let contextObj = { strategy: '', identities: [] };
+      let contextObj: any = { strategy: '', identities: [] };
       let statsObj = { interactions: 0, conversions: 0, inbox: 0 };
 
       try {
@@ -283,7 +283,10 @@ export default function Campaign() {
         tagStatus: settingsObj.tagStatus || {},
         postStatus: settingsObj.postStatus || {},
         shouldSendMessage: settingsObj.shouldSendMessage || false,
-        requireAiForComments: !!settingsObj.requireAiForComments,
+        // Legacy rows stored these toggles only in the context column — fall
+        // back there so an edit never silently turns them off.
+        requireAiForComments: !!(settingsObj.requireAiForComments ?? contextObj.requireAiForComments),
+        targetedComments: !!(settingsObj.targetedComments ?? contextObj.targetedComments),
         campaignMode: resolvedMode,
         targetLink: settingsObj.targetLink || '',
         personalizeLink: !!settingsObj.personalizeLink,
@@ -429,6 +432,7 @@ export default function Campaign() {
     // MUST round-trip through edit/save — without this the "Never comment without
     // AI" checkbox is dropped from the sheet and the engine falls back to emojis.
     requireAiForComments: campaign.requireAiForComments === true || String(campaign.requireAiForComments || '').toLowerCase() === 'true',
+    targetedComments: campaign.targetedComments === true || String(campaign.targetedComments || '').toLowerCase() === 'true',
     campaignMode: campaign.campaignMode || (campaign.fileUrl ? 'file' : 'interactions-only'),
     targetLink: campaign.targetLink || '',
     personalizeLink: (campaign as any).personalizeLink || false,
@@ -464,11 +468,16 @@ export default function Campaign() {
   // unrelated values — e.g. a lowered global duration ceiling re-clamping a
   // campaign's previously-saved 365 days down to 14 on an unrelated account edit.
   const buildChangedSettingsPatch = (original: Partial<Campaign> | null, edited: Partial<Campaign>) => {
-    const origCtx = JSON.parse(buildStrategyContext(original || {}));
     const newCtx = JSON.parse(buildStrategyContext(edited));
     const patch: Record<string, any> = {};
     Object.keys(newCtx).forEach((key) => {
-      if (JSON.stringify(origCtx[key]) !== JSON.stringify(newCtx[key])) {
+      // Compare the RAW values the user actually saw/edited. Comparing two
+      // normalized snapshots can send a default back for a field the user
+      // never touched (e.g. a boolean toggle stored only in the context
+      // column) — GAS then merges that default over the real saved value.
+      const before = (original || {} as Partial<Campaign>)[key as keyof Campaign];
+      const after = (edited || {})[key as keyof Campaign];
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
         patch[key] = newCtx[key];
       }
     });
